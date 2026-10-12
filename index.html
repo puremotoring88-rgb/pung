@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>로봇 포격전 (가칭)</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: #070c16; overflow: hidden;
+    font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color: #e8eef7;
+    user-select: none; -webkit-user-select: none; }
+  body { display: flex; align-items: center; justify-content: center; }
+  #stage { position: relative; width: min(100vw, calc(100vh * 16 / 9)); height: min(100vh, calc(100vw * 9 / 16)); }
+  @supports (height: 100dvh) {
+    #stage { width: min(100vw, calc(100dvh * 16 / 9)); height: min(100dvh, calc(100vw * 9 / 16)); }
+  }
+  canvas#cv { width: 100%; height: 100%; display: block; touch-action: none; }
+  .hidden { display: none !important; }
+
+  #bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: .8%; padding: 1.2% 1.5%;
+    align-items: stretch; pointer-events: none; }
+  #bar button { pointer-events: auto; border: 2px solid #33455f; background: rgba(16, 26, 42, .88); color: #e8eef7;
+    border-radius: 12px; padding: .45em .7em; font: inherit; font-size: clamp(10px, 1.7vw, 16px); cursor: pointer; }
+  #bar button.shell { min-width: 15%; }
+  #bar button.shell.on { border-color: #ffd166; background: rgba(60, 48, 14, .92); }
+  #bar button small { display: block; opacity: .7; font-size: .75em; }
+  #bar .gap { flex: 1; }
+  #fire { background: #e2553f !important; border-color: #ff9a8a !important; font-weight: 700; min-width: 15%; }
+  #bar button:disabled, #items button:disabled { opacity: .4; cursor: default; }
+  #bar .move { min-width: 7%; font-size: clamp(14px, 2.4vw, 22px); touch-action: none; }
+
+  #items { position: absolute; left: 1.5%; top: 2%; display: flex; gap: .7vw; }
+  #top { position: absolute; right: 1.5%; top: 2%; display: flex; flex-direction: column; gap: .7vw; align-items: flex-end; }
+  #items button, #top button { border: 2px solid #33455f; background: rgba(16, 26, 42, .88); color: #e8eef7; border-radius: 10px;
+    padding: .4em .6em; font: inherit; font-size: clamp(10px, 1.5vw, 14px); cursor: pointer; white-space: nowrap; }
+  #items button i { font-style: normal; opacity: .7; }
+  #items button.on, #top button.on { border-color: #ffd166; background: rgba(60, 48, 14, .92); }
+
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(7, 12, 22, .86); text-align: center; padding: 2%; gap: 1.6%; overflow-y: auto; }
+  .overlay h1 { margin: 0; font-size: clamp(20px, 4.6vw, 44px); letter-spacing: .04em; }
+  .overlay h2 { margin: 0; font-size: clamp(14px, 2.6vw, 26px); }
+  .overlay p { margin: 0; font-size: clamp(10px, 1.7vw, 15px); line-height: 1.6; opacity: .88; max-width: 48em; }
+  .row { display: flex; gap: 1.2%; justify-content: center; align-items: stretch; width: 100%; flex-wrap: wrap; }
+  .overlay button { border: 2px solid #4aa3ff; background: #12294a; color: #fff; border-radius: 14px;
+    padding: .6em 1.3em; font: inherit; font-size: clamp(13px, 2.4vw, 21px); font-weight: 700; cursor: pointer; }
+  .overlay button.sub { border-color: #50617a; background: #16202f; font-weight: 400; }
+  .overlay button.chip { padding: .35em .8em; font-size: clamp(10px, 1.6vw, 15px); font-weight: 400; border-color: #33455f; background: #101a2a; border-radius: 10px; }
+  .overlay button.chip small { display: block; opacity: .65; font-size: .72em; }
+  .overlay button.chip.on { border-color: #ffd166; background: rgba(60, 48, 14, .92); }
+  #pickRow { flex-wrap: nowrap; }
+  .overlay button.card { flex: 1; max-width: 19%; padding: .3em .3em .5em; display: flex; flex-direction: column; align-items: center; gap: .15em;
+    font-size: clamp(11px, 1.8vw, 17px); border-color: #33455f; background: #101a2a; }
+  .overlay button.card:hover { border-color: #ffd166; }
+  .card canvas { width: 62%; height: auto; }
+  .card span { font-weight: 400; font-size: .7em; opacity: .8; }
+  .card small { font-weight: 400; font-size: .66em; line-height: 1.45; opacity: .9; }
+
+  /* 온라인 대기실 */
+  #lobby { gap: 1.2%; }
+  #lobby input, #lobby select { font: inherit; font-size: clamp(11px, 1.7vw, 16px); padding: .45em .6em; border-radius: 10px;
+    border: 2px solid #33455f; background: #0c1422; color: #e8eef7; user-select: text; -webkit-user-select: text; }
+  #lobby label { font-size: clamp(10px, 1.6vw, 15px); display: flex; align-items: center; gap: .4em; }
+  #link { width: 34%; }
+  #nick { width: 9em; }
+  .team { flex: 1; max-width: 34%; border: 2px solid #33455f; border-radius: 12px; padding: .5em; background: #101a2a;
+    font-size: clamp(11px, 1.7vw, 16px); display: flex; flex-direction: column; gap: .3em; }
+  .team b { font-size: 1.05em; }
+  .team div { padding: .2em .4em; border-radius: 8px; background: rgba(255, 255, 255, .06); }
+  .team div.bot { opacity: .5; }
+  .team button { font-size: .9em !important; padding: .3em .6em !important; font-weight: 400 !important; }
+
+  #rotate { display: none; position: fixed; top: 0; left: 0; right: 0; padding: 10px; text-align: center;
+    background: #ffd166; color: #222; font-size: 14px; z-index: 10; }
+  @media (orientation: portrait) { #rotate { display: block; } }
+</style>
+</head>
+<body>
+<div id="rotate">📱 휴대폰을 가로로 돌리면 크게 볼 수 있어요</div>
+<div id="stage">
+  <canvas id="cv"></canvas>
+
+  <div id="top">
+    <button id="zoom" class="hidden">🔍 전체 보기</button>
+    <button id="home" class="hidden">📍 내 로봇</button>
+  </div>
+
+  <div id="items" class="hidden">
+    <button data-item="double">✌️ 더블탄 <i>×0</i></button>
+    <button data-item="power">🔺 강화탄 <i>×0</i></button>
+    <button data-item="shield">🛡️ 쉴드 <i>×0</i></button>
+    <button data-item="repair">🔧 수리 <i>×0</i></button>
+    <button data-item="warp">🌀 이동탄 <i>×1</i></button>
+  </div>
+
+  <div id="bar" class="hidden">
+    <button class="move" data-dir="-1">◀</button>
+    <button class="move" data-dir="1">▶</button>
+    <button class="shell on" data-slot="p">1차 공격</button>
+    <button class="shell" data-slot="s">2차 공격</button>
+    <button class="shell" data-slot="ult">🌠 궁극기</button>
+    <div class="gap"></div>
+    <button id="skip">넘기기<small>턴 쉬기</small></button>
+    <button id="fire">발사!</button>
+  </div>
+
+  <div id="menu" class="overlay">
+    <h1>🤖 로봇 포격전 <span style="font-size:.45em;opacity:.6">(가칭 · 시험판)</span></h1>
+    <p><b>내 로봇 근처를 누르고 새총처럼 당겼다 놓으면</b> 조준됩니다. 다른 곳을 누르고 밀면 화면이 움직여요.<br>
+       우리 팀은 <b>동시에 조준</b>하고 차례로 쏩니다. 로봇마다 1차·2차 공격과 궁극기가 다릅니다.<br>
+       💧로 적신 적에게 ⚡전기를 맞히면 피해가 2배! 턴마다 ◀ ▶로 조금 걸을 수 있습니다.<br>
+       아이템은 <b>하늘에서 떨어지는 보급 상자</b>를 걸어가서 줍거나 포탄으로 맞혀 얻고, 한 턴에 하나 씁니다.</p>
+    <div class="row">
+      <button data-n="1">혼자 1 : 1</button>
+      <button data-n="2">혼자 2 : 2</button>
+      <button data-n="3">혼자 3 : 3</button>
+    </div>
+    <div class="row">
+      <button id="online" class="sub">🌐 친구와 함께 (방 만들기)</button>
+    </div>
+  </div>
+
+  <div id="pick" class="overlay hidden">
+    <h2>맵과 로봇을 고르세요</h2>
+    <div class="row" id="mapRow"></div>
+    <div class="row" id="pickRow"></div>
+    <div class="row"><button id="pickBack" class="chip">← 처음으로</button></div>
+  </div>
+
+  <div id="lobby" class="overlay hidden">
+    <h2>🌐 친구와 함께 <span id="roomCode" style="opacity:.6;font-size:.7em"></span></h2>
+    <p id="lobbyMsg">연결하는 중…</p>
+    <div class="row" id="inviteRow">
+      <label>별명 <input id="nick" maxlength="8" placeholder="별명"></label>
+      <input id="link" readonly>
+      <button id="copy" class="chip">초대 링크 복사</button>
+    </div>
+    <div class="row">
+      <label>인원 <select id="selSize"><option value="1">1 : 1</option><option value="2">2 : 2</option><option value="3">3 : 3</option></select></label>
+      <label>맵 <select id="selMap"></select></label>
+      <label>내 로봇 <select id="selRobot"></select></label>
+    </div>
+    <div class="row" id="teams"></div>
+    <div class="row">
+      <button id="startGame">시작!</button>
+      <button id="leave" class="sub">나가기</button>
+    </div>
+  </div>
+
+  <div id="over" class="overlay hidden">
+    <h1 id="overTitle">승리!</h1>
+    <p id="overText"></p>
+    <div class="row">
+      <button id="again">다시 하기</button>
+      <button id="toLobby" class="sub hidden">대기실로</button>
+      <button id="toMenu" class="sub">처음으로</button>
+    </div>
+  </div>
+</div>
+<script src="js/game.js"></script>
+<script src="js/net.js"></script>
+</body>
+</html>
