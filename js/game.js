@@ -586,7 +586,7 @@ function solveAim(r, target, err) {
   return { vx: Math.cos(rad) * pw * dir, vy: -Math.sin(rad) * pw, miss: bestD };
 }
 
-function say(r, text) { r.say = text; r.sayT = 2.4; }
+function say(r, text, sec) { r.say = text; r.sayT = sec || 2.4; }
 
 // 팀이 함께 쏠 계획을 세운다: 누가 적시면 전기를 가진 로봇이 그 적을 노린다.
 function planTeam(team) {
@@ -692,7 +692,8 @@ function showOver() {
   $('overTitle').textContent = winner === -1 ? '무승부' : winner === mine ? '🏆 승리!' : '패배…';
   // 이번 판의 기록: 누가 가장 많이 때렸고, 쓰러뜨렸고, 멋진 한 발을 쐈나
   const best = key => robots.reduce((a, b) => (b[key] > a[key] ? b : a));
-  const row = (icon, title, key, unit) => { const r = best(key); return r[key] > 0 ? `${icon} ${title}: <b style="color:${TEAMS[r.team].light}">${r.name}</b> ${r[key]}${unit}` : ''; };
+  const esc = t => String(t).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');   // 별명은 남이 정한 글자라 그대로 넣지 않는다
+  const row = (icon, title, key, unit) => { const r = best(key); return r[key] > 0 ? `${icon} ${title}: <b style="color:${TEAMS[r.team].light}">${esc(r.name)}</b> ${r[key]}${unit}` : ''; };
   const awards = [row('🏅', '최다 피해', 'dmg', ''), row('💥', '격파', 'kills', '대'), row('🎯', '멋진 한 발', 'tricks', '번')].filter(Boolean);
   $('overText').innerHTML = (winner === -1 ? '두 팀이 함께 쓰러졌습니다.' : `${TEAMS[winner].name}이 이겼습니다.`)
     + (mode === 'client' ? ' 방장이 다시 시작하기를 기다립니다.' : '') + (awards.length ? '<br>' + awards.join(' &nbsp;·&nbsp; ') : '');
@@ -1506,9 +1507,46 @@ function toMenu() {
 }
 $('toMenu').addEventListener('click', () => { if (net && mode !== 'solo') net.leave(); toMenu(); });
 
+// ---------- 대화 ----------
+// 💬를 누르면 빠른 말과 글 입력 칸이 나온다. 보낸 말은 왼쪽 아래에 잠깐 뜨고, 모두에게 한 말은 내 로봇 위 말풍선으로도 보인다.
+const QUICK = ['나이스! 👍', '미안! 🙏', '도와줘!', '내가 적실게 💧', '전기 쏜다 ⚡', '같이 쏘자!', '잘했어!', 'ㅋㅋㅋ', '으악 😱', '한 판 더!'];
+let chatScope = 'all';
+function chatLine(name, team, text, scope) {
+  const log = $('chatLog'), d = document.createElement('div'), b = document.createElement('b');
+  d.className = 'line';
+  b.textContent = (scope === 'team' ? '[팀] ' : '') + name + ' ';
+  b.style.color = TEAMS[team] ? TEAMS[team].light : '#e8eef7';
+  d.append(b, document.createTextNode(text));
+  log.append(d);
+  while (log.children.length > 6) log.firstChild.remove();
+  setTimeout(() => d.remove(), 10000);
+  sfx('pick');
+}
+function sayAs(id, text) { const r = robots.find(o => o.ctrl === id); if (r && r.alive) say(r, text, 3.5); }
+function sendChat(text) {
+  text = String(text).trim().slice(0, 40);
+  if (!text) return;
+  $('chatPanel').classList.add('hidden');
+  if (window.Game.onChat && window.Game.onChat(text, chatScope)) return;   // 온라인이면 js/net.js가 보낸다
+  const m = me();
+  chatLine(m ? m.name : '나', m ? m.team : 0, text, 'all');
+  sayAs(myId, text);
+}
+for (const q of QUICK) {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = q;
+  b.addEventListener('click', () => sendChat(q));
+  $('quick').append(b);
+}
+$('chatBtn').addEventListener('click', () => $('chatPanel').classList.toggle('hidden'));
+$('chatScope').addEventListener('click', () => { chatScope = chatScope === 'all' ? 'team' : 'all'; $('chatScope').textContent = chatScope === 'all' ? '📢 모두에게' : '🤫 우리 팀만'; });
+$('chatSend').addEventListener('click', () => { sendChat($('chatText').value); $('chatText').value = ''; });
+$('chatText').addEventListener('keydown', e => { if (e.key === 'Enter') { sendChat($('chatText').value); $('chatText').value = ''; } });
+
 // ---------- js/net.js가 쓰는 문 ----------
 window.Game = {
-  MODELS, MAPS, TEAMS, startMatch, matchInfo, snapshot, loadMatch, applySnapshot, applyInput, toMenu, robotCards, mapButtons,
+  MODELS, MAPS, TEAMS, startMatch, matchInfo, snapshot, loadMatch, applySnapshot, applyInput, toMenu, robotCards, mapButtons, chatLine, sayAs,
+  onChat: null,
   setMode(m, id, n) { mode = m; myId = id; net = n; },
   get mode() { return mode; }, get phase() { return phase; }, get turn() { return turnNo; },
   hps: () => robots.map(r => Math.round(r.hp)).join('/'),

@@ -15,7 +15,8 @@ let conns = new Map();     // 방장: 참가자 번호표 → 연결
 let hostConn = null;       // 참가자: 방장과의 연결
 let lobby = { n: 2, map: 'random', players: [] };   // players: { id, name, team, pick }
 
-const nick = () => ($('nick').value.trim() || '플레이어').slice(0, 8);
+const clean = t => String(t == null ? '' : t).replace(/[<>&"']/g, '').trim();
+const nick = () => (clean($('nick').value) || '플레이어').slice(0, 8);
 const say = text => { $('lobbyMsg').textContent = text; };
 
 function loadPeerLib() {
@@ -94,7 +95,7 @@ function change(patch) {
 function setPlayer(id, patch) {
   const p = lobby.players.find(o => o.id === id);
   if (!p) return;
-  if (typeof patch.name === 'string') p.name = patch.name.slice(0, 8) || '플레이어';
+  if (typeof patch.name === 'string') p.name = clean(patch.name).slice(0, 8) || '플레이어';
   if (patch.pick === 'random' || G.MODELS.some(m => m.id === patch.pick && !m.special)) p.pick = patch.pick;
   if ((patch.team === 0 || patch.team === 1) && lobby.players.filter(o => o.team === patch.team).length < lobby.n) p.team = patch.team;
 }
@@ -110,10 +111,29 @@ function hostMessage(id, msg) {
     if (lobby.players.length >= 6) { const c = conns.get(id); if (c) c.send({ t: 'full' }); return; }
     const count = t => lobby.players.filter(p => p.team === t).length;
     if (lobby.players.length >= lobby.n * 2) lobby.n = Math.min(3, lobby.n + 1);   // 자리가 모자라면 인원을 늘린다
-    lobby.players.push({ id, name: String(msg.name || '플레이어').slice(0, 8), team: count(0) <= count(1) ? 0 : 1, pick: 'random' });
+    lobby.players.push({ id, name: clean(msg.name).slice(0, 8) || '플레이어', team: count(0) <= count(1) ? 0 : 1, pick: 'random' });
     pushLobby();
   } else if (msg.t === 'set' && msg.patch) { setPlayer(id, msg.patch); pushLobby(); }
   else if (msg.t === 'in' && msg.m) G.applyInput(id, msg.m);
+  else if (msg.t === 'chat') hostChat(id, msg.text, msg.scope);
+}
+
+// 대화: 방장이 받아서 나눠 준다. "우리 팀만"은 같은 팀에게만 가고 말풍선도 띄우지 않는다.
+const lastChat = new Map();
+function hostChat(id, text, scope) {
+  const p = lobby.players.find(o => o.id === id);
+  text = String(text == null ? '' : text).trim().slice(0, 40);
+  if (!p || !text || Date.now() - (lastChat.get(id) || 0) < 600) return;   // 너무 빠른 도배는 막는다
+  lastChat.set(id, Date.now());
+  const team = scope === 'team';
+  const msg = { t: 'chat', name: p.name, team: p.team, text, scope: team ? 'team' : 'all', from: id };
+  for (const o of lobby.players) {
+    if (team && o.team !== p.team) continue;
+    if (o.id === 'host') { G.chatLine(p.name, p.team, text, msg.scope); continue; }
+    const c = conns.get(o.id);
+    if (c && c.open) c.send(msg);
+  }
+  if (!team) G.sayAs(id, text);
 }
 
 function startHost(fixed) {
@@ -164,6 +184,7 @@ function clientMessage(msg) {
     G.setMode('client', myId, api);
     G.loadMatch(msg.info);
   } else if (msg.t === 'snap') { if (G.mode === 'client') G.applySnapshot(msg.s); }
+  else if (msg.t === 'chat') G.chatLine(clean(msg.name), msg.team, String(msg.text).slice(0, 40), msg.scope);
   else if (msg.t === 'full') say('방이 가득 찼습니다(최대 6명).');
 }
 
@@ -193,6 +214,15 @@ async function enter(code, hostCode) {
   try { await loadPeerLib(); } catch (e) { say('연결 도구를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'); return; }
   if (code) startClient(code); else startHost(hostCode);
 }
+
+// 대화를 보낼 때 게임 본체가 부른다. 온라인이 아니면 false를 돌려줘서 본체가 혼자 처리하게 한다.
+G.onChat = (text, scope) => {
+  if (!peer || !myId) return false;
+  if (isHost) hostChat('host', text, scope);
+  else if (hostConn && hostConn.open) hostConn.send({ t: 'chat', text, scope });
+  else return false;
+  return true;
+};
 
 // 화면 요소 채우기와 버튼
 for (const m of [{ id: 'random', name: '아무 맵' }, ...G.MAPS]) $('selMap').add(new Option(m.name, m.id));

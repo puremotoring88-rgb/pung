@@ -56,6 +56,20 @@
   .card span { font-weight: 400; font-size: .7em; opacity: .8; }
   .card small { font-weight: 400; font-size: .66em; line-height: 1.45; opacity: .9; }
 
+  /* 대화 */
+  #chatLog { position: absolute; left: 1.5%; bottom: 17%; width: 40%; display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+    pointer-events: none; z-index: 6; font-size: clamp(10px, 1.6vw, 15px); text-align: left; }
+  #chatLog .line { background: rgba(8, 12, 22, .78); border-radius: 9px; padding: .25em .6em; animation: chatFade 10s forwards; }
+  @keyframes chatFade { 0%, 85% { opacity: 1; } 100% { opacity: 0; } }
+  #chatPanel { position: absolute; right: 1.5%; top: 27%; width: 50%; z-index: 7; display: flex; flex-direction: column; gap: .7vw;
+    background: rgba(10, 18, 32, .95); border: 2px solid #33455f; border-radius: 14px; padding: 1.2%; }
+  #quick { display: flex; flex-wrap: wrap; gap: .5vw; }
+  #chatRow { display: flex; gap: .5vw; }
+  #chatPanel .chip { border: 2px solid #33455f; background: #101a2a; color: #e8eef7; border-radius: 10px; padding: .4em .7em;
+    font: inherit; font-size: clamp(10px, 1.6vw, 15px); cursor: pointer; white-space: nowrap; }
+  #chatText { flex: 1; min-width: 0; font: inherit; font-size: clamp(11px, 1.7vw, 16px); padding: .4em .6em; border-radius: 10px;
+    border: 2px solid #33455f; background: #0c1422; color: #e8eef7; user-select: text; -webkit-user-select: text; }
+
   /* 온라인 대기실 */
   #lobby { gap: 1.2%; }
   #lobby input, #lobby select { font: inherit; font-size: clamp(11px, 1.7vw, 16px); padding: .45em .6em; border-radius: 10px;
@@ -83,7 +97,18 @@
   <div id="top">
     <button id="zoom" class="hidden">🔍 전체 보기</button>
     <button id="mute">🔊 소리 켜짐</button>
+    <button id="chatBtn">💬 대화</button>
     <button id="home" class="hidden">📍 내 로봇</button>
+  </div>
+
+  <div id="chatLog"></div>
+  <div id="chatPanel" class="hidden">
+    <div id="quick"></div>
+    <div id="chatRow">
+      <button id="chatScope" class="chip">📢 모두에게</button>
+      <input id="chatText" maxlength="40" placeholder="하고 싶은 말을 적으세요">
+      <button id="chatSend" class="chip">보내기</button>
+    </div>
   </div>
 
   <div id="items" class="hidden">
