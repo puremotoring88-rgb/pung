@@ -30,7 +30,7 @@
   #bar .move { min-width: 7%; font-size: clamp(14px, 2.4vw, 22px); touch-action: none; }
 
   #items { position: absolute; left: 1.5%; top: 2%; display: flex; gap: .7vw; }
-  #top { position: absolute; right: 1.5%; top: 2%; display: flex; flex-direction: column; gap: .7vw; align-items: flex-end; }
+  #top { position: absolute; right: 1.5%; top: 2%; z-index: 5; display: flex; flex-direction: column; gap: .7vw; align-items: flex-end; }
   #items button, #top button { border: 2px solid #33455f; background: rgba(16, 26, 42, .88); color: #e8eef7; border-radius: 10px;
     padding: .4em .6em; font: inherit; font-size: clamp(10px, 1.5vw, 14px); cursor: pointer; white-space: nowrap; }
   #items button i { font-style: normal; opacity: .7; }
@@ -82,6 +82,7 @@
 
   <div id="top">
     <button id="zoom" class="hidden">🔍 전체 보기</button>
+    <button id="mute">🔊 소리 켜짐</button>
     <button id="home" class="hidden">📍 내 로봇</button>
   </div>
 

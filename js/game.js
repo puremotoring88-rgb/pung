@@ -102,6 +102,7 @@ let wind = 0, phase = 'menu', turnTeam = 0, turnNo = 0, timer = 0, thinkT = 0, p
 let drag = null, winner = null, teamSize = 1, moveDir = 0, lastCfg = null, pickMap = 'random', nextId = 1;
 let cam = { x: 0, z: 1, tx: 0, manual: false }, overview = false;
 let rockPattern = null, patternFor = '';
+let barWasOn = false;
 let pending = null, holdX = null;   // 곧 쏠 로봇, 방금 터진 자리(카메라가 머문다)
 
 // 온라인: mode = solo | host | client, myId = 내 번호표, net = js/net.js가 넣어 주는 통로
@@ -188,7 +189,8 @@ function makeRobot(team, i, model, name, ctrl) {
     ctrl: ctrl || null, name, ready: false, skip: false, moveDir: 0,
     slot: 'p', aim: { vx: dir * 320, vy: -320 }, item: null,
     items: { double: 0, power: 0, shield: 0, repair: 0, warp: 1 },   // 나머지는 보급 상자에서 얻는다
-    energy: 0, shield: 0, fuel: 0, goal: null, say: '', sayT: 0 };
+    energy: 0, shield: 0, fuel: 0, goal: null, say: '', sayT: 0,
+    dmg: 0, kills: 0, tricks: 0, lastBy: null, lastAim: null };   // 판이 끝나면 보여 줄 기록
 }
 
 function resetMatchState() {
@@ -250,6 +252,8 @@ function startAim(team) {
 
 function updateBar() {
   const on = iCanAct();
+  if (on && !barWasOn) sfx('turn');   // 내 차례가 왔다
+  barWasOn = on;
   $('bar').classList.toggle('hidden', !on);
   $('items').classList.toggle('hidden', !on);
   const m = me();
@@ -306,7 +310,7 @@ function takeCrate(c, r) {
   if (!r || !r.alive) return;
   r.items[c.item]++;
   addFloat(r.x, r.y - r.model.art.tall - 22, '+ ' + ITEMS[c.item].icon + ' ' + ITEMS[c.item].name, '#ffe98a');
-  if (r.ctrl === myId) updateBar();
+  if (r.ctrl === myId) { updateBar(); sfx('pick'); }
 }
 
 function updateCrates(dt) {
@@ -389,10 +393,12 @@ function simulate(r, vx, vy) {
 }
 
 function addFloat(x, y, text, color) { floats.push({ x, y, text, color, t: 0 }); emit(['f', Math.round(x), Math.round(y), text, color]); }
+function banner(text, x, y) { addFloat(x, y, text, '#ffd166'); sfx('wow'); }   // 금색 글씨는 "잘했다" 표시
 function addBolt(x1, y1, x2, y2) { fx.push({ type: 'bolt', x1, y1, x2, y2, t: 0 }); emit(['z', x1 | 0, y1 | 0, x2 | 0, y2 | 0]); }
 
 function hurt(r, amount, color, by) {
   let d = Math.max(1, Math.round(amount));
+  if (by) r.lastBy = by;   // 밀려서 떨어지면 누가 떨어뜨렸는지 알 수 있게
   const fy = r.y - r.model.art.tall - 8;
   if (r.shield > 0) {
     const a = Math.min(r.shield, d);
@@ -403,6 +409,8 @@ function hurt(r, amount, color, by) {
   addFloat(r.x + rnd(-8, 8), fy, '-' + d, color || '#fff');
   // 에너지: 적을 맞히면 많이, 맞으면 조금 찬다
   if (by && by.team !== r.team) {
+    by.dmg += d;
+    if (r.hp <= 0) by.kills++;
     by.energy = Math.min(ENERGY_MAX, by.energy + d * 0.9);
     r.energy = Math.min(ENERGY_MAX, r.energy + d * 0.4);
   }
@@ -457,11 +465,12 @@ function explode(p) {
   if (crater > 0) dig(p.x, p.y, crater);
   if (sh.mound) pile(p.x, p.y, sh.mound * p.sm);
 
-  const shocked = [];
+  const shocked = [], struck = [];
   for (const r of robots) {
     if (!r.alive) continue;
     const d = Math.max(0, gapTo(r, p.x, p.y));
     if (d >= blast) continue;
+    if (r.team !== p.owner.team) struck.push(d);
     const near = 1 - d / blast;
     let dmg = sh.dmg * p.dm * (0.35 + 0.65 * near);
     const combo = sh.volt && r.wet > 0;
@@ -480,6 +489,19 @@ function explode(p) {
         hurt(r, 12, '#f5f55a', p.owner);
         shocked.push(r);
       }
+    }
+  }
+  // 잘 쏜 한 발은 크게 알려 주고 에너지를 조금 더 준다(유성·분열 조각은 빼고)
+  if (struck.length && p.shell !== 'meteor' && p.shell !== 'shard' && p.shell !== 'ult') {
+    const tags = [];
+    if (struck.some(d => d === 0)) tags.push('🎯 명중!');
+    if (struck.length >= 2) tags.push('✌️ 한 발에 둘!');
+    if (Math.abs(p.x - p.owner.x) > 1000) tags.push('🏹 장거리!');
+    if (shocked.length) tags.push('⚡ 콤보!');
+    if (tags.length) {
+      banner(tags.join('  '), p.x, p.y - 90);
+      p.owner.tricks += tags.length;
+      p.owner.energy = Math.min(ENERGY_MAX, p.owner.energy + 6 * tags.length);
     }
   }
   // 유성 폭격: 신호탄이 떨어진 자리 위로 유성 5발
@@ -533,6 +555,7 @@ function castUlt(r) {
 
 function launch(r) {
   if (r.skip) { r.skip = false; r.item = null; say(r, '이번 턴은 쉴게'); pauseT = 0.8; return; }
+  sfx('shot');
   if (r.item === 'warp') { projs.push(makeProj(r, r.aim.vx, r.aim.vy, 'warp')); r.item = null; return; }
   if (r.slot === 'ult') {
     r.slot = 'p';
@@ -630,6 +653,7 @@ function applyInput(id, m) {
 }
 
 function input(m) {
+  if (m.t === 'ready' && !m.skip) { const r = me(); if (r) r.lastAim = { ...r.aim }; }   // 다음 턴에 "지난번 조준"으로 보여 준다
   if (mode === 'client') {
     if (m.t === 'ready') readyTn = turnNo;
     if (m.t !== 'aim' || performance.now() - aimSentAt > 70 || m.last) { net.send(m); if (m.t === 'aim') aimSentAt = performance.now(); }
@@ -666,8 +690,13 @@ function confirmAim() {
 function showOver() {
   const m = me(), mine = m ? m.team : 0;
   $('overTitle').textContent = winner === -1 ? '무승부' : winner === mine ? '🏆 승리!' : '패배…';
-  $('overText').textContent = (winner === -1 ? '두 팀이 함께 쓰러졌습니다.' : `${TEAMS[winner].name}이 이겼습니다.`)
-    + (mode === 'client' ? ' 방장이 다시 시작하기를 기다립니다.' : '');
+  // 이번 판의 기록: 누가 가장 많이 때렸고, 쓰러뜨렸고, 멋진 한 발을 쐈나
+  const best = key => robots.reduce((a, b) => (b[key] > a[key] ? b : a));
+  const row = (icon, title, key, unit) => { const r = best(key); return r[key] > 0 ? `${icon} ${title}: <b style="color:${TEAMS[r.team].light}">${r.name}</b> ${r[key]}${unit}` : ''; };
+  const awards = [row('🏅', '최다 피해', 'dmg', ''), row('💥', '격파', 'kills', '대'), row('🎯', '멋진 한 발', 'tricks', '번')].filter(Boolean);
+  $('overText').innerHTML = (winner === -1 ? '두 팀이 함께 쓰러졌습니다.' : `${TEAMS[winner].name}이 이겼습니다.`)
+    + (mode === 'client' ? ' 방장이 다시 시작하기를 기다립니다.' : '') + (awards.length ? '<br>' + awards.join(' &nbsp;·&nbsp; ') : '');
+  sfx(winner === mine ? 'win' : 'lose');
   $('again').classList.toggle('hidden', mode === 'client');
   setTimeout(() => { if (phase === 'over') $('over').classList.remove('hidden'); }, 900);
   updateBar();
@@ -689,6 +718,37 @@ function endTurn() {
   startAim(1 - turnTeam);
 }
 
+// ---------- 소리(파일 없이 그 자리에서 만들어 낸다) ----------
+let AC = null, muted = false;
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+function noise(dur, vol, cutoff, delay = 0) {
+  const t = AC.currentTime + delay, n = Math.floor(AC.sampleRate * dur), buf = AC.createBuffer(1, n, AC.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = buf; f.type = 'lowpass'; f.frequency.value = cutoff; g.gain.value = vol;
+  s.connect(f); f.connect(g); g.connect(AC.destination); s.start(t);
+}
+const SFX = {
+  shot: () => { noise(0.18, 0.22, 1800); tone('square', 220, 70, 0.16, 0.1); },
+  boom: big => { noise(0.45 + big * 0.35, 0.5, 750 - big * 300); tone('sine', 110, 35, 0.4, 0.3); },
+  pick: () => { tone('sine', 660, 990, 0.1, 0.15); tone('sine', 990, 1320, 0.12, 0.15, 0.09); },
+  turn: () => { tone('sine', 520, 520, 0.09, 0.12); tone('sine', 780, 780, 0.14, 0.12, 0.1); },
+  wow: () => [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, f, 0.13, 0.15, i * 0.07)),
+  win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone('triangle', f, f, 0.22, 0.16, i * 0.13)),
+  lose: () => [392, 330, 262, 196].forEach((f, i) => tone('triangle', f, f, 0.28, 0.14, i * 0.18)),
+};
+function sfx(name, arg) { if (!muted && AC) { try { SFX[name](arg); } catch (e) { /* 소리는 안 나도 게임은 계속 */ } } }
+// 소리는 화면을 한 번 누른 뒤에야 낼 수 있다(브라우저 규칙)
+window.addEventListener('pointerdown', () => {
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { /* 소리를 못 쓰는 환경 */ } }
+  else if (AC.state === 'suspended') AC.resume();
+});
+
 // ---------- 효과 ----------
 function spark(x, y, n, color, type) {
   for (let i = 0; i < n && parts.length < 400; i++) {
@@ -701,6 +761,7 @@ function rainFx(x, y) { for (let i = 0; i < 14; i++) spark(x + rnd(-40, 40), y -
 
 function boom(x, y, r, color) {
   emit(['b', x | 0, y | 0, r | 0, color]);
+  sfx('boom', clamp(r / 60, 0, 1));
   fx.push({ type: 'boom', x, y, r, color, t: 0 });
   spark(x, y, Math.round(r / 3), color);
   spark(x, y, Math.round(r / 9), '#6b7480', 'smoke');
@@ -726,7 +787,11 @@ function moveBodies(dt) {
     if (gy >= VOID || r.y < gy - 40) {   // 발밑에 땅이 없으면 떨어진다
       r.fall += 900 * dt; r.y += r.fall * dt;
       if (gy < VOID && r.y >= gy) { r.y = gy; r.fall = 0; }
-      if (r.y > H + 140 && r.alive) { r.alive = false; r.hp = 0; r.ready = true; addFloat(r.x, H - 120, `${r.name} 추락!`, '#ffb0a6'); }
+      if (r.y > H + 140 && r.alive) {
+        r.alive = false; r.hp = 0; r.ready = true;
+        addFloat(r.x, H - 120, `${r.name} 추락!`, '#ffb0a6');
+        if (r.lastBy && r.lastBy.team !== r.team) { r.lastBy.kills++; r.lastBy.tricks++; banner('🕳️ 떨어뜨렸다!', r.x, H - 170); }
+      }
     } else { r.fall = 0; r.y += (gy - r.y) * Math.min(1, dt * 10); }
     if (r.sayT > 0) r.sayT -= dt;
   }
@@ -792,7 +857,7 @@ function snapshot() {
   return { ph: phase, tt: turnTeam, tn: turnNo, tm: r1(timer), w: wind, hx: holdX === null ? null : Math.round(holdX), win: winner,
     pd: pending ? robots.indexOf(pending) : -1,
     R: robots.map(r => [r1(r.x), r1(r.y), r.hp, Math.round(r.energy), r.wet, r.shield, r.alive ? 1 : 0, Math.round(r.aim.vx), Math.round(r.aim.vy),
-      r.slot, r.item, Math.round(r.fuel), r.ready ? 1 : 0, r.say, r1(Math.max(0, r.sayT)), r.items, r.ctrl]),
+      r.slot, r.item, Math.round(r.fuel), r.ready ? 1 : 0, r.say, r1(Math.max(0, r.sayT)), r.items, r.ctrl, r.dmg, r.kills, r.tricks]),
     P: projs.filter(p => p.delay <= 0).map(p => [p.id, r1(p.x), r1(p.y), Math.round(p.vx), Math.round(p.vy), p.shell, p.sm]),
     C: crates.map(c => [c.id, c.x, Math.round(c.y), c.item, c.landed ? 1 : 0]), E: ev };
 }
@@ -822,18 +887,19 @@ function applySnapshot(s) {
     r.tx = a[0]; r.ty = a[1];
     if (r.fresh || Math.abs(r.tx - r.x) > 120) { r.x = r.tx; r.y = r.ty; r.fresh = false; }
     r.hp = a[2]; r.energy = a[3]; r.wet = a[4]; r.shield = a[5]; r.alive = !!a[6];
-    r.fuel = a[11]; r.say = a[13]; r.sayT = a[14]; r.items = a[15]; r.ctrl = a[16];
+    r.fuel = a[11]; r.say = a[13]; r.sayT = a[14]; r.items = a[15]; r.ctrl = a[16]; r.dmg = a[17]; r.kills = a[18]; r.tricks = a[19];
     // 내가 조준하는 동안에는 내 손이 먼저다(늦게 온 소식이 조준을 되돌리지 않게)
     const steering = r.ctrl === myId && phase === 'aim' && r.team === turnTeam && !newTurn && readyTn !== turnNo;
     if (!steering) { r.aim = { vx: a[7], vy: a[8] }; r.slot = a[9]; r.item = a[10]; }
     r.ready = !!a[12] || (r.ctrl === myId && readyTn === turnNo);
   });
   const old = new Map(projs.map(p => [p.id, p]));
+  if (s.P.some(a => !old.has(a[0]))) sfx('shot');
   projs = s.P.map(a => Object.assign(old.get(a[0]) || { trail: [] }, { id: a[0], x: a[1], y: a[2], vx: a[3], vy: a[4], shell: a[5], sm: a[6], delay: 0, dm: 1 }));
   crates = s.C.map(a => ({ id: a[0], x: a[1], y: a[2], item: a[3], landed: !!a[4] }));
   for (const e of s.E) {
     if (e[0] === 'b') boom(e[1], e[2], e[3], e[4]);
-    else if (e[0] === 'f') floats.push({ x: e[1], y: e[2], text: e[3], color: e[4], t: 0 });
+    else if (e[0] === 'f') { floats.push({ x: e[1], y: e[2], text: e[3], color: e[4], t: 0 }); if (e[4] === '#ffd166') sfx('wow'); }
     else if (e[0] === 'z') fx.push({ type: 'bolt', x1: e[1], y1: e[2], x2: e[3], y2: e[4], t: 0 });
     else if (e[0] === 'd') dig(e[1], e[2], e[3]);
     else if (e[0] === 'p') pile(e[1], e[2], e[3]);
@@ -1200,6 +1266,14 @@ function drawAimGuide() {
   // 이번 턴에 더 걸을 수 있는 거리
   ctx.fillStyle = 'rgba(0,0,0,.5)'; rr(ctx, m.x - 30, m.y + 30, 60, 6, 3); ctx.fill();
   ctx.fillStyle = '#7fe0c0'; rr(ctx, m.x - 29, m.y + 31, Math.max(2, 58 * m.fuel / m.model.fuel), 4, 2); ctx.fill();
+  // 지난번 조준: 흐린 선과 숫자. 이걸 보고 조금씩 고쳐 쏜다.
+  if (m.lastAim) {
+    const la = m.lastAim, ll = Math.hypot(la.vx, la.vy) || 1, pv = pivotOf(m.model, m.team);
+    const ox = m.x + pv.x, oy = m.y + pv.y, len = 40 + 60 * ll / MAX_POWER;
+    ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 2; ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + la.vx / ll * len, oy + la.vy / ll * len); ctx.stroke(); ctx.setLineDash([]);
+    label(`지난번 ${Math.round(Math.atan2(-la.vy, Math.abs(la.vx)) * 180 / Math.PI)}° ${Math.round(ll / MAX_POWER * 100)}%`, m.x, m.y + 52, '#b9c4d2', '11px sans-serif');
+  }
 }
 
 function drawProjs() {
@@ -1377,6 +1451,7 @@ $('fire').addEventListener('click', () => { if (iCanAct()) input({ t: 'ready' })
 $('skip').addEventListener('click', () => { if (iCanAct()) input({ t: 'ready', skip: 1 }); });
 $('zoom').addEventListener('click', () => { overview = !overview; $('zoom').classList.toggle('on', overview); });
 $('home').addEventListener('click', () => { cam.manual = false; overview = false; $('zoom').classList.remove('on'); });
+$('mute').addEventListener('click', () => { muted = !muted; $('mute').textContent = muted ? '🔇 소리 꺼짐' : '🔊 소리 켜짐'; });
 
 // ---------- 맵·로봇 고르기(혼자 하기) ----------
 function robotCard(id, title, desc, lines, model, onPick) {
