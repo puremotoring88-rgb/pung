@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05080f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="하늘 로봇">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<title>하늘 로봇 (가칭)</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+  html, body { margin: 0; height: 100%; background: #02040a; overflow: hidden; color: #e8eef7; overscroll-behavior: none;
+    font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; user-select: none; -webkit-user-select: none; }
+  body { display: flex; align-items: center; justify-content: center; }
+  /* 세로 화면(9:16). --u = 화면 너비의 1% */
+  #stage { position: relative; width: min(100vw, calc(100vh * 9 / 16)); height: min(100vh, calc(100vw * 16 / 9)); overflow: hidden; background: #02040a; }
+  @supports (height: 100dvh) { #stage { width: min(100vw, calc(100dvh * 9 / 16)); height: min(100dvh, calc(100vw * 16 / 9)); } }
+  /* 배경은 비스듬히 눕혀서 멀리 뻗어 나가는 땅처럼 보이게(입체감) */
+  #bg { position: absolute; left: -100%; width: 300%; top: -130%; height: 230%; transform-origin: 50% 100%;
+    transform: perspective(calc(var(--u) * 120)) rotateX(28deg); }
+  .hgHead, .tabs, .pilot, .tab { flex-shrink: 0; }
+  canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .hidden { display: none !important; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 2.2);
+    padding: calc(var(--u) * 4); padding-top: max(calc(var(--u) * 4), env(safe-area-inset-top)); background: rgba(3, 6, 14, .82);
+    overflow-y: auto; text-align: center; font-size: calc(var(--u) * 3.6); -webkit-overflow-scrolling: touch; }
+  .overlay.center { justify-content: center; }
+  .overlay h2 { margin: 0; font-size: calc(var(--u) * 7); font-weight: 900; letter-spacing: .02em; }
+  .overlay p { margin: 0; line-height: 1.55; opacity: .9; }
+  .btn { border: 2px solid #4cc9ff; background: linear-gradient(#173a66, #0d2140); border-radius: calc(var(--u) * 3); padding: calc(var(--u) * 2.6) calc(var(--u) * 6);
+    font-size: calc(var(--u) * 4.4); font-weight: 800; box-shadow: 0 calc(var(--u) * .8) 0 #06101f, inset 0 1px 0 rgba(255, 255, 255, .25); }
+  .btn:active { transform: translateY(calc(var(--u) * .6)); box-shadow: 0 calc(var(--u) * .2) 0 #06101f; }
+  .btn.sub { border-color: #50617a; background: linear-gradient(#1d2a3d, #121b29); font-weight: 600; font-size: calc(var(--u) * 3.6); }
+  .btn.big { font-size: calc(var(--u) * 6); padding: calc(var(--u) * 3) calc(var(--u) * 10); background: linear-gradient(#ff8a5c, #e0472c 60%, #b8321d); border-color: #ffc4a8;
+    box-shadow: 0 calc(var(--u) * 1) 0 #6e1c0e, 0 0 calc(var(--u) * 6) rgba(255, 120, 70, .45), inset 0 1px 0 rgba(255, 255, 255, .4); text-shadow: 0 2px 0 rgba(0, 0, 0, .3); }
+  .row { display: flex; gap: calc(var(--u) * 2); justify-content: center; flex-wrap: wrap; width: 100%; }
+
+  /* 격납고 */
+  #hangar { justify-content: flex-start; padding: 0; gap: 0; background: linear-gradient(rgba(3, 6, 14, .2), rgba(3, 6, 14, .75) 30%, rgba(3, 6, 14, .95)); }
+  .hgHead { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: calc(var(--u) * 3) calc(var(--u) * 4) calc(var(--u) * 1);
+    padding-top: max(calc(var(--u) * 3), env(safe-area-inset-top)); }
+  .logo { text-align: left; line-height: 1; }
+  .logo b { font-size: calc(var(--u) * 9); font-weight: 900; letter-spacing: .04em; background: linear-gradient(#fff6d0, #ffd166 45%, #e08a2a); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 calc(var(--u) * .6) 0 rgba(90, 40, 0, .8)); }
+  .logo b i { font-style: normal; background: linear-gradient(#e6fbff, #4cc9ff 50%, #1f6fb0); -webkit-background-clip: text; background-clip: text; }
+  .logo small { display: block; font-size: calc(var(--u) * 3.2); opacity: .75; letter-spacing: .3em; margin-top: calc(var(--u) * 1); }
+  .wallet { text-align: right; }
+  #scrap { display: inline-block; font-size: calc(var(--u) * 4.4); font-weight: 800; background: linear-gradient(#2b2410, #171207); border: 1px solid rgba(255, 209, 102, .5);
+    border-radius: 99px; padding: calc(var(--u) * 1.2) calc(var(--u) * 3.4); color: #ffe7a3; }
+  #bestTxt { display: block; font-size: calc(var(--u) * 2.8); opacity: .7; margin-top: calc(var(--u) * 1); }
+  .tabs { display: flex; width: 100%; padding: calc(var(--u) * 1.5) calc(var(--u) * 3); gap: calc(var(--u) * 1.2); position: sticky; top: 0; z-index: 2;
+    background: linear-gradient(rgba(3, 6, 14, .95), rgba(3, 6, 14, .8)); backdrop-filter: blur(4px); }
+  .tabs button { flex: 1; position: relative; border: 1px solid #2b3c56; background: rgba(16, 26, 42, .9); border-radius: calc(var(--u) * 2.5); padding: calc(var(--u) * 2) 0;
+    font-size: calc(var(--u) * 3.3); font-weight: 700; }
+  .tabs button.on { border-color: #ffd166; background: linear-gradient(#3a2f10, #1e180a); color: #ffe7a3; }
+  .tabs .badge { position: absolute; top: -6px; right: -4px; background: #ff4d4d; color: #fff; border-radius: 99px; font-size: calc(var(--u) * 2.6); padding: 0 calc(var(--u) * 1.4); }
+  .tab { width: 100%; padding: calc(var(--u) * 2) calc(var(--u) * 4) calc(var(--u) * 4); display: flex; flex-direction: column; gap: calc(var(--u) * 2.4); }
+  .glass { background: linear-gradient(160deg, rgba(36, 54, 86, .55), rgba(10, 16, 28, .75)); border: 1px solid rgba(140, 180, 230, .25); border-radius: calc(var(--u) * 4);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 calc(var(--u) * 2) calc(var(--u) * 6) rgba(0, 0, 0, .35); }
+  #preview { display: flex; align-items: center; gap: calc(var(--u) * 2); padding: calc(var(--u) * 2.4); text-align: left; }
+  .pvShip { flex: 0 0 44%; background: radial-gradient(circle at 50% 60%, rgba(76, 201, 255, .25), transparent 65%); border-radius: calc(var(--u) * 3); }
+  .pvShip canvas { width: 100%; height: auto; display: block; }
+  .pvInfo { flex: 1; font-size: calc(var(--u) * 3.3); display: flex; flex-direction: column; gap: calc(var(--u) * 1); }
+  .pvInfo > b { font-size: 1.3em; }
+  .eq { display: flex; gap: calc(var(--u) * 1); }
+  .eq span { width: calc(var(--u) * 8); height: calc(var(--u) * 8); border-radius: calc(var(--u) * 2); background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .15);
+    display: flex; align-items: center; justify-content: center; font-size: calc(var(--u) * 4.4); position: relative; }
+  .eq span.empty { opacity: .35; }
+  .eq sup { position: absolute; right: 1px; bottom: -2px; font-size: calc(var(--u) * 2.4); color: #ffd166; }
+  .ultLine { color: #ffe7a3; }
+  .stat { display: flex; align-items: center; gap: calc(var(--u) * 1.4); font-size: calc(var(--u) * 2.8); }
+  .stat span { width: 3em; opacity: .75; }
+  .stat i { flex: 1; height: calc(var(--u) * 1.6); background: rgba(0, 0, 0, .45); border-radius: 99px; overflow: hidden; }
+  .stat i b { display: block; height: 100%; background: linear-gradient(90deg, #3f7dd6, #9fe3ff); border-radius: 99px; }
+  .stat em { font-style: normal; width: 3.4em; text-align: right; opacity: .85; }
+  #stageMap { display: flex; flex-direction: column; gap: calc(var(--u) * 1.4); max-height: calc(var(--u) * 62); overflow-y: auto; padding: calc(var(--u) * 1); }
+  .node { display: flex; align-items: center; gap: calc(var(--u) * 2.4); border: 1px solid #2b3c56; background: rgba(12, 20, 34, .85); border-radius: calc(var(--u) * 3);
+    padding: calc(var(--u) * 1.8) calc(var(--u) * 2.4); text-align: left; position: relative; }
+  .node.on { border-color: #ffd166; background: linear-gradient(90deg, rgba(80, 60, 14, .9), rgba(20, 16, 6, .9)); box-shadow: 0 0 calc(var(--u) * 3) rgba(255, 209, 102, .3); }
+  .node.locked { opacity: .45; }
+  .node .num { width: calc(var(--u) * 10); height: calc(var(--u) * 10); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900;
+    font-size: calc(var(--u) * 4.4); background: radial-gradient(circle at 35% 30%, #5a7aa8, #18263d); border: 2px solid #6d8fbf; }
+  .node.done .num { background: radial-gradient(circle at 35% 30%, #ffe7a3, #b8862a); border-color: #ffd166; color: #2a1c02; }
+  .node .nm { flex: 1; } .node .nm b { display: block; font-size: calc(var(--u) * 3.6); } .node .nm i { font-style: normal; color: #ff9a9a; font-size: .8em; }
+  .node .nm small { opacity: .65; font-size: calc(var(--u) * 2.8); }
+  .node .st em { font-style: normal; color: #3a4558; font-size: calc(var(--u) * 4.4); } .node .st em.on { color: #ffd166; text-shadow: 0 0 6px rgba(255, 209, 102, .7); }
+  .node .lock { position: absolute; right: calc(var(--u) * 2); font-size: calc(var(--u) * 4); }
+  #stTip { padding: calc(var(--u) * 2.4); text-align: left; font-size: calc(var(--u) * 3.2); line-height: 1.5; }
+  #stTip small { opacity: .8; } #stTip .rules { color: #ffe7a3; }
+  .goWrap { position: sticky; bottom: 0; padding: calc(var(--u) * 2) 0 max(calc(var(--u) * 2), env(safe-area-inset-bottom)); background: linear-gradient(rgba(3, 6, 14, 0), rgba(3, 6, 14, .95) 40%); }
+  .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: calc(var(--u) * 2); width: 100%; }
+  .card { border: 1px solid #2b3c56; background: linear-gradient(160deg, rgba(30, 46, 72, .8), rgba(10, 16, 28, .9)); border-radius: calc(var(--u) * 3.5); padding: calc(var(--u) * 1.8);
+    text-align: left; display: flex; flex-direction: column; gap: calc(var(--u) * .9); font-size: calc(var(--u) * 3.1); }
+  .card.on { border: 2px solid #ffd166; background: linear-gradient(160deg, rgba(80, 62, 18, .85), rgba(20, 16, 6, .92)); box-shadow: 0 0 calc(var(--u) * 4) rgba(255, 209, 102, .25); }
+  .card.locked { opacity: .45; filter: grayscale(.7); }
+  .card canvas { width: 100%; height: auto; background: radial-gradient(circle at 50% 55%, rgba(76, 201, 255, .18), transparent 70%); border-radius: calc(var(--u) * 2); }
+  .card b { font-size: 1.25em; } .card small { opacity: .78; line-height: 1.4; } .card .ult { color: #ffe7a3; opacity: .95; } .card .lockTxt { color: #ff9a9a; }
+  .wIcon { display: inline-block; width: calc(var(--u) * 3); height: calc(var(--u) * 3); border-radius: 50%; margin-right: calc(var(--u) * 1); box-shadow: 0 0 8px currentColor; vertical-align: middle; }
+  .lvDots { display: inline-flex; gap: 3px; vertical-align: middle; } .lvDots i { width: calc(var(--u) * 2); height: calc(var(--u) * 2); border-radius: 50%; background: #2a3446; }
+  .lvDots i.on { background: #ffd166; box-shadow: 0 0 5px rgba(255, 209, 102, .8); }
+  .card .up, .pRow button, .goal button { margin-top: auto; border: 1px solid #ffd166; background: linear-gradient(#3a2f10, #1e180a); color: #ffe7a3; border-radius: calc(var(--u) * 2);
+    padding: calc(var(--u) * 1.2) calc(var(--u) * 2); font-size: calc(var(--u) * 3); font-weight: 700; }
+  .card .up:disabled, .pRow button:disabled { opacity: .4; border-color: #50617a; color: #a8b4c4; }
+  .slots { display: grid; grid-template-columns: repeat(2, 1fr); gap: calc(var(--u) * 2); width: 100%; }
+  .slot { border: 2px dashed #2b3c56; background: rgba(11, 19, 32, .85); border-radius: calc(var(--u) * 3); padding: calc(var(--u) * 2); text-align: left; font-size: calc(var(--u) * 3.2); }
+  .slot .ic { font-size: 1.6em; margin-right: calc(var(--u) * 1); }
+  .slot.filled { border-style: solid; background: linear-gradient(160deg, rgba(30, 46, 72, .8), rgba(10, 16, 28, .9)); }
+  .slot.open { border-color: #ffd166; }
+  .slot i { font-style: normal; opacity: .65; display: block; font-size: .85em; margin-top: calc(var(--u) * .6); }
+  #partList, #goals { width: 100%; display: flex; flex-direction: column; gap: calc(var(--u) * 1.6); }
+  .pRow, .goal { display: flex; align-items: center; gap: calc(var(--u) * 2); background: rgba(14, 23, 38, .9); border: 1px solid #2b3c56; border-radius: calc(var(--u) * 3);
+    padding: calc(var(--u) * 1.8); text-align: left; font-size: calc(var(--u) * 3.2); }
+  .pRow.on { border-color: #ffd166; }
+  .pRow .ic { font-size: 1.8em; } .pRow .tx, .goal .tx { flex: 1; } .pRow small, .goal small { opacity: .75; display: block; }
+  .pRow button.eq { border-color: #4cc9ff; color: #bff0ff; background: linear-gradient(#173a66, #0d2140); }
+  .goal i { display: block; height: calc(var(--u) * 1.4); background: rgba(0, 0, 0, .45); border-radius: 99px; overflow: hidden; margin-top: calc(var(--u) * 1); }
+  .goal i b { display: block; height: 100%; background: linear-gradient(90deg, #2be38a, #9dffcf); }
+  .goal .rw { font-size: calc(var(--u) * 2.8); text-align: right; opacity: .85; }
+  .goal.done { border-color: #ffd166; box-shadow: 0 0 calc(var(--u) * 3) rgba(255, 209, 102, .25); } .goal.got { opacity: .5; }
+  .note { font-size: calc(var(--u) * 3); opacity: .7; margin: 0; }
+  .tab h3 { margin: calc(var(--u) * 1) 0 0; font-size: calc(var(--u) * 3.8); text-align: left; } .tab h3 small { opacity: .6; font-size: .75em; font-weight: 400; }
+  .pilot { width: 100%; padding: 0 calc(var(--u) * 4) calc(var(--u) * 1.5); display: flex; align-items: center; gap: calc(var(--u) * 2); font-size: calc(var(--u) * 3); }
+  .pilot .lv { background: linear-gradient(#ffe7a3, #c8962e); color: #2a1c02; font-weight: 900; border-radius: 99px; padding: calc(var(--u) * .6) calc(var(--u) * 2.4); white-space: nowrap; }
+  .pilot i { flex: 1; height: calc(var(--u) * 1.8); background: rgba(0, 0, 0, .5); border-radius: 99px; overflow: hidden; border: 1px solid rgba(255, 255, 255, .15); }
+  .pilot i b { display: block; height: 100%; background: linear-gradient(90deg, #4cc9ff, #9dffcf); }
+  .pilot em { font-style: normal; opacity: .75; white-space: nowrap; }
+  .tabs { overflow-x: auto; scrollbar-width: none; } .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { flex: 0 0 auto !important; padding-left: calc(var(--u) * 2.6) !important; padding-right: calc(var(--u) * 2.6) !important; white-space: nowrap; }
+  #research, #daily { width: 100%; display: flex; flex-direction: column; gap: calc(var(--u) * 1.6); }
+  .attend { display: grid; grid-template-columns: repeat(7, 1fr); gap: calc(var(--u) * 1); }
+  .attend div { border: 1px solid #2b3c56; background: rgba(14, 23, 38, .9); border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 1.4) 0; font-size: calc(var(--u) * 2.6); line-height: 1.4; }
+  .attend div.got { border-color: #ffd166; background: linear-gradient(#3a2f10, #1e180a); color: #ffe7a3; } .attend div.today { box-shadow: 0 0 calc(var(--u) * 3) rgba(255, 209, 102, .6); }
+  .howto { gap: calc(var(--u) * 1.6) !important; font-size: calc(var(--u) * 3.2); line-height: 1.5 !important; } .howto b { color: #ffe7a3; } .howto small { opacity: .7; }
+  /* PC: 양옆 빈 자리에 조작 안내 */
+  #side { display: none; position: fixed; left: 2vw; top: 50%; transform: translateY(-50%); width: 18vw; max-width: 260px; font-size: 14px; line-height: 1.9; color: #b9c8dc;
+    background: rgba(14, 23, 38, .7); border: 1px solid #2b3c56; border-radius: 16px; padding: 18px; }
+  #side b { color: #ffe7a3; } #side kbd { background: #22324a; border-radius: 6px; padding: 1px 7px; color: #fff; border: 1px solid #3a4f70; }
+  @media (min-aspect-ratio: 11/10) and (hover: hover) { #side { display: block; } body { background: radial-gradient(circle at 50% 40%, #0d1c36, #02040a 70%); } #stage { box-shadow: 0 0 60px rgba(76, 201, 255, .25), 0 0 0 2px rgba(255, 209, 102, .25); border-radius: 14px; } }
+  .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(var(--u) * 1.4); }
+  .modes button { border: 1px solid #2b3c56; background: rgba(14, 23, 38, .9); border-radius: calc(var(--u) * 3); padding: calc(var(--u) * 1.8) calc(var(--u) * .5);
+    font-size: calc(var(--u) * 2.9); font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * .6); }
+  .modes button span { font-size: calc(var(--u) * 6); }
+  .modes button.on { border-color: #ffd166; background: linear-gradient(#3a2f10, #1e180a); color: #ffe7a3; box-shadow: 0 0 calc(var(--u) * 3) rgba(255, 209, 102, .3); }
+  #modeInfo { padding: calc(var(--u) * 2.4); text-align: left; font-size: calc(var(--u) * 3.1); line-height: 1.5; }
+  #modeInfo b { color: #ffe7a3; }
+  .hgFoot { padding: calc(var(--u) * 2) calc(var(--u) * 4) max(calc(var(--u) * 4), env(safe-area-inset-bottom)); }
+  .hgFoot .btn.sub { padding: calc(var(--u) * 1.6) calc(var(--u) * 3); font-size: calc(var(--u) * 3); }
+  .hgFoot .btn.off { opacity: .5; }
+
+  /* 판 중 */
+  #hud { position: absolute; inset: 0; pointer-events: none; }
+  #ultBtn { pointer-events: auto; position: absolute; right: calc(var(--u) * 4); bottom: calc(var(--u) * 6 + env(safe-area-inset-bottom)); width: calc(var(--u) * 21); height: calc(var(--u) * 21);
+    border-radius: 50%; border: 3px solid #5b6b85; background: radial-gradient(circle, rgba(10, 16, 28, .9) 58%, transparent 60%), conic-gradient(#ffd166 calc(var(--p, 0) * 1%), rgba(40, 52, 74, .9) 0);
+    font-size: calc(var(--u) * 3); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.15; touch-action: none; }
+  #ultBtn b { font-size: calc(var(--u) * 4); } #ultBtn small { opacity: .8; }
+  #ultBtn.ready { border-color: #fff3b0; animation: pulse .7s infinite alternate; }
+  #ultBtn.ready b { font-size: calc(var(--u) * 3.2); color: #ffe066; }
+  @keyframes pulse { from { transform: scale(1); box-shadow: 0 0 0 rgba(255, 209, 102, 0); } to { transform: scale(1.07); box-shadow: 0 0 calc(var(--u) * 6) rgba(255, 209, 102, .85); } }
+  #pauseBtn { pointer-events: auto; position: absolute; right: calc(var(--u) * 3); top: calc(var(--u) * 14 + env(safe-area-inset-top)); width: calc(var(--u) * 10); height: calc(var(--u) * 10);
+    border-radius: 50%; border: 1px solid rgba(255, 209, 102, .45); background: rgba(16, 24, 38, .8); font-size: calc(var(--u) * 4); }
+
+  #cards { background: radial-gradient(circle at 50% 30%, rgba(40, 70, 120, .55), rgba(3, 6, 14, .9)); }
+  #cards h2 { color: #9dffcf; text-shadow: 0 0 calc(var(--u) * 4) rgba(43, 227, 138, .6); }
+  #cardsLv { font-size: calc(var(--u) * 4); color: #ffe7a3; }
+  #cardsBox { display: flex; flex-direction: column; gap: calc(var(--u) * 2.5); width: 100%; }
+  .pickCard { border: 2px solid #4cc9ff; background: linear-gradient(160deg, #183a66, #0b1a30); border-radius: calc(var(--u) * 4); padding: calc(var(--u) * 3); display: flex; align-items: center;
+    gap: calc(var(--u) * 3); text-align: left; font-size: calc(var(--u) * 3.8); box-shadow: 0 calc(var(--u) * 1) 0 #06101f, 0 0 calc(var(--u) * 5) rgba(76, 201, 255, .25);
+    animation: cardIn .35s backwards; }
+  .pickCard:active { transform: scale(.97); }
+  @keyframes cardIn { from { transform: translateY(40px) scale(.9); opacity: 0; } }
+  .pickCard .ic { font-size: calc(var(--u) * 11); filter: drop-shadow(0 0 6px rgba(255, 255, 255, .4)); }
+  .pickCard b { font-size: 1.25em; display: block; } .pickCard i { font-style: normal; display: block; opacity: .6; font-size: .8em; }
+  #result { background: radial-gradient(circle at 50% 25%, rgba(60, 50, 20, .6), rgba(3, 6, 14, .92)); }
+  #rTitle { margin: 0; font-size: calc(var(--u) * 10); font-weight: 900; line-height: 1.1; }
+  #rTitle small { display: block; font-size: .35em; letter-spacing: .3em; opacity: .7; }
+  #rTitle.win { background: linear-gradient(#fff6d0, #ffd166 50%, #e08a2a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #rTitle.lose { color: #ff8a8a; }
+  #rStars span { font-size: calc(var(--u) * 13); color: #2a3446; margin: 0 calc(var(--u) * 1); display: inline-block; }
+  #rStars span.on { color: #ffd166; text-shadow: 0 0 calc(var(--u) * 3) rgba(255, 209, 102, .8); }
+  #rStars span.new { animation: starPop .6s backwards .3s; }
+  @keyframes starPop { from { transform: scale(2.5) rotate(-30deg); opacity: 0; } }
+  .stats { background: linear-gradient(160deg, rgba(36, 54, 86, .5), rgba(10, 16, 28, .8)); border: 1px solid rgba(140, 180, 230, .25); border-radius: calc(var(--u) * 4);
+    padding: calc(var(--u) * 3); width: 100%; text-align: left; line-height: 1.75; display: flex; flex-direction: column; gap: calc(var(--u) * .6); }
+  .stats .big { font-size: calc(var(--u) * 9); font-weight: 900; text-align: center; } .stats .big small { font-size: .35em; opacity: .7; margin-left: .4em; }
+  .stats .gold { color: #ffe7a3; } .stats .rules { font-size: .85em; opacity: .85; }
+</style>
+</head>
+<body>
+<div id="side"><b>조작법 (PC)</b><br>이동: 마우스 또는 <kbd>←↑↓→</kbd><br>궁극기·연타·박자: <kbd>Space</kbd> / 클릭<br>카드 고르기: <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd><br>멈춤: <kbd>P</kbd> · 출격: <kbd>Enter</kbd></div>
+<div id="stage">
+  <canvas id="bg"></canvas>
+  <canvas id="cv"></canvas>
+
+  <div id="hud" class="hidden">
+    <button id="pauseBtn">⏸</button>
+    <button id="ultBtn">궁극기</button>
+  </div>
+
+  <div id="hangar" class="overlay">
+    <header class="hgHead">
+      <div class="logo"><b>SKY<i>BOT</i></b><small>하늘 로봇</small></div>
+      <div class="wallet"><span id="scrap">🔩 0</span><span id="bestTxt"></span></div>
+    </header>
+    <div id="pilot" class="pilot"></div>
+    <nav class="tabs">
+      <button data-tab="sortie">🚀 출격</button><button data-tab="ship">✈️ 기체</button><button data-tab="arms">🔫 무기</button>
+      <button data-tab="parts">⚙️ 부품</button><button data-tab="research">🔬 연구</button>
+      <button data-tab="goals">🏅 임무<span id="goalBadge" class="badge hidden"></span></button><button data-tab="settings">⚙ 설정</button>
+    </nav>
+    <section id="tab-sortie" class="tab">
+      <div id="modes" class="modes"></div>
+      <div id="modeInfo" class="glass"></div>
+      <div id="preview" class="glass"></div>
+      <div id="stTip" class="glass"></div>
+      <div id="stageMap"></div>
+      <div class="goWrap"><button id="go" class="btn big">출격! ▶</button></div>
+    </section>
+    <section id="tab-ship" class="tab hidden"><p class="note">기체마다 체력·속도와 궁극기가 다릅니다.</p><div id="frames" class="cards"></div></section>
+    <section id="tab-arms" class="tab hidden"><p class="note">무기마다 쏘는 방식과 소리가 다릅니다. 고철로 강화하세요.</p><div id="weapons" class="cards"></div></section>
+    <section id="tab-parts" class="tab hidden"><div id="slots" class="slots"></div><div id="partList"></div></section>
+    <section id="tab-research" class="tab hidden"><p class="note">고철로 연구하면 모든 기체가 영구히 강해집니다.</p><div id="research"></div></section>
+    <section id="tab-goals" class="tab hidden">
+      <h3>📅 출석 <small>(들어온 날마다 하나씩, 빠져도 이어집니다)</small></h3><div id="attend" class="attend"></div>
+      <h3>☀️ 오늘의 임무 <small>(날마다 바뀝니다)</small></h3><div id="daily"></div>
+      <h3>🏅 도전 과제</h3><div id="goals"></div>
+    </section>
+    <section id="tab-settings" class="tab hidden">
+      <div class="row">
+        <button id="musicBtn" class="btn sub">🎵 음악</button><button id="sfxBtn" class="btn sub">🔊 효과음</button>
+        <button id="vibBtn" class="btn sub">📳 진동</button><button id="mouseBtn" class="btn sub">🖱 마우스 따라가기</button>
+        <button id="fsBtn" class="btn sub">⛶ 전체 화면</button><button id="helpBtn" class="btn sub">❔ 하는 법</button>
+      </div>
+      <h3>저장</h3>
+      <p class="note">기록은 이 기기의 이 브라우저에만 저장됩니다. 다른 기기로 옮기려면 저장 코드를 복사해 가서 붙여 넣으세요.</p>
+      <div class="row"><button id="exportBtn" class="btn sub">📤 저장 코드 복사</button><button id="importBtn" class="btn sub">📥 저장 코드 넣기</button><button id="resetBtn" class="btn sub">🗑 처음부터</button></div>
+      <p class="note" id="verTxt"></p>
+    </section>
+
+    <p class="note" style="padding:0 6% 6%">손가락으로 끌면 로봇이 따라오고, 쏘는 것은 자동입니다. 궁극기 단추가 차면 누르세요(화면을 두 번 톡톡 눌러도 됩니다).<br>
+      그물에 걸리면 화면을 빠르게 연타! 「비트 러시」가 오면 박자에 맞춰 톡!<br>컴퓨터: 방향키 이동 · 스페이스 궁극기/연타/박자 · P 멈춤</p>
+  </div>
+
+  <div id="away" class="overlay center hidden">
+    <h2>어서 와요!</h2>
+    <div id="awayTxt" class="stats"></div>
+    <button id="awayOk" class="btn big">받기</button>
+  </div>
+
+  <div id="howto" class="overlay center hidden">
+    <h2>하는 법</h2>
+    <div class="stats howto">
+      <div><b>👆 움직이기</b> 화면을 누른 채 끌면 로봇이 따라옵니다. 쏘는 것은 자동! <small>(PC: 마우스를 따라가거나 방향키)</small></div>
+      <div><b>⚪ 맞는 자리</b> 로봇 가운데 흰 점만 맞습니다. 탄 사이로 흰 점을 지나가게 하세요.</div>
+      <div><b>🌟 궁극기</b> 적을 맞히면 차오릅니다. 다 차면 오른쪽 아래 단추(또는 두 번 톡톡, 스페이스).</div>
+      <div><b>⬆ 레벨 업</b> 초록 알을 모으면 카드 3장 중 하나를 골라 이번 판 동안 강해집니다.</div>
+      <div><b>🕸 그물</b> 걸리면 못 움직입니다. 화면을 빠르게 <b>연타</b>해서 빠져나오세요.</div>
+      <div><b>♪ 비트 러시</b> 음표가 동그라미에 닿을 때 <b>톡!</b> 맞히면 박자 빔이 나갑니다.</div>
+      <div><b>🔩 고철과 부품</b> 모아서 격납고에서 무기·부품·연구를 강화하세요.</div>
+    </div>
+    <button id="howtoOk" class="btn big">알겠어요!</button>
+  </div>
+
+  <div id="cards" class="overlay center hidden">
+    <h2>LEVEL UP!</h2>
+    <div id="cardsLv"></div>
+    <p>하나를 고르세요(이번 판에만 적용)</p>
+    <div id="cardsBox"></div>
+  </div>
+
+  <div id="pause" class="overlay center hidden">
+    <h2>멈춤</h2>
+    <button id="resume" class="btn big">계속하기</button>
+    <button id="quit" class="btn sub">격납고로 (이번 판 그만두기)</button>
+  </div>
+
+  <div id="result" class="overlay center hidden">
+    <h2 id="rTitle"></h2>
+    <div id="rStars"></div>
+    <div id="rStats" class="stats"></div>
+    <div class="row" id="rBtns"></div>
+    <button id="copy" class="btn sub">📋 결과 복사해서 자랑하기</button>
+  </div>
+</div>
+<script src="js/data.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/art.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
