@@ -97,12 +97,30 @@ const MOODS = {
   hangar: { bpm: 92, prog: [[0, 4, 7], [7, 11, 14], [9, 12, 16], [5, 9, 12]], drums: null, bass: 'triangle', arpWave: 'sine', arp: [0, 1, 2, 1], pad: true },
   stage: { bpm: 128, prog: [[0, 3, 7], [8, 12, 15], [3, 7, 10], [10, 14, 17]], drums: 'beat', bass: 'sawtooth', arpWave: 'square', arp: [0, 1, 2, 3, 2, 1, 0, 1] },
   boss: { bpm: 152, prog: [[0, 3, 7], [0, 3, 7], [8, 12, 15], [10, 14, 17]], drums: 'hard', bass: 'sawtooth', arpWave: 'sawtooth', arp: [0, 2, 1, 3, 0, 2, 1, 3] },
+  duel: { bpm: 140, prog: [[0, 3, 7], [8, 12, 15], [5, 8, 12], [7, 11, 14]], drums: 'beat', bass: 'square', arpWave: 'triangle', arp: [0], noArp: true },
 };
 const ROOTS = [45, 48, 43, 50];   // 스테이지 배경마다 다른 조(A, C, G, D)
 function music(m, th) {
   if (!ac) return;
   if (m === mood && (th || 0) === theme) return;
   mood = m; theme = th || 0; step = 0; nextT = ac.currentTime + 0.08; startT = nextT;
+}
+// 리듬 결투: 박자 수 세기 + 악보의 음표마다 가락을 미리 예약한다. 0번째 박의 시각을 돌려준다
+function duel(chart, bpm, countIn) {
+  const beat = 60 / bpm;
+  if (!ac || ac.state !== 'running') return performance.now() / 1000 + countIn * beat + 0.3;
+  MOODS.duel.bpm = bpm;
+  mood = 'duel'; theme = 0; step = 0; nextT = ac.currentTime + 0.1; startT = nextT;
+  const t0 = startT + countIn * beat;
+  for (let i = 0; i < countIn; i++) osc(sfxBus, 'square', i === countIn - 1 ? 1760 : 1320, i === countIn - 1 ? 1760 : 1320, startT + i * beat, 0.06, 0.08);
+  const root = 57;
+  for (const n of chart) {
+    const ch = MOODS.duel.prog[Math.floor(n.b / 4) % 4], t = t0 + n.b * beat;
+    const midi = root + 12 + ch[0] + [0, 3, 7, 12][n.lane];
+    osc(musicBus, 'square', mtof(midi), mtof(midi), t, beat * 0.42, 0.05);
+    osc(musicBus, 'triangle', mtof(midi + 12), mtof(midi + 12), t, beat * 0.3, 0.035);
+  }
+  return t0;
 }
 // 박자 시계: 리듬 구간의 음표를 음악 박자에 맞추려고 쓴다(소리가 꺼져 있으면 보통 시계로 대신한다)
 function clock() {
@@ -131,7 +149,7 @@ function playStep(M, s, t, sp) {
     o.connect(fl); fl.connect(g); g.connect(musicBus); o.start(t); o.stop(t + d + 0.05);
   }
   const slow = mood === 'hangar';
-  if (!slow || i % 2 === 0) {   // 아르페지오
+  if (!M.noArp && (!slow || i % 2 === 0)) {   // 아르페지오
     const k = M.arp[(slow ? i / 2 | 0 : i) % M.arp.length];
     const n = root + 12 + ch[k % 3] + (k === 3 ? 12 : 0);
     osc(musicBus, M.arpWave, mtof(n), mtof(n), t, sp * (slow ? 2.5 : 0.9), slow ? 0.05 : 0.03);
@@ -142,7 +160,7 @@ function playStep(M, s, t, sp) {
 }
 
 return {
-  init, sfx, music, clock,
+  init, sfx, music, clock, duel,
   stopMusic() { mood = null; },
   setMusic(on) { musicOn = on; if (musicBus) musicBus.gain.value = on ? 0.3 : 0; },
   setSfx(on) { sfxOn = on; if (sfxBus) sfxBus.gain.value = on ? 0.55 : 0; },

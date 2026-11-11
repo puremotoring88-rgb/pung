@@ -325,6 +325,12 @@ function enemyBase(type) {
       g.fillStyle = 'rgba(0,40,15,.3)'; poly(g, [[0, 22], [20, 0], [0, 0]]); g.fill();
       g.strokeStyle = 'rgba(0,40,15,.6)'; g.beginPath(); g.moveTo(0, -22); g.lineTo(-4, -6); g.lineTo(5, 4); g.lineTo(0, 22); g.stroke();
       eye(0, 0, 2.4, 'rgba(180,255,190,1)');
+    } else if (type === 'treasure') {
+      for (const sx of [-1, 1]) { g.fillStyle = metal(g, sx * 10, -6, sx * 28, 10, [[0, '#fff1b8'], [1, '#8a5a10']]); poly(g, [[sx * 8, -8], [sx * 28, 2], [sx * 26, 10], [sx * 8, 8]]); g.fill(); g.stroke(); }
+      g.beginPath(); g.ellipse(0, 0, 13, 22, 0, 0, TAU); g.fillStyle = metal(g, -13, -20, 13, 20, [[0, '#fff8d0'], [0.4, '#ffd166'], [1, '#7a4a08']]); g.fill(); g.stroke();
+      g.fillStyle = '#5a3a06'; g.fillRect(-9, -2, 18, 10); g.strokeRect(-9, -2, 18, 10);
+      g.fillStyle = '#ffe9a0'; g.font = 'bold 9px sans-serif'; g.textAlign = 'center'; g.fillText('★', 0, 6);
+      eye(0, -12, 3, 'rgba(255,240,180,1)');
     } else if (type === 'netter') {
       g.strokeStyle = 'rgba(120,255,230,.55)'; g.lineWidth = 0.8;
       for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * 24, Math.sin(a) * 24); g.stroke(); }

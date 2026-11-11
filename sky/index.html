@@ -146,7 +146,17 @@
     background: rgba(14, 23, 38, .7); border: 1px solid #2b3c56; border-radius: 16px; padding: 18px; }
   #side b { color: #ffe7a3; } #side kbd { background: #22324a; border-radius: 6px; padding: 1px 7px; color: #fff; border: 1px solid #3a4f70; }
   @media (min-aspect-ratio: 11/10) and (hover: hover) { #side { display: block; } body { background: radial-gradient(circle at 50% 40%, #0d1c36, #02040a 70%); } #stage { box-shadow: 0 0 60px rgba(76, 201, 255, .25), 0 0 0 2px rgba(255, 209, 102, .25); border-radius: 14px; } }
-  .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(var(--u) * 1.4); }
+  .modes { display: grid; grid-template-columns: repeat(5, 1fr); gap: calc(var(--u) * 1.2); }
+  .modes button { font-size: calc(var(--u) * 2.6) !important; }
+  .dojoLv { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 1.2); margin-top: calc(var(--u) * 1.6); }
+  .dojoLv button { border: 1px solid #6a4aa8; background: #1a1236; color: #e8d8ff; border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 1.2) calc(var(--u) * 2.2); font-size: calc(var(--u) * 3); font-weight: 700; }
+  .dojoLv button.on { border-color: #ff6ad5; background: #3a1a5a; } .dojoLv button:disabled { opacity: .35; } .dojoLv i { font-style: normal; color: #ffe066; margin-left: .3em; }
+  .pickCard em { font-style: normal; font-size: .75em; font-weight: 900; padding: 1px 8px; border-radius: 99px; margin-bottom: 3px; display: inline-block; }
+  .pickCard.rare { border-color: #b98bff; background: linear-gradient(160deg, #3a2066, #140b30); } .pickCard.rare em { background: #b98bff; color: #1a0d33; }
+  .pickCard.hero { border-color: #ffd166; background: linear-gradient(160deg, #5a4210, #1e1505); box-shadow: 0 0 calc(var(--u) * 6) rgba(255, 209, 102, .45); } .pickCard.hero em { background: #ffd166; color: #2a1c02; }
+  .pickCard.curse { border-color: #ff5d5d; background: linear-gradient(160deg, #5a1414, #1e0606); } .pickCard.curse em { background: #ff5d5d; color: #2a0505; }
+  .pickCard.evo { border-color: #fff; background: linear-gradient(120deg, #ff6ad5, #4cc9ff, #ffd166); color: #1a0d33; box-shadow: 0 0 calc(var(--u) * 7) rgba(255, 255, 255, .6); } .pickCard.evo em { background: #fff; color: #1a0d33; }
+  #stage.lefty #ultBtn { right: auto; left: calc(var(--u) * 4); } #stage.lefty #pauseBtn { right: auto; left: calc(var(--u) * 3); }
   .modes button { border: 1px solid #2b3c56; background: rgba(14, 23, 38, .9); border-radius: calc(var(--u) * 3); padding: calc(var(--u) * 1.8) calc(var(--u) * .5);
     font-size: calc(var(--u) * 2.9); font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * .6); }
   .modes button span { font-size: calc(var(--u) * 6); }
@@ -237,7 +247,7 @@
     <section id="tab-settings" class="tab hidden">
       <div class="row">
         <button id="musicBtn" class="btn sub">🎵 음악</button><button id="sfxBtn" class="btn sub">🔊 효과음</button>
-        <button id="vibBtn" class="btn sub">📳 진동</button><button id="mouseBtn" class="btn sub">🖱 마우스 따라가기</button>
+        <button id="vibBtn" class="btn sub">📳 진동</button><button id="mouseBtn" class="btn sub">🖱 마우스 따라가기</button><button id="leftyBtn" class="btn sub">✋ 오른손 모드</button>
         <button id="fsBtn" class="btn sub">⛶ 전체 화면</button><button id="helpBtn" class="btn sub">❔ 하는 법</button>
       </div>
       <h3>저장</h3>
@@ -294,6 +304,7 @@
 <script src="js/data.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/art.js"></script>
+<script src="js/duel.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

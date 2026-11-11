@@ -65,6 +65,7 @@ const ENEMIES = {
   splitter: { name: '분열기', hp: 32, r: 20, xp: 2, score: 120, from: 3 },
   tank:     { name: '장갑기', hp: 140, r: 30, xp: 6, score: 400, from: 4, elite: true },
   netter:   { name: '그물기', hp: 36, r: 21, xp: 3, score: 180, from: 2 },   // 그물을 쏜다. 걸리면 연타해서 빠져나온다
+  treasure: { name: '황금 수송선', hp: 160, r: 34, xp: 5, score: 1500, from: 1 },   // 가끔 지나간다. 놓치기 전에 부수면 고철이 쏟아진다
 };
 
 // 보스: 다섯이 차례로 나오고, 다섯 번째 다음부터는 더 세져서 다시 나온다
