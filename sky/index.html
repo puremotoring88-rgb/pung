@@ -94,6 +94,9 @@
   .node .lock { position: absolute; right: calc(var(--u) * 2); font-size: calc(var(--u) * 4); }
   #stTip { padding: calc(var(--u) * 2.4); text-align: left; font-size: calc(var(--u) * 3.2); line-height: 1.5; }
   #stTip small { opacity: .8; } #stTip .rules { color: #ffe7a3; }
+  #assistBtn { display: block; margin: 0 auto calc(var(--u) * 2); font-size: calc(var(--u) * 3.2); border-color: #6ee37a; } #assistBtn small { opacity: .7; }
+  .node .rank { font-weight: 900; font-size: calc(var(--u) * 4.6); width: calc(var(--u) * 7); text-align: center; }
+  .rank.rS { color: #ffd166; text-shadow: 0 0 8px rgba(255, 209, 102, .8); } .rank.rA { color: #9dffcf; } .rank.rB { color: #9fd0ff; } .rank.rC { color: #8a96a8; }
   .goWrap { position: sticky; bottom: 0; padding: calc(var(--u) * 2) 0 max(calc(var(--u) * 2), env(safe-area-inset-bottom)); background: linear-gradient(rgba(3, 6, 14, 0), rgba(3, 6, 14, .95) 40%); }
   .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: calc(var(--u) * 2); width: 100%; }
   .card { border: 1px solid #2b3c56; background: linear-gradient(160deg, rgba(30, 46, 72, .8), rgba(10, 16, 28, .9)); border-radius: calc(var(--u) * 3.5); padding: calc(var(--u) * 1.8);
@@ -220,7 +223,7 @@
       <div id="preview" class="glass"></div>
       <div id="stTip" class="glass"></div>
       <div id="stageMap"></div>
-      <div class="goWrap"><button id="go" class="btn big">출격! ▶</button></div>
+      <div class="goWrap"><button id="assistBtn" class="btn sub hidden"></button><button id="go" class="btn big">출격! ▶</button></div>
     </section>
     <section id="tab-ship" class="tab hidden"><p class="note">기체마다 체력·속도와 궁극기가 다릅니다.</p><div id="frames" class="cards"></div></section>
     <section id="tab-arms" class="tab hidden"><p class="note">무기마다 쏘는 방식과 소리가 다릅니다. 고철로 강화하세요.</p><div id="weapons" class="cards"></div></section>

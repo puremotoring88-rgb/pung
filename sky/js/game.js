@@ -177,12 +177,15 @@ const diffFor = s => ({
   iv: Math.max(0.55, 1.9 - 0.12 * (s - 1)),
 });
 
+let assistOn = false;
 function startRun(stage, md = 'stage') {
   A.init();
   if (touchDevice) goFullscreen();
   if (md === 'auto') stage = S.idle.zone;
   if (md === 'rush' || md === 'endless') stage = 1;
   st = buildStats();
+  const assist = md === 'stage' && assistOn && (S.fails || {})[stage] >= 2;
+  if (assist) { st.maxHp = Math.round(st.maxHp * 1.25); st.dmg *= 1.25; }
   shots = []; foes = []; ebul = []; drops = []; fx = []; texts = []; lasers = []; boss = null; shake = 0; flash = 0;
   run = { stage, t: 0, phase: 'waves', waveDur: 110, spawnT: 1.2, warnT: 0, endT: 0, chain: 0, score: 0, kills: 0, scrapGot: 0, partsGot: [],
     level: 1, xp: 0, xpNeed: 8, taken: {}, d: diffFor(stage), theme: (stage - 1) % 4, loop: (stage - 1) / 5 | 0,
@@ -190,7 +193,7 @@ function startRun(stage, md = 'stage') {
     rushAt: rnd(42, 58), rush: null, rushDone: false, rushSum: null,
     banner: { kind: 'stage', title: `STAGE ${stage}`, sub: D.THEMES[(stage - 1) % 4].name, t: 0, life: 2.6 },
     m: { dmg: 1, rate: 1, multi: 0, pierce: 0, drones: 0, magnet: 1, ult: 1, speed: 1, barrier: 0 },
-    mode: md, wave: 1, bossCount: 0, nextBoss: 90, bossIdx: 0, startedAt: Date.now(), zone0: stage };
+    mode: md, wave: 1, bossCount: 0, nextBoss: 90, bossIdx: 0, startedAt: Date.now(), zone0: stage, assist };
   if (md === 'endless') { run.waveDur = Infinity; run.banner = { kind: 'stage', title: 'WAVE 1', sub: '무한 생존 · 얼마나 버틸까?', t: 0, life: 2.6 }; }
   if (md === 'rush') { run.d = diffFor(Math.max(3, S.cleared)); run.phase = 'warning'; run.warnT = 2.5; run.rushDone = true; run.banner = { kind: 'boss', title: 'BOSS RUSH', sub: '보스 다섯 연속!', t: 0, life: 2.4 }; }
   if (md === 'auto') { run.waveDur = 45; run.rushAt = rnd(15, 30); run.banner = { kind: 'stage', title: `ZONE ${stage}`, sub: '자동 출격 · 그냥 두셔도 됩니다', t: 0, life: 2.6 }; S.idle.on = true; S.idle.lastSeen = Date.now(); keepAwake(true); }
@@ -308,7 +311,7 @@ function spawnBoss() {
     const part = { type: 'boss', isBoss: true, x: W / 2 + dx, y: -170, dx, r, hp, maxHp: hp, t: 0, flash: 0, xp: 0, score: 0, inv: true };
     foes.push(part); boss.parts.push(part);
   }
-  run.hitsAtBoss = run.hits;
+  run.hitsAtBoss = run.hits; run.bossStart = run.t;
   A.music('boss', run.theme);
   run.banner = { kind: 'boss', title: def.name, sub: def.tip, t: 0, life: 3.4 };
 }
@@ -330,8 +333,16 @@ function bossAI(dt) {
     return false;
   };
   const hpFrac = b.parts.reduce((s, p) => s + Math.max(0, p.hp), 0) / b.parts.reduce((s, p) => s + p.maxHp, 0);
-  const p2 = hpFrac < 0.5;
-  if (p2 && !b.p2) { b.p2 = true; say('보스가 화났다!', W / 2, H * 0.42, '#ff8a8a', 30, 1.6); shake = Math.max(shake, 0.6); }
+  const ph = b.entering ? 1 : hpFrac < 1 / 3 ? 3 : hpFrac < 2 / 3 ? 2 : 1;
+  if (ph > (b.ph || 1)) {   // 단계가 바뀔 때: 잠깐 무적이 되며 모습이 바뀐다
+    b.ph = ph; b.phT = 1.1;
+    b.parts.forEach(p => { if (!p.dead) p.inv = true; });
+    run.banner = { kind: 'boss', title: `${b.def.name} · ${ph}단계`, sub: ph === 2 ? '공격이 거세진다!' : '마지막 발악!', t: 0, life: 1.6 };
+    shake = Math.max(shake, 0.9); flash = 0.35; A.sfx('charge'); buzz([60, 40, 60]);
+  }
+  if (b.phT > 0 && (b.phT -= dt) <= 0) b.parts.forEach(p => { p.inv = false; });
+  const p2 = ph >= 2, p3 = ph >= 3;
+  b.p2 = p2;
   const main = alive[0];
   switch (b.def.id) {
     case 'spider':
@@ -340,11 +351,16 @@ function bossAI(dt) {
       if (ev('aim', 2.6 / fr)) fan(b.x, b.y + 30, angTo(main), 3, 0.25, 235);
       if (p2 && ev('mine', 2.1 / fr)) ebul.push({ x: rnd(60, W - 60), y: b.y + 40, vx: 0, vy: 140, r: 13, color: '#ff3d3d', mine: 1.4 });
       if (p2 && ev('web', 7)) { eShot(b.x, b.y + 40, angTo(main), 160, { net: true, r: 16, color: '#7ff0dc' }); A.sfx('net'); }   // 거미줄 그물
+      if (p3 && ev('spiral', 0.14 / fr)) for (const s of [1, -1]) eShot(b.x, b.y + 10, s * b.t * 2.2, 150, { color: '#ffd166', r: 6 });   // 두 겹 소용돌이
       break;
     case 'whale':
       b.x = W / 2 + Math.sin(b.t * 0.4) * 110;
       if (ev('fan', 1.7 / fr)) { fan(b.x, b.y + 50, angTo(main), 5, 0.6, 195, { color: '#7fd8ff' }); if (p2) fan(b.x, b.y + 50, Math.PI / 2, 9, 1.8, 150, { color: '#7fd8ff' }); }
       if (ev('pup', 5)) { addFoe('scout', 60, -20, { vy: 170 }); addFoe('scout', W - 60, -20, { vy: 170 }); }
+      if (p3 && ev('wall', 3.2 / fr)) {   // 틈이 하나뿐인 물방울 벽
+        const gap = rnd(80, W - 80);
+        for (let x = 20; x < W; x += 34) if (Math.abs(x - gap) > 46) ebul.push({ x, y: b.y + 60, vx: 0, vy: 130 * run.d.bs, r: 9, color: '#9fe0ff' });
+      }
       if (b.inhale > 0) {
         b.inhale -= dt;
         if (Math.random() < 0.6) fx.push({ k: 'streak', x: rnd(0, W), y: rnd(b.y + 120, H), vx: 0, vy: -520, t: 0, life: 0.6, color: 'rgba(200,240,255,.7)', size: 2 });
@@ -362,7 +378,8 @@ function bossAI(dt) {
         b.spin += dt * 2.4 * (enr ? 1.4 : 1);
         if (ev('Rs', 0.11 / fr)) for (let k = 0; k < 2; k++) eShot(Rp.x, Rp.y, b.spin + k * Math.PI, 170, { color: '#c58bff' });
       }
-      if (enr && ev('laser', 4)) addLaser(main, angTo(main), 1.0, 0.6);
+      if (enr && ev('laser', p3 ? 2.6 : 4)) addLaser(main, angTo(main), p3 ? 0.8 : 1.0, 0.6);
+      if (p3 && ev('cross', 3.6)) for (const a of [Math.PI / 2 - 0.5, Math.PI / 2 + 0.5]) addLaser(main, a, 1.0, 0.5);
       break;
     }
     case 'knight':
@@ -372,15 +389,19 @@ function bossAI(dt) {
         b.slash = p2 ? 2 : 0; b.slashT = 0.35;
         fan(b.x, b.y + 40, Math.PI / 2, 7 + L, 1.3, 245, { color: '#e0e8ff' });
       }
-      if (b.slash === 2 && (b.slashT -= dt) <= 0) { b.slash = 0; fan(b.x, b.y + 40, Math.PI / 2, 8 + L, 1.5, 200, { color: '#e0e8ff' }); }
+      if (b.slash === 2 && (b.slashT -= dt) <= 0) {
+        b.slash = 0; fan(b.x, b.y + 40, Math.PI / 2, 8 + L, 1.5, 200, { color: '#e0e8ff' });
+        if (p3) for (const a of [Math.PI / 2 - 0.7, Math.PI / 2 + 0.7]) fan(b.x, b.y + 40, a, 5, 0.25, 280, { color: '#ffffff', r: 6 });   // X자 베기
+      }
       if (b.mirror > 0) b.mirror -= dt;
-      else if (ev('mirror', 8)) { b.mirror = 2.6; say('거울 방패! 내 탄이 되돌아온다', W / 2, H * 0.45, '#9fc8ff', 24, 1.6); }
+      else if (ev('mirror', p3 ? 5.5 : 8)) { b.mirror = 2.6; say('거울 방패! 내 탄이 되돌아온다', W / 2, H * 0.45, '#9fc8ff', 24, 1.6); }
       main.shield = b.mirror > 0;
       break;
     case 'core':
       b.x = W / 2;
       b.spin += dt * (p2 ? 1.3 : 1.0);
-      if (ev('sp', 0.13 / fr)) for (let k = 0; k < 4; k++) eShot(b.x, b.y, b.spin + k * TAU / 4, 175, { color: '#7cf0c0' });
+      if (p3) b.spin -= dt * 2.6;   // 마지막 단계: 거꾸로 돈다
+      if (ev('sp', 0.13 / fr)) { const arms = p3 ? 6 : 4; for (let k = 0; k < arms; k++) eShot(b.x, b.y, b.spin + k * TAU / arms, 175, { color: p3 ? '#ff8a8a' : '#7cf0c0' }); }
       if (ev('ring', 3 / fr)) ring(b.x, b.y, 16 + 2 * L, 0, 140, { color: '#ffd166' });
       if (p2 && ev('laser', 3.4)) addLaser(main, angTo(main), 0.9, 0.5);
       break;
@@ -402,6 +423,14 @@ function bossDown() {
   if (!S.stats.bossSeen.includes(boss.idx)) S.stats.bossSeen.push(boss.idx);
   dcount('boss');
   if (run.hits === run.hitsAtBoss) { S.stats.nohit = 1; say('노피격 격파!', W / 2, H * 0.32, '#7fffd4', 30, 2.4); }
+  // 보스 랭크: 정해진 시간(par) 안에 적게 맞고 잡을수록 높다. S·A면 고철 덤
+  const bt = run.t - run.bossStart, hits = run.hits - run.hitsAtBoss, par = (boss.def.par || 45) + 3 * Math.min(run.stage, 10);
+  const rank = run.assist ? 'C' : hits === 0 && bt <= par ? 'S' : hits <= 1 && bt <= par * 1.3 ? 'A' : hits <= 3 && bt <= par * 1.8 ? 'B' : 'C';
+  run.bossRank = rank; run.bossTime = bt;
+  const bonus = { S: 6, A: 3, B: 1, C: 0 }[rank];
+  for (let i = 0; i < bonus; i++) drops.push({ kind: 'scrap', x: x + rnd(-60, 60), y: y + rnd(-30, 30), vy: rnd(30, 80), v: 5 });
+  say(`${rank} 랭크 · ${bt.toFixed(1)}초`, W / 2, H * 0.4, { S: '#ffd166', A: '#9dffcf', B: '#9fd0ff', C: '#c9d2dc' }[rank], 34, 2.6);
+  if (run.mode === 'stage') { S.ranks = S.ranks || {}; const old = S.ranks[run.stage]; if (!old || 'SABC'.indexOf(rank) < 'SABC'.indexOf(old)) S.ranks[run.stage] = rank; }
   A.sfx('boomL'); shake = 1.4; flash = 1; buzz([80, 60, 160]);
 }
 
@@ -993,7 +1022,9 @@ function endRun(win) {
   const before = S.cleared, hpOk = P.hp >= P.maxHp * 0.5;
   S.stats.bestCombo = Math.max(S.stats.bestCombo, run.maxCombo);
   const old = S.stars[run.stage] || [false, false, false];
-  const now = [old[0] || win, old[1] || (win && hpOk), old[2] || run.maxCombo >= 30];
+  const now = [old[0] || win, old[1] || (win && hpOk && !run.assist), old[2] || (run.maxCombo >= 30 && !run.assist)];
+  S.fails = S.fails || {};
+  S.fails[run.stage] = win ? 0 : (S.fails[run.stage] || 0) + 1;
   const newStars = now.filter((v, i) => v && !old[i]).length;
   if (now.some(Boolean)) S.stars[run.stage] = now;
   S.scrap += newStars * STAR_REWARD;
@@ -1012,6 +1043,8 @@ function endRun(win) {
   $('rStars').innerHTML = now.map((v, i) => `<span class="${v ? 'on' : ''} ${v && !old[i] ? 'new' : ''}" title="${STAR_RULES[i]}">★</span>`).join('');
   $('rStats').innerHTML = [
     `<div class="big">${run.score.toLocaleString()}<small>점${newBest ? ' · 최고 기록!' : ''}</small></div>`,
+    run.bossRank ? `<div>보스 랭크 <b class="gold">${run.bossRank}</b> · ${run.bossTime.toFixed(1)}초 · 맞은 횟수 ${run.hits - run.hitsAtBoss}${S.ranks && S.ranks[run.stage] ? ` · 최고 ${S.ranks[run.stage]}` : ''}</div>` : '',
+    run.assist ? '<div>🛟 지원 출격으로 깼습니다(별 2·3과 S·A 랭크는 지원 없이 도전)</div>' : '',
     `<div>처치 <b>${run.kills}</b> · 최고 콤보 <b>${run.maxCombo}</b> · 레벨 <b>${run.level}</b></div>`,
     `<div>얻은 고철 🔩 <b>${run.scrapGot}</b>${newStars ? ` + 새 별 보상 🔩 <b>${newStars * STAR_REWARD}</b>` : ''}</div>`,
     run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
@@ -1542,6 +1575,10 @@ function renderHangar() {
   $('stageMap').classList.toggle('hidden', selMode !== 'stage');
   $('stTip').classList.toggle('hidden', selMode !== 'stage');
   $('go').textContent = M.go;
+  const canAssist = selMode === 'stage' && (S.fails || {})[hangarStage] >= 2;
+  $('assistBtn').classList.toggle('hidden', !canAssist);
+  if (!canAssist) assistOn = false;
+  $('assistBtn').innerHTML = `${assistOn ? '✅' : '⬜'} 🛟 지원 출격 <small>(체력·화력 +25%, 이 판은 별 2·3과 S·A 랭크 없음)</small>`;
   const s2 = buildStats();
   const pv = $('preview'); pv.innerHTML = '';
   const shipBox = document.createElement('div'); shipBox.className = 'pvShip';
@@ -1556,7 +1593,8 @@ function renderHangar() {
     const open = s <= S.maxStage, bd = D.BOSSES[(s - 1) % 5], stars = S.stars[s] || [], loop = (s - 1) / 5 | 0;
     const n = document.createElement('button');
     n.className = 'node' + (s === hangarStage ? ' on' : '') + (open ? '' : ' locked') + (S.cleared >= s ? ' done' : '');
-    n.innerHTML = `<span class="num">${s}</span><span class="nm"><b>${bd.name}${loop ? ` <i>${loop + 1}회차</i>` : ''}</b><small>${D.THEMES[(s - 1) % 4].name}</small></span><span class="st">${[0, 1, 2].map(i => `<em class="${stars[i] ? 'on' : ''}">★</em>`).join('')}</span>${open ? '' : '<span class="lock">🔒</span>'}`;
+    const rk = (S.ranks || {})[s];
+    n.innerHTML = `<span class="num">${s}</span><span class="nm"><b>${bd.name}${loop ? ` <i>${loop + 1}회차</i>` : ''}</b><small>${D.THEMES[(s - 1) % 4].name}</small></span>${rk ? `<span class="rank r${rk}">${rk}</span>` : ''}<span class="st">${[0, 1, 2].map(i => `<em class="${stars[i] ? 'on' : ''}">★</em>`).join('')}</span>${open ? '' : '<span class="lock">🔒</span>'}`;
     if (open) n.addEventListener('click', () => { hangarStage = s; A.sfx('click'); renderHangar(); });
     map.append(n);
   }
@@ -1738,6 +1776,7 @@ $('ultBtn').addEventListener('pointerdown', e => { e.stopPropagation(); if (P &&
 $('pauseBtn').addEventListener('click', pauseGame);
 $('resume').addEventListener('click', resumeGame);
 $('quit').addEventListener('click', () => { save(); $('pause').classList.add('hidden'); if (run && run.mode !== 'stage') endRun(false); else showHangar(); });
+$('assistBtn').addEventListener('click', () => { assistOn = !assistOn; A.sfx('click'); renderHangar(); });
 $('go').addEventListener('click', () => {
   A.init(); A.sfx('click');
   const go = () => startRun(hangarStage, selMode);
