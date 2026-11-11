@@ -569,6 +569,7 @@ function dojoEnd(r) {
   if (lv < S.dojo.open) mk(`Lv ${lv + 1} 도전 ▶`, 'big', () => { dojoLv = lv + 1; startRun(1, 'dojo'); });
   mk('다시 하기', lv < S.dojo.open ? 'sub' : 'big', () => { dojoLv = lv; startRun(1, 'dojo'); });
   mk('격납고', 'sub', showHangar);
+  Rank.after('dojo', lv * 1000 + Math.round(r.acc * 999), `Lv ${lv} · ${r.rank} 랭크 · 정확도 ${Math.round(r.acc * 100)}%`);
   $('copy').dataset.text = `🎵 볼트윙 리듬 도장 Lv ${lv} ${r.rank} 랭크 · 정확도 ${Math.round(r.acc * 100)}% · 콤보 ${r.maxCombo}`;
   $('result').classList.remove('hidden');
 }
@@ -1198,6 +1199,8 @@ function endOther(win) {   // 무한 생존·보스 러시·자동 출격의 결
   const mk = (label, cls, fn) => { const b = document.createElement('button'); b.className = 'btn ' + cls; b.textContent = label; b.addEventListener('click', () => { A.sfx('click'); fn(); }); btns.append(b); };
   mk(m === 'auto' ? '다시 켜 두기 ▶' : '다시 하기 ▶', 'big', () => startRun(1, m));
   mk('격납고', 'sub', showHangar);
+  if (m === 'endless') Rank.after('endless', run.score, `WAVE ${run.wave} · ${fmt(run.t)}`, !run.coop);
+  if (m === 'rush') Rank.after('rush', run.score, run.bossIdx >= 5 || win ? `완주 · ${fmt(run.t)}` : `보스 ${run.bossIdx}/5`, !run.coop);
   $('copy').dataset.text = `⚡ 볼트윙 ${MODES.find(x => x.id === m).name} ${title.replace(/<[^>]+>/g, ' ').trim()} · 점수 ${run.score.toLocaleString()}`;
   $('result').classList.remove('hidden');
 }
@@ -1255,6 +1258,7 @@ function endRun(win) {
   if (win) mk('다음 스테이지 ▶', 'big', () => startRun(stg + 1));
   else mk('다시 도전', 'big', () => startRun(stg));
   mk('격납고', 'sub', showHangar);
+  Rank.after('stage', run.score, `STAGE ${run.stage}${win ? ' 클리어' : ''} · ${st.F.name}`, !run.coop && !run.assist);
   $('copy').dataset.text = `⚡ 볼트윙 스테이지 ${run.stage} ${win ? '클리어' : '도전'} ${now.map(v => (v ? '★' : '☆')).join('')} 점수 ${run.score.toLocaleString()} · 콤보 ${run.maxCombo} · ${st.F.name}+${st.Wp.name}`;
   $('result').classList.remove('hidden');
 }
@@ -1779,6 +1783,7 @@ function renderHangar() {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   { const on = document.querySelector('.tabs button.on'), nav = document.querySelector('.tabs'); if (on) nav.scrollLeft = on.offsetLeft - nav.clientWidth / 2 + on.clientWidth / 2; }
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('hidden', t.id !== 'tab-' + tab));
+  if (tab === 'rank') Rank.render($('tab-rank'));
   const claimable = GOALS.filter(g => !S.claimed[g.id] && g.val() >= g.need).length;
   $('goalBadge').textContent = claimable || '';
   $('goalBadge').classList.toggle('hidden', !claimable);
@@ -2447,6 +2452,7 @@ Forge.init({
   reborn: () => { if (run && run.mode === 'auto') nextZone(1, 'ZONE 1', '환생! 처음부터 더 강하게'); save(); },
 });
 { const q = new URLSearchParams(location.search).get('room'); if (q) { selMode = 'coop'; joinCode = q.toUpperCase().slice(0, 5); } }   // 초대 링크로 들어오면
+Rank.init({ S, save, sfx: n => A.sfx(n), ver: VERSION });
 renderHangar();
 if (joinCode && selMode === 'coop') joinRoom(joinCode);
 SKY.net = () => net; SKY.allies = allies; SKY.host = hostRoom; SKY.join = joinRoom;

@@ -52,6 +52,34 @@
   .logo b i { font-style: normal; background: linear-gradient(#e6fbff, #4cc9ff 50%, #1f6fb0); -webkit-background-clip: text; background-clip: text; }
   .logo small .by { letter-spacing: .08em; font-weight: 800; color: #9fe0ff; }
   .credit { margin: calc(var(--u) * 3) 0; padding: calc(var(--u) * 3); border-radius: calc(var(--u) * 2.4); background: rgba(10,20,40,.55); border: 1px solid rgba(160,200,255,.25); text-align: center; }
+  .gem { display: inline-block; width: .75em; height: .75em; margin: 0 .45em 0 .1em; transform: rotate(45deg); border-radius: 2px; vertical-align: .02em;
+    background: linear-gradient(135deg, #fff 0%, var(--c) 45%, rgba(0,0,0,.6) 140%); box-shadow: 0 0 .5em var(--c); }
+  .rkMe { padding: calc(var(--u) * 2.4); border-radius: calc(var(--u) * 2); background: rgba(10,20,40,.6); border: 1px solid rgba(255,209,102,.35); font-size: calc(var(--u) * 4); }
+  .rkMe small { display: block; font-size: .7em; color: #b9c8dc; margin-top: .3em; }
+  .rkJoin p, .rkMsg { font-size: calc(var(--u) * 3.1); color: #cfe0f5; line-height: 1.5; } .rkMsg { color: #ff9a9a; }
+  .rkRow { display: flex; gap: calc(var(--u) * 1.6); margin: calc(var(--u) * 2) 0; }
+  .rkRow input { flex: 1; min-width: 0; font: inherit; padding: calc(var(--u) * 2); border-radius: calc(var(--u) * 1.6); border: 1px solid rgba(160,200,255,.35); background: rgba(5,12,28,.7); color: #fff; }
+  .rkBtn { font: inherit; font-weight: 800; padding: calc(var(--u) * 2) calc(var(--u) * 3); border-radius: calc(var(--u) * 1.6); border: 0; background: linear-gradient(#ffd166, #e08a2a); color: #2a1600; cursor: pointer; }
+  .rkBtn.sub { flex: 1; background: rgba(40,70,120,.6); color: #fff; border: 1px solid rgba(160,200,255,.35); }
+  .rkChips { display: flex; gap: calc(var(--u) * 1.2); margin: calc(var(--u) * 2) 0 0; }
+  .rkChips button { flex: 1; font: inherit; font-size: calc(var(--u) * 3); padding: calc(var(--u) * 1.8) 0; border-radius: calc(var(--u) * 1.6); border: 1px solid #2b3c56; background: rgba(16,26,42,.9); color: #cfe0f5; cursor: pointer; }
+  .rkChips button.on { border-color: #ffd166; color: #ffe7a3; background: linear-gradient(#3a2f10, #1e180a); }
+  .rkChips.small button { font-size: calc(var(--u) * 2.8); padding: calc(var(--u) * 1.2) 0; }
+  .rkList { margin: calc(var(--u) * 2) 0; }
+  .rk { display: flex; align-items: center; gap: calc(var(--u) * 2); padding: calc(var(--u) * 2) calc(var(--u) * 2.4); border-bottom: 1px solid rgba(160,200,255,.12); font-size: calc(var(--u) * 3.6); }
+  .rk.me { background: rgba(255,209,102,.12); border-radius: calc(var(--u) * 1.6); }
+  .rk .pos { width: 2.2em; text-align: center; font-weight: 900; color: #ffd166; }
+  .rk .who { flex: 1; min-width: 0; } .rk .who small { display: block; font-size: .72em; color: #9fb0c6; margin-left: 1.3em; }
+  .rk b { color: #fff; }
+  .rankLine { margin-top: .4em; color: #ffe7a3; } .rankLine small { color: #9fb0c6; }
+  .zone { font-style: normal; font-weight: 800; color: var(--c); white-space: nowrap; }
+  .rkStat { margin-top: .5em; font-size: .78em; color: #e8eef7; line-height: 1.5; }
+  .rkHint { font-size: calc(var(--u) * 3); color: #9dffcf; margin-bottom: calc(var(--u) * 1); }
+  .rkZones { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 1) calc(var(--u) * 2.4); margin: calc(var(--u) * 2) 0 0; font-size: calc(var(--u) * 2.9); justify-content: center; }
+  .rkZones small { color: #8b9bb0; font-weight: 600; margin-left: .3em; }
+  .rkZoneHead { margin: calc(var(--u) * 2.4) 0 calc(var(--u) * .6); padding-left: calc(var(--u) * 1); font-weight: 900; font-size: calc(var(--u) * 3.2); color: var(--c); border-left: 3px solid var(--c); }
+  .rkGap { text-align: center; color: #6b7c92; letter-spacing: .3em; }
+  .rkJump { width: 100%; margin-top: calc(var(--u) * 2); }
   .credit p { margin: calc(var(--u) * 1) 0; }
   .credit .cLogo { font-size: calc(var(--u) * 8); font-weight: 900; letter-spacing: .06em; background: linear-gradient(90deg, #ffd166, #ff7ad9, #4cc9ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .logo small { display: block; font-size: calc(var(--u) * 3.2); opacity: .75; letter-spacing: .3em; margin-top: calc(var(--u) * 1); }
@@ -265,7 +293,7 @@
     <nav class="tabs">
       <button data-tab="sortie">🚀 출격</button><button data-tab="ship">✈️ 기체</button><button data-tab="arms">🔫 무기</button>
       <button data-tab="parts">⚙️ 부품</button><button data-tab="research">🔬 연구</button>
-      <button data-tab="goals">🏅 임무<span id="goalBadge" class="badge hidden"></span></button><button data-tab="settings">⚙ 설정</button>
+      <button data-tab="goals">🏅 임무<span id="goalBadge" class="badge hidden"></span></button><button data-tab="rank">🏆 랭킹</button><button data-tab="settings">⚙ 설정</button>
     </nav>
     <section id="tab-sortie" class="tab">
       <div id="modes" class="modes"></div>
@@ -284,6 +312,7 @@
       <h3>☀️ 오늘의 임무 <small>(날마다 바뀝니다)</small></h3><div id="daily"></div>
       <h3>🏅 도전 과제</h3><div id="goals"></div>
     </section>
+    <section id="tab-rank" class="tab hidden"></section>
     <section id="tab-settings" class="tab hidden">
       <div class="row">
         <button id="musicBtn" class="btn sub">🎵 음악</button><button id="sfxBtn" class="btn sub">🔊 효과음</button>
@@ -350,6 +379,7 @@
 <script src="js/art.js"></script>
 <script src="js/duel.js"></script>
 <script src="js/forge.js"></script>
+<script src="js/rank.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>
