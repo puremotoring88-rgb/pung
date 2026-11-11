@@ -141,7 +141,8 @@ function loadImg(key) {
   const next = i => { if (i >= exts.length) return; const im = new Image(); im.onload = () => { IMG[key] = im; }; im.onerror = () => next(i + 1); im.src = `assets/${key}.${exts[i]}`; };
   next(0);
 }
-[...D.FRAMES.map(f => 'ship-' + f.id), ...D.BOSSES.map(b => 'boss-' + b.id)].forEach(loadImg);
+const ASSET_KEYS = [];   // 그림 파일을 넣으면 여기에 이름을 적는다(예: 'ship-falcon', 'boss-spider'). 비어 있으면 찾지 않는다
+ASSET_KEYS.forEach(loadImg);
 
 // ---------- 판 상태 ----------
 let state = 'hangar', run = null, P = null, st = null, boss = null;
@@ -1781,6 +1782,7 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 resize();
+rollDaily();
 renderHangar();
 // 자동 출격을 켜 둔 채 나갔다가 다시 열면: 비운 시간만큼 보상
 if (S.idle.on && S.idle.lastSeen && Date.now() - S.idle.lastSeen > 120000) awayReward((Date.now() - S.idle.lastSeen) / 1000, 'hangar');
