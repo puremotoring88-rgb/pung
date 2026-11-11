@@ -146,7 +146,7 @@
     background: rgba(14, 23, 38, .7); border: 1px solid #2b3c56; border-radius: 16px; padding: 18px; }
   #side b { color: #ffe7a3; } #side kbd { background: #22324a; border-radius: 6px; padding: 1px 7px; color: #fff; border: 1px solid #3a4f70; }
   @media (min-aspect-ratio: 11/10) and (hover: hover) { #side { display: block; } body { background: radial-gradient(circle at 50% 40%, #0d1c36, #02040a 70%); } #stage { box-shadow: 0 0 60px rgba(76, 201, 255, .25), 0 0 0 2px rgba(255, 209, 102, .25); border-radius: 14px; } }
-  .modes { display: grid; grid-template-columns: repeat(5, 1fr); gap: calc(var(--u) * 1.2); }
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * 1.2); }
   .modes button { font-size: calc(var(--u) * 2.6) !important; }
   .dojoLv { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 1.2); margin-top: calc(var(--u) * 1.6); }
   .dojoLv button { border: 1px solid #6a4aa8; background: #1a1236; color: #e8d8ff; border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 1.2) calc(var(--u) * 2.2); font-size: calc(var(--u) * 3); font-weight: 700; }
@@ -163,6 +163,16 @@
   .modes button.on { border-color: #ffd166; background: linear-gradient(#3a2f10, #1e180a); color: #ffe7a3; box-shadow: 0 0 calc(var(--u) * 3) rgba(255, 209, 102, .3); }
   #modeInfo { padding: calc(var(--u) * 2.4); text-align: left; font-size: calc(var(--u) * 3.1); line-height: 1.5; }
   #modeInfo b { color: #ffe7a3; }
+.coopBox { margin-top: calc(var(--u) * 2); display: flex; flex-direction: column; gap: calc(var(--u) * 1.6); }
+.coopBox .cRow { display: flex; gap: calc(var(--u) * 1.6); align-items: center; flex-wrap: wrap; }
+.coopBox .cRow span { color: #b9c8dc; }
+.coopBox input { flex: 1; min-width: 0; font: inherit; padding: calc(var(--u) * 1.6) calc(var(--u) * 2); border-radius: calc(var(--u) * 1.6); border: 1px solid rgba(160,200,255,.35); background: rgba(5,12,28,.7); color: #fff; }
+.coopBox input.code { text-transform: uppercase; letter-spacing: .3em; font-weight: 900; text-align: center; }
+.coopBox .cbtn { font: inherit; font-weight: 800; padding: calc(var(--u) * 1.6) calc(var(--u) * 2.6); border-radius: calc(var(--u) * 1.6); border: 1px solid rgba(160,200,255,.4); background: rgba(40,80,140,.6); color: #fff; cursor: pointer; }
+.coopBox .cbtn.main { flex: 1; background: linear-gradient(#3fa0ff, #2160c0); font-size: 1.1em; }
+.coopBox .cbtn.off { background: rgba(120,40,50,.6); }
+.coopBox .cCode { text-align: center; } .coopBox .cCode small { display: block; color: #b9c8dc; } .coopBox .cCode b { font-size: 2.2em; letter-spacing: .25em; color: #ffd166; }
+.coopBox .cList { color: #dfe8f2; } .coopBox .cNote { color: #b9c8dc; font-size: .88em; } .coopBox .cMsg { color: #9dffcf; font-weight: 800; }
   .hgFoot { padding: calc(var(--u) * 2) calc(var(--u) * 4) max(calc(var(--u) * 4), env(safe-area-inset-bottom)); }
   .hgFoot .btn.sub { padding: calc(var(--u) * 1.6) calc(var(--u) * 3); font-size: calc(var(--u) * 3); }
   .hgFoot .btn.off { opacity: .5; }
@@ -179,6 +189,24 @@
   #pauseBtn { pointer-events: auto; position: absolute; right: calc(var(--u) * 3); top: calc(var(--u) * 14 + env(safe-area-inset-top)); width: calc(var(--u) * 10); height: calc(var(--u) * 10);
     border-radius: 50%; border: 1px solid rgba(255, 209, 102, .45); background: rgba(16, 24, 38, .8); font-size: calc(var(--u) * 4); }
 
+  /* 표창 공방 */
+  #forge { position: absolute; left: 0; right: 0; bottom: 0; height: 35%; z-index: 4; padding: calc(var(--u) * 2) calc(var(--u) * 3) max(calc(var(--u) * 2), env(safe-area-inset-bottom));
+    background: linear-gradient(rgba(14, 20, 34, .92), rgba(6, 9, 18, .97)); border-top: 2px solid rgba(255, 209, 102, .5); display: flex; flex-direction: column; gap: calc(var(--u) * 1.4); touch-action: none; font-size: calc(var(--u) * 3); }
+  .fTop { display: flex; gap: calc(var(--u) * 1.4); align-items: center; }
+  .fGoldBox { flex: 1; font-size: calc(var(--u) * 4.4); font-weight: 900; color: #ffe7a3; }
+  .fTop button { border: 1px solid #ffd166; background: linear-gradient(#3a2f10, #1e180a); color: #ffe7a3; border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 1.2) calc(var(--u) * 2); font-size: calc(var(--u) * 3); font-weight: 800; }
+  .fTop button small { display: block; font-size: .78em; opacity: .8; } .fTop button:disabled { opacity: .45; }
+  .fBars { display: flex; gap: calc(var(--u) * 1.4); } .fBars i { flex: 1; height: calc(var(--u) * 1.4); background: rgba(0, 0, 0, .5); border-radius: 99px; overflow: hidden; }
+  .fBars i b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #4cc9ff, #9dffcf); } .fBars i.fev b { background: linear-gradient(90deg, #ff8a3c, #ffd166); } .fBars i.fev.on b { animation: pulse .3s infinite alternate; }
+  #fGrid { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); gap: calc(var(--u) * 1.2); }
+  .fCell { position: relative; border: 1px solid #2b3c56; background: radial-gradient(circle, rgba(60, 80, 120, .35), rgba(10, 16, 28, .9)); border-radius: calc(var(--u) * 2); display: flex; align-items: center; justify-content: center; }
+  .fCell canvas { width: 78%; height: auto; pointer-events: none; } .fCell b { position: absolute; right: 4px; bottom: 1px; font-size: calc(var(--u) * 3); font-weight: 900; text-shadow: 0 1px 2px #000; pointer-events: none; }
+  .fCell.locked { opacity: .35; font-size: calc(var(--u) * 3.6); }
+  .fGhost { position: absolute; width: calc(var(--u) * 15); height: calc(var(--u) * 15); pointer-events: none; z-index: 9; filter: drop-shadow(0 0 8px rgba(255, 255, 255, .6)); }
+  #fInfo { font-size: calc(var(--u) * 2.8); opacity: .85; text-align: center; }
+  #fUps { position: absolute; left: calc(var(--u) * 3); right: calc(var(--u) * 3); bottom: calc(100% + 6px); background: rgba(10, 16, 28, .97); border: 1px solid #ffd166; border-radius: calc(var(--u) * 3); padding: calc(var(--u) * 2); display: flex; flex-direction: column; gap: calc(var(--u) * 1.2); }
+  .fUp { display: flex; align-items: center; gap: calc(var(--u) * 2); } .fUp span { flex: 1; } .fUp small { display: block; opacity: .7; }
+  .fUp button { border: 1px solid #ffd166; background: #2a2410; color: #ffe7a3; border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 1) calc(var(--u) * 2); font-weight: 800; } .fUp button:disabled { opacity: .4; }
   #cards { background: radial-gradient(circle at 50% 30%, rgba(40, 70, 120, .55), rgba(3, 6, 14, .9)); }
   #cards h2 { color: #9dffcf; text-shadow: 0 0 calc(var(--u) * 4) rgba(43, 227, 138, .6); }
   #cardsLv { font-size: calc(var(--u) * 4); color: #ffe7a3; }
@@ -214,6 +242,14 @@
   <div id="hud" class="hidden">
     <button id="pauseBtn">⏸</button>
     <button id="ultBtn">궁극기</button>
+  </div>
+
+  <div id="forge" class="hidden">
+    <div class="fTop"><span class="fGoldBox">💰 <b id="fGold">0</b></span><button id="fBuy">⭐ 사기</button><button id="fUpBtn">⬆ 강화</button><button id="fReborn">✨ 환생</button></div>
+    <div class="fBars"><i><b id="fGen"></b></i><i class="fev"><b id="fFever"></b></i></div>
+    <div id="fGrid"></div>
+    <div id="fInfo"></div>
+    <div id="fUps" class="hidden"></div>
   </div>
 
   <div id="hangar" class="overlay">
@@ -305,6 +341,7 @@
 <script src="js/audio.js"></script>
 <script src="js/art.js"></script>
 <script src="js/duel.js"></script>
+<script src="js/forge.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

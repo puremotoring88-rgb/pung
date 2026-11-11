@@ -3,45 +3,67 @@
 window.Duel = (() => {
 'use strict';
 const W = 540, H = 960, TAU = Math.PI * 2, LANES = 4;
-const WIN = { p: 0.05, g: 0.1, o: 0.15 };        // PERFECT, GREAT, GOOD로 인정하는 어긋남(초)
-const APPROACH = 1.35;                           // 음표가 위에서 판정선까지 오는 시간(초)
+const WIN = { p: 0.04, g: 0.075, o: 0.11 };      // PERFECT, GREAT, GOOD로 인정하는 어긋남(초) — 예전보다 좁다
+let APPROACH = 1.3;                              // 음표가 위에서 판정선까지 오는 시간(초). 단계가 오를수록 짧아진다(빨라짐)
 const COLORS = ['#ff6ad5', '#4cc9ff', '#ffd166', '#6ee37a'];
 const KEYS = ['D', 'F', 'J', 'K'];
 const NAMES = ['베이스 드롭', '비트 박스', '신스 웨이브', '드럼 머신', '하이햇 헌터', '서브 우퍼', '글리치 코어', '마스터 DJ'];
 const TOP = 210, JUDGE_Y = H - 200, W_TOP = 150, W_BOT = W - 30;
 let A, Art, d = null;
 
-// 악보 만들기: 단계가 오를수록 음표가 빽빽해지고 엇박·동시 누르기가 늘어난다
+// 악보 만들기: 한 마디(4박)마다 '무늬'를 하나 골라 채운다.
+// 1단계부터 8분음표 흐름과 엇박, 2단계부터 길게 누르기·연타, 4단계부터 16분음표(트릴·계단)가 나온다.
+const R = n => (Math.random() * n) | 0;
+const PATTERNS = [
+  { id: 'quarters', lv: 1, w: 1 }, { id: 'eighths', lv: 1, w: 3 }, { id: 'offbeat', lv: 1, w: 2 }, { id: 'chord', lv: 1, w: 2 },
+  { id: 'hold', lv: 2, w: 3 }, { id: 'jack', lv: 2, w: 2 }, { id: 'gallop', lv: 3, w: 3 },
+  { id: 'trill', lv: 4, w: 3 }, { id: 'stairs', lv: 4, w: 3 }, { id: 'holdRun', lv: 5, w: 3 }, { id: 'chordRun', lv: 6, w: 3 },
+];
 function makeChart(level, beats) {
   const notes = [];
-  let lane = (Math.random() * 4) | 0;
-  const add = b => {
-    const steps = [-1, 1, 1, -1, 2, -2, 0];
-    lane = (lane + steps[(Math.random() * steps.length) | 0] + 4) % 4;
-    if (notes.some(n => n.b === b && n.lane === lane)) lane = (lane + 1) % 4;
-    notes.push({ b, lane });
-    if (level >= 3 && Math.random() < 0.05 * level) notes.push({ b, lane: (lane + 2) % 4 });   // 두 줄 동시
+  let lane = R(4), prev = '';
+  const busy = (ln, b) => notes.some(n => n.lane === ln && (Math.abs(n.b - b) < 0.2 || (n.len && b >= n.b - 0.1 && b <= n.b + n.len + 0.2)));
+  const put = (b, ln, len) => { if (busy(ln, b) || (len && notes.some(n => n.lane === ln && n.b > b && n.b < b + len + 0.3))) return false; notes.push(len ? { b, lane: ln, len } : { b, lane: ln }); return true; };
+  const step = () => { lane = (lane + [1, -1, 2, 1, -1, 3][R(6)] + 4) % 4; return lane; };
+  const other = ln => (ln + 1 + R(3)) % 4;
+  const fill = {
+    quarters: B => { for (let i = 0; i < 4; i++) put(B + i, step()); },
+    eighths: B => { for (let i = 0; i < 8; i++) if (level > 1 || i % 4 !== 3) put(B + i * 0.5, step()); },
+    offbeat: B => { put(B, step()); for (let i = 0; i < 4; i++) put(B + i + 0.5, step()); if (level >= 3) put(B + 2, step()); },
+    chord: B => { for (let i = 0; i < 4; i++) { const a = step(); put(B + i, a); if (i % 2 === 0 || level >= 5) put(B + i, (a + 2) % 4); if (level >= 3 && i % 2) put(B + i + 0.5, step()); } },
+    hold: B => { const h = step(), len = level >= 5 ? 3 : 2; put(B, h, len); for (let i = 1; i < (level >= 4 ? 8 : 4); i++) { const b = B + i * (level >= 4 ? 0.5 : 1); if (b < B + len + 0.5) put(b, other(h)); } },
+    jack: B => { const j = step(); for (let i = 0; i < 3; i++) put(B + i * 0.5, j); for (let i = 3; i < 8; i++) put(B + i * 0.5, step()); },
+    gallop: B => { for (let i = 0; i < 4; i++) { put(B + i, step()); put(B + i + 0.75, step()); } },
+    trill: B => { const a = step(), b = (a + (R(2) ? 1 : 2)) % 4, k = level >= 6 ? 12 : 8; for (let i = 0; i < k; i++) put(B + i * 0.25, i % 2 ? b : a); for (let b2 = B + k * 0.25; b2 < B + 4; b2 += 0.5) put(b2, step()); },
+    stairs: B => { for (let s = 0; s < 2; s++) { const dir = R(2) ? 1 : -1, st = R(4); for (let k = 0; k < 4; k++) put(B + s * 2 + k * 0.25, (st + dir * k + 8) % 4); put(B + s * 2 + 1.5, step()); } },
+    holdRun: B => { const h = step(); put(B, h, 3.5); for (let i = 1; i < 14; i++) if (i % 4 !== 3 || level >= 7) put(B + i * 0.25 + 0.25, other(h)); },
+    chordRun: B => { for (let i = 0; i < 8; i++) { const a = step(); put(B + i * 0.5, a); if (i % 2 === 0) put(B + i * 0.5, (a + 2) % 4); } },
   };
-  for (let b = 0; b < beats; b++) {
-    if (level <= 2 && b % 8 === 7) continue;   // 쉬어 가는 박
-    if (Math.random() < Math.min(0.95, 0.6 + 0.06 * level)) add(b);
-    if (level >= 2 && Math.random() < Math.min(0.55, 0.1 * level)) add(b + 0.5);
+  const pool = PATTERNS.filter(p => p.lv <= level).map(p => ({ id: p.id, w: p.w * (p.lv >= level - 1 ? 2 : 1) }));   // 새로 열린 무늬가 더 자주
+  const pick = () => { let tot = pool.reduce((s, p) => s + (p.id === prev ? 0 : p.w), 0), x = Math.random() * tot; for (const p of pool) { if (p.id === prev) continue; if ((x -= p.w) < 0) return p.id; } return pool[0].id; };
+  for (let m = 0; m < beats / 4; m++) {
+    const id = m === 0 ? (level <= 3 ? 'quarters' : 'eighths') : pick();
+    prev = id; fill[id](m * 4);
   }
-  return notes.sort((a, b) => a.b - b.b);
+  const last = beats - 1; put(last, 0); put(last, 3);   // 마지막은 양쪽 끝 동시에
+  return notes.filter(n => n.b + (n.len || 0) < beats + 0.01).sort((a, b) => a.b - b.b || a.lane - b.lane);
 }
 
 function start(opt) {
   A = window.AudioKit; Art = window.Art;
-  const level = Math.max(1, Math.min(8, opt.level | 0)), beats = 32, countIn = 4;
-  const bpm = Math.min(164, 116 + level * 6), beat = 60 / bpm;
+  const level = Math.max(1, Math.min(8, opt.level | 0)), beats = 40, countIn = 4;
+  const bpm = Math.min(180, 124 + level * 7), beat = 60 / bpm;
+  APPROACH = Math.max(0.92, 1.3 - 0.055 * (level - 1));
   const chart = makeChart(level, beats);
   const t0 = A.duel(chart, bpm, countIn);   // 0번째 박이 울리는 시각
   d = {
     level, bpm, beat, t0, countIn, name: NAMES[(level - 1) % NAMES.length], title: opt.title || 'RHYTHM DUEL',
-    notes: chart.map(n => ({ t: t0 + n.b * beat, lane: n.lane, j: null, half: n.b % 1 !== 0 })),
-    end: t0 + beats * beat + 0.6, cnt: { p: 0, g: 0, o: 0, m: 0 }, combo: 0, maxCombo: 0,
+    notes: chart.map(n => ({ t: t0 + n.b * beat, lane: n.lane, j: null, half: n.b % 1 !== 0, end: n.len ? t0 + (n.b + n.len) * beat : 0, tail: null })),
+    end: t0 + beats * beat + 0.6, cnt: { p: 0, g: 0, o: 0, m: 0, x: 0 }, combo: 0, maxCombo: 0, down: [false, false, false, false],
     judge: null, judgeT: 0, judgeLane: 0, flash: [0, 0, 0, 0], hits: [], done: false, resT: 0, onEnd: opt.onEnd, res: null,
+    fog: level >= 7,   // 7단계부터 '구름 구간': 음표가 중간에 잠깐 흐려진다
   };
+  d.total = d.notes.length + d.notes.filter(n => n.end).length;   // 길게 누르기는 끝까지 버텨야 1점 더
 }
 
 const now = () => A.clock().t;
@@ -52,27 +74,43 @@ function press(lane) {
   const t = now();
   let best = null, bd = 9;
   for (const n of d.notes) { if (n.j || n.lane !== lane) continue; const dt = Math.abs(t - n.t); if (dt < bd) { bd = dt; best = n; } }
+  d.down[lane] = true;
   const j = best ? judgeOf(bd) : null;
-  if (!j) return;   // 박자가 아닐 때 누르면 아무 일 없음
+  if (!j) {   // 헛누름: 근처에 음표가 없는데 누르면 콤보가 끊기고 정확도가 조금 깎인다(마구 누르기 방지)
+    if (t > d.t0 - 0.2 && !(best && bd < 0.3)) { d.cnt.x++; if (d.combo >= 5) { d.judge = '헛누름'; d.judgeT = 0.35; } d.combo = 0; }
+    return;
+  }
   best.j = j; d.cnt[j]++; d.combo++; d.maxCombo = Math.max(d.maxCombo, d.combo);
+  if (best.end) best.hold = true;
   d.judge = { p: 'PERFECT', g: 'GREAT', o: 'GOOD' }[j]; d.judgeT = 0.45; d.judgeLane = lane;
   d.hits.push({ lane, t: 0, j });
   A.sfx(j === 'o' ? 'good' : 'perfect');
   if (navigator.vibrate && j === 'p') { try { navigator.vibrate(8); } catch (e) { /* 진동 없음 */ } }
 }
-function pressX(x) { press(Math.max(0, Math.min(3, Math.floor(x / (W / LANES))))); }
-
+function pressX(x) { const l = Math.max(0, Math.min(3, Math.floor(x / (W / LANES)))); press(l); return l; }
+function release(lane) {   // 손을 떼면: 길게 누르는 음표를 끝나기 전에 놓으면 꼬리를 놓친다
+  if (!d) return;
+  d.down[lane] = false;
+  const t = now();
+  for (const n of d.notes) if (n.hold && n.lane === lane && !n.tail) {
+    if (t >= n.end - WIN.g) tailOk(n); else { n.tail = 'm'; n.hold = false; d.cnt.m++; d.combo = 0; d.judge = '놓쳤다'; d.judgeT = 0.4; d.judgeLane = lane; }
+  }
+}
+function tailOk(n) { n.tail = 'p'; n.hold = false; d.cnt.p++; d.combo++; d.maxCombo = Math.max(d.maxCombo, d.combo); d.hits.push({ lane: n.lane, t: 0, j: 'p' }); A.sfx('perfect'); }
+const score = () => { const c = d.cnt; return (c.p + 0.7 * c.g + 0.3 * c.o) / ((d.total || 1) + 0.25 * c.x); };
 function result() {
-  const c = d.cnt, total = d.notes.length || 1;
-  const acc = (c.p + 0.7 * c.g + 0.4 * c.o) / total;
-  const rank = acc >= 0.95 ? 'S' : acc >= 0.85 ? 'A' : acc >= 0.7 ? 'B' : acc >= 0.5 ? 'C' : 'D';
-  return { rank, acc, p: c.p, g: c.g, o: c.o, m: c.m, maxCombo: d.maxCombo, total, level: d.level };
+  const c = d.cnt, acc = Math.max(0, score());
+  const rank = acc >= 0.96 ? 'S' : acc >= 0.88 ? 'A' : acc >= 0.76 ? 'B' : acc >= 0.58 ? 'C' : 'D';
+  return { rank, acc, p: c.p, g: c.g, o: c.o, m: c.m, x: c.x, maxCombo: d.maxCombo, total: d.total, level: d.level };
 }
 
 function update(dt) {
   if (!d) return;
   const t = now();
-  for (const n of d.notes) if (!n.j && t - n.t > WIN.o) { n.j = 'm'; d.cnt.m++; d.combo = 0; d.judge = 'MISS'; d.judgeT = 0.4; d.judgeLane = n.lane; }
+  for (const n of d.notes) {
+    if (!n.j && t - n.t > WIN.o) { n.j = 'm'; d.cnt.m++; d.combo = 0; d.judge = 'MISS'; d.judgeT = 0.4; d.judgeLane = n.lane; if (n.end) { n.tail = 'm'; d.cnt.m++; } }
+    if (n.hold && !n.tail) { if (t >= n.end) tailOk(n); else if (!d.down[n.lane]) release(n.lane); else if (Math.random() < 0.3) d.flash[n.lane] = Math.max(d.flash[n.lane], 0.6); }
+  }
   for (let i = 0; i < 4; i++) d.flash[i] = Math.max(0, d.flash[i] - dt * 6);
   d.judgeT = Math.max(0, d.judgeT - dt);
   d.hits.forEach(h => { h.t += dt; }); d.hits = d.hits.filter(h => h.t < 0.35);
@@ -148,11 +186,26 @@ function draw(g, T) {
     g.strokeStyle = COLORS[i]; g.lineWidth = 2; g.stroke();
     text(g, KEYS[i], (x0 + x1) / 2, y + 42, 18, 'rgba(255,255,255,.75)', 800);
   }
+  // 길게 누르는 음표의 몸통(머리에서 꼬리까지)
+  const yOf = s => TOP + (JUDGE_Y - TOP) * Math.pow(Math.max(0, Math.min(1, s)), 1.6);
+  for (const n of d.notes) {
+    if (!n.end || n.tail === 'p') continue;
+    const sh = n.hold ? 1 : 1 - (n.t - t) / APPROACH, se = 1 - (n.end - t) / APPROACH;
+    if (sh < 0 || se > 1.05) continue;
+    const y0 = yOf(sh), y1 = yOf(se), s0 = depth(y0), s1 = depth(y1);
+    g.beginPath(); g.moveTo(laneX(n.lane, s1, 0.3), y1); g.lineTo(laneX(n.lane, s1, 0.7), y1); g.lineTo(laneX(n.lane, s0, 0.7), y0); g.lineTo(laneX(n.lane, s0, 0.3), y0); g.closePath();
+    const dead = n.j === 'm' || n.tail === 'm';
+    g.globalAlpha = dead ? 0.25 : n.hold ? 0.95 : 0.7; g.fillStyle = dead ? '#555' : COLORS[n.lane]; g.fill();
+    if (n.hold) { g.globalCompositeOperation = 'lighter'; g.drawImage(Art.glow(COLORS[n.lane], 40), laneX(n.lane, 1) - 50, JUDGE_Y - 50, 100, 100); g.globalCompositeOperation = 'source-over'; }
+    g.globalAlpha = 1;
+    if (se >= 0) { rr(g, laneX(n.lane, s1, 0.2), y1 - 4, laneX(n.lane, s1, 0.8) - laneX(n.lane, s1, 0.2), 8, 4); g.fillStyle = dead ? '#555' : '#fff'; g.fill(); }
+  }
   // 음표
   for (const n of d.notes) {
     if (n.j && n.j !== 'm') continue;
     const s = 1 - (n.t - t) / APPROACH;
     if (s < 0 || s > 1.18) continue;
+    if (d.fog && !n.j && s > 0.42 && s < 0.72) continue;   // 구름 구간: 박자와 소리로 읽기
     const y = TOP + (JUDGE_Y - TOP) * Math.pow(Math.max(0, s), 1.6), ss = depth(y);
     const x0 = laneX(n.lane, ss, 0.08), x1 = laneX(n.lane, ss, 0.92), h = 10 + 18 * ss;
     g.globalAlpha = n.j === 'm' ? 0.25 : 1;
@@ -173,7 +226,12 @@ function draw(g, T) {
   }
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   // DJ 로봇과 체력
-  const c = d.cnt, total = d.notes.length, dealt = (c.p + 0.7 * c.g + 0.4 * c.o) / total;
+  if (d.fog) {   // 구름 띠
+    const ya = yOf(0.42), yb = yOf(0.72), fg = g.createLinearGradient(0, ya - 20, 0, yb + 20);
+    fg.addColorStop(0, 'rgba(200,190,255,0)'); fg.addColorStop(0.3, 'rgba(200,190,255,.18)'); fg.addColorStop(0.7, 'rgba(200,190,255,.18)'); fg.addColorStop(1, 'rgba(200,190,255,0)');
+    g.fillStyle = fg; g.fillRect(0, ya - 20, W, yb - ya + 40);
+  }
+  const dealt = Math.max(0, score());
   drawDJ(g, W / 2, 112, T, kick);
   rr(g, 90, 176, W - 180, 12, 6); g.fillStyle = 'rgba(0,0,0,.6)'; g.fill();
   rr(g, 90, 176, (W - 180) * Math.max(0, 1 - dealt), 12, 6); g.fillStyle = '#ff5da2'; g.fill();
@@ -186,10 +244,11 @@ function draw(g, T) {
     const left = Math.ceil((d.t0 - t) / d.beat);
     text(g, left > 3 ? 'READY' : String(left), W / 2, H * 0.48, left > 3 ? 54 : 96, '#ffffff');
     text(g, '음표가 흰 선에 닿을 때 그 줄을 누르세요', W / 2, H * 0.48 + 56, 18, '#e8d8ff', 700);
+    text(g, d.fog ? '긴 음표는 끝까지 누르고 · 구름 속 음표는 소리로!' : d.level >= 2 ? '긴 음표는 꼬리까지 누르고 있기 · 마구 누르면 감점' : '마구 누르면 감점', W / 2, H * 0.48 + 86, 15, '#ffd6f5', 700);
   }
   // 판정과 콤보
   if (d.judgeT > 0 && d.judge) {
-    const col = { PERFECT: '#ffe066', GREAT: '#7fffd4', GOOD: '#9fd0ff', MISS: '#ff7a8a' }[d.judge];
+    const col = { PERFECT: '#ffe066', GREAT: '#7fffd4', GOOD: '#9fd0ff', MISS: '#ff7a8a' }[d.judge] || '#ff9a9a';
     const sc = 1 + (d.judgeT / 0.45) * 0.3;
     g.save(); g.translate(W / 2, JUDGE_Y - 150); g.scale(sc, sc); text(g, d.judge, 0, 0, 38, col); g.restore();
   }
@@ -202,14 +261,14 @@ function draw(g, T) {
     rr(g, 60, H * 0.3, W - 120, 330, 24); g.fillStyle = 'rgba(30,18,64,.95)'; g.fill(); g.strokeStyle = '#ffd166'; g.lineWidth = 2; g.stroke();
     text(g, r.rank === 'D' ? 'DJ가 도망쳤다…' : 'DJ를 이겼다!', W / 2, H * 0.3 + 52, 28, '#ffd6f5');
     text(g, r.rank, W / 2, H * 0.3 + 160, 110, { S: '#ffe066', A: '#7fffd4', B: '#9fd0ff', C: '#d8c8ff', D: '#ff7a8a' }[r.rank]);
-    text(g, `PERFECT ${r.p} · GREAT ${r.g} · GOOD ${r.o} · MISS ${r.m}`, W / 2, H * 0.3 + 230, 16, '#ffffff', 800);
+    text(g, `PERFECT ${r.p} · GREAT ${r.g} · GOOD ${r.o} · MISS ${r.m}${r.x ? ` · 헛누름 ${r.x}` : ''}`, W / 2, H * 0.3 + 230, 16, '#ffffff', 800);
     text(g, `정확도 ${Math.round(r.acc * 100)}% · 최고 콤보 ${r.maxCombo}`, W / 2, H * 0.3 + 262, 16, '#ffd6f5', 700);
     g.globalAlpha = 1;
   }
 }
 
 return {
-  start, update, draw, press, pressX,
+  start, update, draw, press, pressX, release,
   get active() { return !!d; },
   peek: () => (d ? { notes: d.notes, now: now() } : null),   // 점검용
 };

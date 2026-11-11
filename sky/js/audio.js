@@ -117,7 +117,7 @@ function duel(chart, bpm, countIn) {
   for (const n of chart) {
     const ch = MOODS.duel.prog[Math.floor(n.b / 4) % 4], t = t0 + n.b * beat;
     const midi = root + 12 + ch[0] + [0, 3, 7, 12][n.lane];
-    osc(musicBus, 'square', mtof(midi), mtof(midi), t, beat * 0.42, 0.05);
+    osc(musicBus, 'square', mtof(midi), mtof(midi), t, beat * (n.len || 0.42), 0.05);
     osc(musicBus, 'triangle', mtof(midi + 12), mtof(midi + 12), t, beat * 0.3, 0.035);
   }
   return t0;
