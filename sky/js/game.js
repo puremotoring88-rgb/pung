@@ -2055,7 +2055,7 @@ $('sfxBtn').addEventListener('click', () => { S.sfx = !S.sfx; A.setSfx(S.sfx); s
 $('vibBtn').addEventListener('click', () => { S.vib = !S.vib; save(); buzz(40); renderHangar(); });
 $('fsBtn').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else goFullscreen(); });
 $('copy').addEventListener('click', async () => {
-  const t = `${$('copy').dataset.text || ''} · by motive\n${location.origin}${location.pathname}`;   // 친구가 바로 들어올 수 있게 주소도 붙인다
+  const t = `${$('copy').dataset.text || ''}\n${location.origin}${location.pathname}`;   // 친구가 바로 들어올 수 있게 주소도 붙인다
   try { await navigator.clipboard.writeText(t); $('copy').textContent = '복사했어요! 카톡에 붙여 넣으세요 ✔'; } catch (e) { $('copy').textContent = t; }
   setTimeout(() => { $('copy').textContent = '📋 결과 복사해서 자랑하기'; }, 2500);
 });
