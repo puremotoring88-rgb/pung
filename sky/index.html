@@ -7,11 +7,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="하늘 로봇">
+<meta name="apple-mobile-web-app-title" content="볼트윙">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="assets/icon-192.png">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
-<title>하늘 로봇 (가칭)</title>
+<title>볼트윙 BOLTWING · by motive</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
   html, body { margin: 0; height: 100%; background: #02040a; overflow: hidden; color: #e8eef7; overscroll-behavior: none;
@@ -50,6 +50,10 @@
   .logo b { font-size: calc(var(--u) * 9); font-weight: 900; letter-spacing: .04em; background: linear-gradient(#fff6d0, #ffd166 45%, #e08a2a); -webkit-background-clip: text; background-clip: text; color: transparent;
     filter: drop-shadow(0 calc(var(--u) * .6) 0 rgba(90, 40, 0, .8)); }
   .logo b i { font-style: normal; background: linear-gradient(#e6fbff, #4cc9ff 50%, #1f6fb0); -webkit-background-clip: text; background-clip: text; }
+  .logo small .by { letter-spacing: .08em; font-weight: 800; color: #9fe0ff; }
+  .credit { margin: calc(var(--u) * 3) 0; padding: calc(var(--u) * 3); border-radius: calc(var(--u) * 2.4); background: rgba(10,20,40,.55); border: 1px solid rgba(160,200,255,.25); text-align: center; }
+  .credit p { margin: calc(var(--u) * 1) 0; }
+  .credit .cLogo { font-size: calc(var(--u) * 8); font-weight: 900; letter-spacing: .06em; background: linear-gradient(90deg, #ffd166, #ff7ad9, #4cc9ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .logo small { display: block; font-size: calc(var(--u) * 3.2); opacity: .75; letter-spacing: .3em; margin-top: calc(var(--u) * 1); }
   .wallet { text-align: right; }
   #scrap { display: inline-block; font-size: calc(var(--u) * 4.4); font-weight: 800; background: linear-gradient(#2b2410, #171207); border: 1px solid rgba(255, 209, 102, .5);
@@ -254,7 +258,7 @@
 
   <div id="hangar" class="overlay">
     <header class="hgHead">
-      <div class="logo"><b>SKY<i>BOT</i></b><small>하늘 로봇</small></div>
+      <div class="logo"><b>BOLT<i>WING</i></b><small>볼트윙 · <span class="by">by motive</span></small></div>
       <div class="wallet"><span id="scrap">🔩 0</span><span id="bestTxt"></span></div>
     </header>
     <div id="pilot" class="pilot"></div>
@@ -289,6 +293,12 @@
       <h3>저장</h3>
       <p class="note">기록은 이 기기의 이 브라우저에만 저장됩니다. 다른 기기로 옮기려면 저장 코드를 복사해 가서 붙여 넣으세요.</p>
       <div class="row"><button id="exportBtn" class="btn sub">📤 저장 코드 복사</button><button id="importBtn" class="btn sub">📥 저장 코드 넣기</button><button id="resetBtn" class="btn sub">🗑 처음부터</button></div>
+      <div class="credit">
+        <div class="cLogo">motive</div>
+        <p>만든 사람 <b>motive</b></p>
+        <p class="note">motive는 '동기'라는 뜻입니다. 하고 싶은 마음이 어디서 생기고 어떻게 자라는지에 관심을 두고, 그 마음을 깨우는 게임과 교육 도구를 만듭니다.</p>
+        <p class="note">그림·음악·효과음은 모두 코드로 직접 만들었습니다. 다른 게임의 캐릭터·그림·음악은 쓰지 않았습니다.</p>
+      </div>
       <p class="note" id="verTxt"></p>
     </section>
 

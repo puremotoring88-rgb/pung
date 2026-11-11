@@ -1,4 +1,4 @@
-// 하늘 로봇 (가칭) — 세로 화면 비행 슈팅.
+// 볼트윙(BOLTWING, by motive) — 세로 화면 비행 슈팅.
 // 격납고에서 기체·무기·부품을 고르고, 한 판(약 3분)마다 보스를 잡으면 다음 스테이지가 열린다. 스테이지가 오를수록 어려워진다.
 // 판 중에는 그물 함정(연타해서 탈출)과 비트 러시(박자에 맞춰 톡)가 끼어들어 흐름이 바뀐다.
 (() => {
@@ -569,7 +569,7 @@ function dojoEnd(r) {
   if (lv < S.dojo.open) mk(`Lv ${lv + 1} 도전 ▶`, 'big', () => { dojoLv = lv + 1; startRun(1, 'dojo'); });
   mk('다시 하기', lv < S.dojo.open ? 'sub' : 'big', () => { dojoLv = lv; startRun(1, 'dojo'); });
   mk('격납고', 'sub', showHangar);
-  $('copy').dataset.text = `🎵 하늘 로봇 리듬 도장 Lv ${lv} ${r.rank} 랭크 · 정확도 ${Math.round(r.acc * 100)}% · 콤보 ${r.maxCombo}`;
+  $('copy').dataset.text = `🎵 볼트윙 리듬 도장 Lv ${lv} ${r.rank} 랭크 · 정확도 ${Math.round(r.acc * 100)}% · 콤보 ${r.maxCombo}`;
   $('result').classList.remove('hidden');
 }
 
@@ -1198,7 +1198,7 @@ function endOther(win) {   // 무한 생존·보스 러시·자동 출격의 결
   const mk = (label, cls, fn) => { const b = document.createElement('button'); b.className = 'btn ' + cls; b.textContent = label; b.addEventListener('click', () => { A.sfx('click'); fn(); }); btns.append(b); };
   mk(m === 'auto' ? '다시 켜 두기 ▶' : '다시 하기 ▶', 'big', () => startRun(1, m));
   mk('격납고', 'sub', showHangar);
-  $('copy').dataset.text = `🤖 하늘 로봇 ${MODES.find(x => x.id === m).name} ${title.replace(/<[^>]+>/g, ' ').trim()} · 점수 ${run.score.toLocaleString()}`;
+  $('copy').dataset.text = `⚡ 볼트윙 ${MODES.find(x => x.id === m).name} ${title.replace(/<[^>]+>/g, ' ').trim()} · 점수 ${run.score.toLocaleString()}`;
   $('result').classList.remove('hidden');
 }
 let wakeLock = null;
@@ -1255,7 +1255,7 @@ function endRun(win) {
   if (win) mk('다음 스테이지 ▶', 'big', () => startRun(stg + 1));
   else mk('다시 도전', 'big', () => startRun(stg));
   mk('격납고', 'sub', showHangar);
-  $('copy').dataset.text = `🤖 하늘 로봇 스테이지 ${run.stage} ${win ? '클리어' : '도전'} ${now.map(v => (v ? '★' : '☆')).join('')} 점수 ${run.score.toLocaleString()} · 콤보 ${run.maxCombo} · ${st.F.name}+${st.Wp.name}`;
+  $('copy').dataset.text = `⚡ 볼트윙 스테이지 ${run.stage} ${win ? '클리어' : '도전'} ${now.map(v => (v ? '★' : '☆')).join('')} 점수 ${run.score.toLocaleString()} · 콤보 ${run.maxCombo} · ${st.F.name}+${st.Wp.name}`;
   $('result').classList.remove('hidden');
 }
 
@@ -1926,7 +1926,7 @@ function renderHangar() {
   $('mouseBtn').textContent = S.mouse ? '🖱 마우스 따라가기' : '🖱 끌어서 움직이기';
   $('leftyBtn').textContent = S.lefty ? '🤚 왼손 모드' : '✋ 오른손 모드';
   $('stage').classList.toggle('lefty', !!S.lefty);
-  $('verTxt').textContent = `하늘 로봇 v${VERSION} · 음악과 효과음은 코드로 만든 소리입니다 · 지금까지 ${S.plays}번 출격`;
+  $('verTxt').textContent = `볼트윙 BOLTWING v${VERSION} · by motive · 음악과 효과음은 코드로 만든 소리입니다 · 지금까지 ${S.plays}번 출격`;
   const gl = $('goals'); gl.innerHTML = '';
   for (const g of GOALS) {
     const v = Math.min(g.val(), g.need), done = v >= g.need, got = S.claimed[g.id], row = document.createElement('div');
@@ -2055,7 +2055,7 @@ $('sfxBtn').addEventListener('click', () => { S.sfx = !S.sfx; A.setSfx(S.sfx); s
 $('vibBtn').addEventListener('click', () => { S.vib = !S.vib; save(); buzz(40); renderHangar(); });
 $('fsBtn').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else goFullscreen(); });
 $('copy').addEventListener('click', async () => {
-  const t = $('copy').dataset.text || '';
+  const t = `${$('copy').dataset.text || ''} · by motive\n${location.origin}${location.pathname}`;   // 친구가 바로 들어올 수 있게 주소도 붙인다
   try { await navigator.clipboard.writeText(t); $('copy').textContent = '복사했어요! 카톡에 붙여 넣으세요 ✔'; } catch (e) { $('copy').textContent = t; }
   setTimeout(() => { $('copy').textContent = '📋 결과 복사해서 자랑하기'; }, 2500);
 });
@@ -2369,7 +2369,7 @@ function guestEnd(m) {
   b.addEventListener('click', () => { A.sfx('click'); selMode = 'coop'; showHangar(); }); btns.append(b);
   const b2 = document.createElement('button'); b2.className = 'btn sub'; b2.textContent = '방 나가기';
   b2.addEventListener('click', () => { A.sfx('click'); leaveRoom(); showHangar(); }); btns.append(b2);
-  $('copy').dataset.text = `🤖 하늘 로봇 친구와 함께 ${m.mode === 'endless' ? 'WAVE ' + m.wave : 'STAGE ' + m.stage + (m.win ? ' 클리어' : '')} · 팀 점수 ${m.score.toLocaleString()}`;
+  $('copy').dataset.text = `⚡ 볼트윙 친구와 함께 ${m.mode === 'endless' ? 'WAVE ' + m.wave : 'STAGE ' + m.stage + (m.win ? ' 클리어' : '')} · 팀 점수 ${m.score.toLocaleString()}`;
   $('result').classList.remove('hidden');
 }
 
