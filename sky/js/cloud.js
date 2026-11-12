@@ -9,6 +9,9 @@ const URL = 'https://karluttarljwyutztbgx.supabase.co';
 const KEY = 'sb_publishable_oT_Z6aYJ3uDZxcJeF3ArIA_4ivykkte';
 const AK = 'boltwing.acct';   // 로그인 정보(아이디·접속표). 기록(S)과 따로 둬서 저장 코드에 섞이지 않게
 const OWN = 'boltwing.owner';   // 이 기기 기록의 주인 { uid, at, dirty }
+// 📴 혼자 하기(인터넷 없이): 주인이 LOCAL인 기록. 서버에 없는 유일한 사본이라, 계정이 이 기기를 쓰는 동안에는 SLOT에 따로 넣어 둔다.
+const LOCAL = '@local', OFF = 'boltwing.offline', SLOT = 'boltwing.slot.' + LOCAL;
+let offline = false;
 let leaving = false, lastId = '', getS, saveKey, canReload, sfx, onUi, acct = null, timer = null, busy = false, msg = '', choose = null;
 
 const read = () => { try { return JSON.parse(localStorage.getItem(AK) || sessionStorage.getItem(AK) || 'null'); } catch (e) { return null; } };
@@ -41,6 +44,11 @@ function init(o) {
   getS = o.getS; saveKey = o.saveKey; canReload = o.canReload || (() => true); sfx = o.sfx || (() => {}); onUi = o.onUi;
   acct = read();
   if (acct) { if (acct.keep === undefined) acct.keep = true; store(); }   // 이 기능 전에 로그인해 둔 기기는 유지
+  try {
+    const own = owner();
+    offline = !acct && !!(localStorage.getItem(OFF) || sessionStorage.getItem(OFF)) && !!own && own.uid === LOCAL;
+    if (!offline) { localStorage.removeItem(OFF); sessionStorage.removeItem(OFF); }
+  } catch (e) { offline = false; }
   if (acct) check(!!acct.dirty);   // 앱을 열 때 저절로 하는 저장보다 먼저, 이 기기에 안 올린 기록이 있었는지를 기준으로
   document.addEventListener('visibilitychange', () => { if (!acct) return; if (document.hidden) push(true); else if (canReload()) check(); });
   window.addEventListener('pagehide', () => { if (acct) push(true); });
@@ -96,9 +104,16 @@ async function enter(kind, id, pw, keep) {
   msg = kind === 'signup' ? '만드는 중…' : '로그인하는 중…'; ui();
   try {
     const token = await rpc(kind === 'signup' ? 'acct_signup' : 'acct_login', { p_uid: id, p_pw: pw });
-    const own = owner(), S = getS(), mine = !!own && own.uid === id;
-    const legacy = !own && !!(S.plays || S.cleared);   // 계정이 생기기 전부터 이 기기에서 하던 기록
+    let own = owner(), legacy;
+    const S = getS();
+    if (own && own.uid === LOCAL) {
+      if (kind === 'signup') { own = null; legacy = true; try { localStorage.removeItem(SLOT); } catch (e) { /* 무시 */ } }   // 혼자 하던 기록으로 계정을 만든다
+      else try { localStorage.setItem(SLOT, localStorage.getItem(saveKey) || ''); } catch (e) { /* 무시 */ }   // 혼자 하던 기록은 따로 넣어 두고 계정 기록으로
+    }
+    const mine = !!own && own.uid === id;
+    if (legacy === undefined) legacy = !own && !!(S.plays || S.cleared);   // 계정이 생기기 전부터 이 기기에서 하던 기록
     acct = { uid: id, token, at: mine ? own.at : null, dirty: mine ? !!own.dirty : true, keep: !!keep };
+    offline = false; try { localStorage.removeItem(OFF); sessionStorage.removeItem(OFF); } catch (e) { /* 무시 */ }
     sfx('part'); msg = '';
     if (own && !mine) {   // 이 기기 기록은 다른 아이디 것: 섞지 않고 내 계정 기록을 받거나 새로 시작
       const r = kind === 'login' ? (await rpc('acct_load', { p_token: token }) || [])[0] : null;
@@ -113,6 +128,24 @@ async function enter(kind, id, pw, keep) {
     if (!legacy) { apply(r.save, r.save_at); return; }   // 이 기기는 새것이면 바로 계정 기록으로
     choose = { save: r.save, at: r.save_at }; ui();
   } catch (e) { msg = why(e); ui(); }
+}
+// 📴 인터넷 없이 혼자 하기: 기록은 이 기기에만 쌓인다
+function goOffline(keep) {
+  try {
+    const own = owner(), slot = localStorage.getItem(SLOT);
+    (keep ? localStorage : sessionStorage).setItem(OFF, '1');
+    localStorage.setItem(OWN, JSON.stringify({ uid: LOCAL }));
+    if (own && own.uid === LOCAL) { offline = true; msg = ''; ui(); return; }   // 지금 기록이 바로 혼자 하던 기록
+    if (!own && !slot) { offline = true; msg = ''; ui(); return; }   // 계정 전부터 하던 기록(또는 새 기록)을 그대로
+    if (slot) localStorage.setItem(saveKey, slot); else localStorage.removeItem(saveKey);   // 계정 기록 자리에 혼자 하던 기록을 바꿔 끼운다
+    localStorage.removeItem(SLOT);
+  } catch (e) { /* 무시 */ }
+  leaving = true; location.reload();
+}
+function leaveOffline() {   // 아이디로 들어가는 화면으로(혼자 하던 기록은 남는다)
+  offline = false; msg = '';
+  try { localStorage.removeItem(OFF); sessionStorage.removeItem(OFF); } catch (e) { /* 무시 */ }
+  ui();
 }
 async function logout() {
   if (!acct) return;
@@ -145,7 +178,11 @@ function render(el) {
     const r2 = add('', 'acRow'); r2.append(btn(`📱 이 기기 기록으로 계정 덮어쓰기 — ${summary(S)}`, () => { acct.at = c.at; acct.dirty = true; store(); choose = null; push(); ui(); }, 'wide'));
     return;
   }
-  if (!acct) {
+  if (!acct && offline) {   // 혼자 하기 중(설정 칸)
+    add('<b>📴 혼자 하기 중</b> <small>인터넷 없이</small>', 'acHead');
+    const r = add('', 'acRow'); r.append(btn('👤 아이디로 들어가기', leaveOffline, 'main'));
+    add('기록은 이 기기에만 쌓여요. 기기를 바꾸거나 브라우저 기록을 지우면 사라질 수 있어요. 아이디를 새로 만들면 혼자 하던 기록이 계정으로 올라가요. 랭킹·친구와 함께는 인터넷과 아이디가 필요해요.', 'acNote');
+  } else if (!acct) {
     add('<b>👤 로그인</b> <small>아이디로 들어와서 해요</small>', 'acHead');
     const f = add('', 'acForm');
     const id = document.createElement('input'); id.placeholder = '아이디 (영어 소문자·숫자 4~16)'; id.maxLength = 16; id.autocapitalize = 'none'; id.autocomplete = 'username'; id.spellcheck = false; id.value = lastId;
@@ -158,6 +195,8 @@ function render(el) {
     const r = add('', 'acRow');
     r.append(btn('로그인', () => go('login'), 'main'), btn('처음이면 새로 만들기', () => go('signup')));
     add('이메일·실명은 받지 않아요. 비밀번호를 잊으면 되찾을 수 없으니 잘 기억해 두세요. 유지를 고르지 않으면 창을 닫을 때 로그아웃돼요.', 'acNote');
+    const r2 = add('', 'acRow acSolo'); r2.append(btn('📴 인터넷 없이 혼자 하기', () => goOffline(keep.checked), 'wide'));
+    add('혼자 하기 기록은 이 기기에만 쌓여요. 나중에 아이디를 만들면 계정으로 올릴 수 있어요.', 'acNote');
   } else {
     const when = acct.last ? new Date(acct.last).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
     add(`<b>👤 ${esc(acct.uid)}</b> <small>로그인됨 · ${acct.dirty ? '저장 대기 중' : when ? `☁️ ${when} 저장됨` : '☁️ 저장됨'}</small>`, 'acHead');
@@ -168,5 +207,5 @@ function render(el) {
   if (msg) add(esc(msg), 'acMsg');
 }
 
-return { init, dirty, render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; } };
+return { init, dirty, render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; }, get offline() { return offline; } };
 })();
