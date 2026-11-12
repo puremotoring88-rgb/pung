@@ -22,7 +22,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.12';
+const VERSION = '0.13';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -144,8 +144,14 @@ function loadImg(key) {
   const next = i => { if (i >= exts.length) return; const im = new Image(); im.onload = () => { IMG[key] = im; }; im.onerror = () => next(i + 1); im.src = `assets/${key}.${exts[i]}`; };
   next(0);
 }
-const ASSET_KEYS = [];   // 그림 파일을 넣으면 여기에 이름을 적는다(예: 'ship-falcon', 'boss-spider'). 비어 있으면 찾지 않는다
+const ASSET_KEYS = ['falcon', 'turtle', 'hornet', 'phoenix'].map(k => 'ship-' + k).concat(['spider', 'whale', 'twins', 'knight', 'core'].map(k => 'boss-' + k), ['scout', 'weaver', 'diver', 'turret', 'splitter', 'tank', 'netter', 'treasure'].map(k => 'enemy-' + k), ['civ-ddrone', 'civ-liner']);   // 그림 파일을 넣으면 여기에 이름을 적는다(예: 'ship-falcon', 'boss-spider'). 비어 있으면 찾지 않는다
 ASSET_KEYS.forEach(loadImg);
+const silCache = {};
+function silhouette(key) {   // 그림 파일의 그림자(검은 실루엣)
+  const im = IMG[key]; if (!im) return null;
+  if (!silCache[key]) { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = 'rgba(0,0,0,.42)'; g.fillRect(0, 0, c.width, c.height); silCache[key] = c; }
+  return silCache[key];
+}
 
 // ---------- 판 상태 ----------
 let state = 'hangar', run = null, P = null, st = null, boss = null;
@@ -1516,7 +1522,7 @@ function drawShipAt(g, id, x, y, s, bank, t, withShadow, look) {
   const sx = 1 - Math.abs(bank) * 0.22;
   if (withShadow) {
     g.save(); g.translate(x + 26, y + 40); g.scale(s * sx * 0.85, s * 0.85); g.rotate(bank * 0.08);
-    g.globalAlpha = 0.9; g.drawImage(im ? im : Art.shipShadow(id, F.color), -size / 2, -size / 2, size, size); g.restore();
+    g.globalAlpha = 0.9; g.drawImage(im ? silhouette('ship-' + id) : Art.shipShadow(id, F.color), -size / 2, -size / 2, size, size); g.restore();
   }
   g.save(); g.translate(x, y); g.scale(s, s);
   g.globalCompositeOperation = 'lighter';
@@ -1552,7 +1558,7 @@ function drawShipAt(g, id, x, y, s, bank, t, withShadow, look) {
 function drawFoe(e) {
   if (e.civ) { drawCiv(e); return; }
   const size = Art.EN / Art.ES, rot = e.arena ? Math.atan2(e.vy || 1, e.vx || 0) - Math.PI / 2 : e.type === 'weaver' ? e.t * 3 : e.type === 'netter' ? e.t * 0.8 : e.type === 'diver' && e.mode === 'go' ? Math.atan2(e.vy, e.vx) - Math.PI / 2 : 0;
-  if (hasGround()) { ctx.save(); ctx.translate(e.x + 16, e.y + 26); ctx.scale(0.85, 0.85); ctx.rotate(rot); ctx.drawImage(Art.enemyShadow(e.type), -size / 2, -size / 2, size, size); ctx.restore(); }
+  if (hasGround()) { ctx.save(); ctx.translate(e.x + 16, e.y + 26); ctx.scale(0.85, 0.85); ctx.rotate(rot); ctx.drawImage(silhouette('enemy-' + e.type) || Art.enemyShadow(e.type), -size / 2, -size / 2, size, size); ctx.restore(); }
   if (e.mod) {   // 정예 표시
     const c = { shield: '#7fd8ff', swift: '#ffe066', volatile: '#ff9a3c' }[e.mod];
     ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(Art.glow(c, 40), e.x - e.r * 1.8, e.y - e.r * 1.8, e.r * 3.6, e.r * 3.6); ctx.globalCompositeOperation = 'source-over';
@@ -1563,7 +1569,9 @@ function drawFoe(e) {
   ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(rot);
   if (run.danceT > 0) ctx.rotate(Math.sin(T * 14 + (e.nid || 0)) * 0.5);   // 춤
   if (e.type === 'treasure') ctx.scale(1.6, 1.6); else if (e.keeper) ctx.scale(2.2, 2.2);
-  ctx.drawImage(Art.enemy(e.type, e.flash > 0), -size / 2, -size / 2, size, size);
+  const eim = IMG['enemy-' + e.type];
+  if (eim) { ctx.drawImage(eim, -size / 2, -size / 2, size, size); if (e.flash > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.6; ctx.drawImage(eim, -size / 2, -size / 2, size, size); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; } }
+  else ctx.drawImage(Art.enemy(e.type, e.flash > 0), -size / 2, -size / 2, size, size);
   ctx.restore();
   if (e.type === 'turret') {
     ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(angTo(e) - Math.PI / 2);
@@ -1574,6 +1582,11 @@ function drawFoe(e) {
   if (e.elite && e.hp < e.maxHp) { const w = 46; ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w, 5); ctx.fillStyle = '#ff8a5e'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w * e.hp / e.maxHp, 5); }
 }
 
+function bossOverlay(b, w, glowAt) {   // 그림 파일 보스: 상태를 빛으로 보여 준다
+  if (b.p2 || b.enraged) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.22 + 0.12 * Math.sin(T * 8); ctx.drawImage(Art.glow('#ff3030', 60), -w / 2, -w / 2, w, w); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
+  if (b.def.id === 'knight' && b.mirror > 0) { glowAt(0, w * 0.45, '#9fc8ff', w * 0.4); ctx.strokeStyle = 'rgba(190,225,255,.95)'; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(0, 0, w * 0.56, 0.18 * Math.PI, 0.82 * Math.PI); ctx.stroke(); }
+  if (b.def.id === 'whale' && b.inhale > 0) glowAt(0, w * 0.4, '#7fe8ff', w * 0.32);
+}
 function drawBoss() {
   if (!boss) return;
   const b = boss, id = b.def.id, im = IMG['boss-' + id];
@@ -1583,7 +1596,7 @@ function drawBoss() {
     if (hasGround()) { ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(p.x + 34, p.y + 60, p.r * 1.1, p.r * 0.8, 0, 0, TAU); ctx.fill(); }
     ctx.save(); ctx.translate(p.x, p.y);
     if (b.gs && b.gs < 1) { ctx.scale(b.gs, b.gs); ctx.filter = `brightness(${(0.35 + 0.65 * (b.gs - 0.55) / 0.45).toFixed(2)}) saturate(.7)`; }   // 지상: 작고 어둡게
-    if (im) { const w = p.r * 2.8; ctx.drawImage(im, -w / 2, -w / 2, w, w); if (p.flash > 0) glowAt(0, 0, '#ffffff', p.r); ctx.restore(); continue; }
+    if (im) { const w = p.r * 2.8; ctx.drawImage(im, -w / 2, -w / 2, w, w); if (p.flash > 0) glowAt(0, 0, '#ffffff', p.r); bossOverlay(b, w, glowAt); ctx.restore(); continue; }
     ctx.lineWidth = 3; ctx.strokeStyle = '#0b0f18'; ctx.lineJoin = 'round';
     const grad = (a, c) => { const g = ctx.createRadialGradient(-p.r * 0.3, -p.r * 0.4, 4, 0, 0, p.r * 1.1); g.addColorStop(0, a); g.addColorStop(0.55, c); g.addColorStop(1, '#0a0d14'); return g; };
     if (id === 'spider') {
@@ -2941,6 +2954,14 @@ function civHit(e, dmg) {   // 쏘면 벌점(점수 깎이고 콤보가 끊긴�
 function drawCiv(e) {
   ctx.save(); ctx.translate(e.x, e.y);
   if (hasGround()) { ctx.save(); ctx.translate(e.type === 'liner' ? 40 : 16, e.type === 'liner' ? 60 : 26); ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(0, 0, e.type === 'liner' ? 70 : 20, e.type === 'liner' ? 22 : 10, 0, 0, TAU); ctx.fill(); ctx.restore(); }
+  const cim = IMG['civ-' + e.type];
+  if (cim) {
+    const s = e.type === 'liner' ? 175 : 66; if (e.type === 'ddrone') ctx.rotate(Math.sin(e.t * 1.8 + e.ph) * 0.15);
+    ctx.drawImage(cim, -s / 2, -s / 2, s, s);
+    if (e.flash > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.6; ctx.drawImage(cim, -s / 2, -s / 2, s, s); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
+    if (e.type === 'liner') { ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText('🚫 민간기', 0, -96); }
+    ctx.restore(); return;
+  }
   if (e.type === 'ddrone') {   // 네 날개 배달 드론과 매달린 상자
     ctx.rotate(Math.sin(e.t * 1.8 + e.ph) * 0.15);
     ctx.strokeStyle = '#3c4656'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-16, -16); ctx.lineTo(16, 16); ctx.moveTo(16, -16); ctx.lineTo(-16, 16); ctx.stroke();
