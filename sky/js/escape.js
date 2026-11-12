@@ -1,5 +1,5 @@
 // 볼트윙 「탈출 작전」 시험판(로드맵 9-1): 오른쪽으로 나아가는 한 손가락 모드.
-// 비행기(누르면 오름) → 비상 탈출 → 로프(누르면 앞 위의 고리에 걸려 흔들리고, 떼면 날아감) → 새(누르면 날갯짓, 말을 잘 안 들음) → 다시 로프 …
+// 비행기(자유 조종) → 비상 탈출 → 로프(한 번 누르면 앞 위 고리로 발사·그네, 또 누르면 끊고 날아감) → 새·보스 기계 탈것 → 다시 로프 …
 // 그림은 보스·기체 그림을 돌려 쓰고, 없으면 도형. 탈것(9-3): 새·거미·고래·기사·코어.
 window.Escape = (() => {
 'use strict';
@@ -15,7 +15,7 @@ const K = {
   reel: 70,             // 누르고 있으면 로프가 감기는 빠르기(짧을수록 빨리 돈다)
   flyRise: 1700, flySink: 1150, flyMax: 520,   // 비행기
   birdFlap: 400, birdG: 1250, birdEvery: 0.2,  // 새: 누르고 있으면 0.2초마다 날갯짓
-  segPlane: 1900, segRope: 2600, segBird: 1900, // 구간 길이(px)
+  segPlane: 3600, segRope: 4200, segBird: 3600, // 구간 길이(px). 0.36: 1900·2600·1900 → 더 길게(한 방식에 익숙해질 시간)
   flyX: 300, flyY: 420,                         // 비행기 앞뒤·위아래 빠르기
   stars: [300, 900, 1800],                      // 별 ⭐ 거리(m)
   trouble: 380,                                 // 비행기 구간이 끝나기 이만큼(px) 앞에서 엔진 고장
@@ -52,7 +52,7 @@ function start(callbacks, o) {
 function build() {
   box = document.createElement('div'); box.id = 'escape'; box.className = 'hidden';
   box.innerHTML = `<canvas width="${W}" height="${H}"></canvas><button class="esQuit">✕</button>
-    <div class="esRes hidden"><h2>탈출 작전</h2><div class="esStat"></div><div class="esRank"></div><div class="row"><button class="btn big esAgain">다시 ▶</button><button class="btn sub esEasy"></button><button class="btn sub esGhost hidden">👻 유령과 달리기</button><button class="btn sub esHome">격납고로</button></div><small class="esTip"></small><details class="esHelp"><summary>❓ 조작법</summary><div>✈️ <b>비행기</b>: 누른 채 끌기(PC는 방향키·WASD). 놓으면 그 자리에 떠 있어요.<br>🪢 <b>로프</b>: 노랗게 빛나는 고리가 보일 때 <b>누르고 있으면</b> 매달려 그네처럼 앞뒤로 계속 흔들려요(떼기 전까지). 앞쪽 위로 올라가는 순간 <b>떼면</b> 멀리 날아가요. 날아가는 중에 다시 누르면 다음 고리. 너무 일찍 떼면 아래로 떨어져요.<br>🐦 <b>새</b>: 누르고 있으면 날갯짓 · 🕷️ <b>거미</b>: 누를 때마다 천장↔바닥 · 🐋 <b>고래</b>: 누르면 오름 · ⚔️ <b>기사</b>: 누르면 돌진 · 🚀 <b>쌍둥이</b>: 누르고 있으면 오름, 누르면 대포<br>💠 <b>코어</b>: 누를 때마다 중력이 위↔아래로 바뀌어요(옆 화살표 쪽으로 떨어짐). 계속 위로 올라가 있으면 다시 한 번 눌러 내려오세요. 기둥의 빈틈 높이에 맞춰 눌러 주면 돼요.<br>🐢 처음엔 <b>연습 모드</b>(느리게·하트 5개, 고철은 조금 덜)로 익혀 보세요.</div></details></div>`;
+    <div class="esRes hidden"><h2>탈출 작전</h2><div class="esStat"></div><div class="esRank"></div><div class="row"><button class="btn big esAgain">다시 ▶</button><button class="btn sub esEasy"></button><button class="btn sub esGhost hidden">👻 유령과 달리기</button><button class="btn sub esHome">격납고로</button></div><small class="esTip"></small><details class="esHelp"><summary>❓ 조작법</summary><div>✈️ <b>비행기</b>: 누른 채 끌기(PC는 방향키·WASD). 놓으면 그 자리에 떠 있어요.<br>🪢 <b>로프</b>: 노랗게 빛나는 고리가 보일 때 <b>한 번 누르면</b>(스페이스·화면 톡) 로프가 날아가 걸리고, 그네처럼 앞뒤로 계속 흔들려요. 앞쪽 위로 올라가는 순간 <b>한 번 더 누르면</b> 로프가 끊기고 멀리 날아가요. 날아가는 중에 또 누르면 다음 고리. 너무 일찍 끊으면 아래로 떨어져요.<br>🐦 <b>새</b>: 누르고 있으면 날갯짓 · 🕷️ <b>거미</b>: 누를 때마다 천장↔바닥 · 🐋 <b>고래</b>: 누르면 오름 · ⚔️ <b>기사</b>: 누르면 돌진 · 🚀 <b>쌍둥이</b>: 누르고 있으면 오름, 누르면 대포<br>💠 <b>코어</b>: 누를 때마다 중력이 위↔아래로 바뀌어요(옆 화살표 쪽으로 떨어짐). 계속 위로 올라가 있으면 다시 한 번 눌러 내려오세요. 기둥의 빈틈 높이에 맞춰 눌러 주면 돼요.<br>🐢 처음엔 <b>연습 모드</b>(느리게·하트 5개, 고철은 조금 덜)로 익혀 보세요.</div></details></div>`;
   document.getElementById('stage').append(box);
   cv = box.querySelector('canvas'); g = cv.getContext('2d');
   const at = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
@@ -65,16 +65,18 @@ function build() {
   window.addEventListener('keyup', e => { if (!on) return; if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = false; e.stopImmediatePropagation(); } if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp') { e.stopImmediatePropagation(); press(false); } }, true);
   box.querySelector('.esQuit').addEventListener('click', () => finish(true));
   box.querySelector('.esAgain').addEventListener('click', () => { if (opt.race) opt.race.again(); else start(cb); });
-  box.querySelector('.esGhost').addEventListener('click', () => { const gh = cb.loadGhost && cb.loadGhost(); if (gh) start(cb, { seed: gh.seed, ghost: gh }); });
+  box.querySelector('.esGhost').addEventListener('click', () => { const gh = ghost(); if (gh) start(cb, { seed: gh.seed, ghost: gh }); });
   box.querySelector('.esHome').addEventListener('click', () => { close(); });
   box.querySelector('.esEasy').addEventListener('click', () => { const v = !(cb.easy && cb.easy()); if (cb.setEasy) cb.setEasy(v); easyBtn(); });
 }
+const GHOST_V = 2;   // 구간 길이 등 맵 만드는 법이 바뀌면 올린다(옛 유령은 맵이 달라 버림)
+const ghost = () => { const g0 = cb.loadGhost && cb.loadGhost(); return g0 && g0.v === GHOST_V ? g0 : null; };
 function easyBtn() { const b = box.querySelector('.esEasy'), v = !!(cb.easy && cb.easy()); b.textContent = v ? '🐢 연습 모드 켜짐(느리게·하트 5)' : '🐢 연습 모드 꺼짐'; b.classList.toggle('hidden', !!opt.race); }
 function close() { on = false; cancelAnimationFrame(raf); box.classList.add('hidden'); if (opt.race && opt.race.leave) opt.race.leave(); opt = {}; if (cb.home) cb.home(); }
 function press(v) {
   if (v === hold) return; hold = v; holdT = 0;
   if (st.riding) { if (v) helpPress(); return; }   // 같이 탄 사람: 누르면 돕기
-  if (st.phase === 'rope') { if (v) shoot(); else letGo(); }
+  if (st.phase === 'rope' && v) { if (P.rope) letGo(); else shoot(); }   // 0.36: 한 번 누르면 로프 발사, 매달린 채 또 누르면 끊고 날아감
   if (st.phase === 'bird' && v) { flap(); st.dFlapT = t; if (st.pass && t - (st.pFlapT || -9) < 0.15) syncFlap(); }
   if (v && st.phase === 'spider') { P.side = -P.side; P.vy = P.side * -200; sfx('flap'); }
   if (v && st.phase === 'knight' && !(P.dashT > 0) && !(P.dashCd > 0)) { P.dashT = 0.32; P.dashCd = 0.55; P.vy = -430; sfx('release'); }
@@ -319,7 +321,7 @@ function update(dt) {
       let tx = -dy / d, ty = dx / d; if (tx < 0) { tx = -tx; ty = -ty; }   // 줄에 수직, 앞쪽
       const vt = P.vx * tx + P.vy * ty;   // 줄을 따라 도는 빠르기(+ 앞쪽, - 뒤쪽)
       if (dy > 0 && Math.abs(vt) < K.swing) { const s = vt >= 0 ? 1 : -1; P.vx += tx * s * K.pump * dt; P.vy += ty * s * K.pump * dt; }   // 아래쪽을 지날 때 흔들리는 방향으로 밀어 준다(떼지 않으면 앞뒤로 계속 그네)
-      if (hold && P.rope.L > P.rope.L0 * 0.75) P.rope.L = Math.max(K.ropeMin, P.rope.L - K.reel * dt);   // 처음엔 조금 감기고 그다음엔 그 길이로 흔들린다
+      if (P.rope.L > P.rope.L0 * 0.75) P.rope.L = Math.max(K.ropeMin, P.rope.L - K.reel * dt);   // 처음엔 조금 감기고 그다음엔 그 길이로 흔들린다
     }
     P.vx *= 1 - 0.05 * dt;
   }
@@ -385,7 +387,7 @@ function changePhase(ph) {
     for (let i = 0; i < 14; i++) parts.push({ x: P.x, y: P.y, vx: rnd(-200, 100), vy: rnd(-300, 100), t: 0, life: 1.2, c: was === 'bird' ? '#d9c7a8' : '#9aa6b4', s: rnd(4, 9) });
     P.vx = 320; P.vy = -720;
     const off = { plane: '🚨 엔진 고장! 비상 탈출!', bird: '🐦 새가 지쳤다! 뛰어내려!', spider: '🕷️ 거미가 멈췄다! 뛰어내려!', whale: '🐋 고래가 잠들었다! 뛰어내려!', knight: '⚔️ 기사가 무릎을 꿇었다! 뛰어내려!', core: '💠 코어가 꺼졌다! 뛰어내려!' };
-    banner(off[was] || '뛰어내려!', st.seen.rope ? '누르면 로프 · 떼면 날아가요' : '누르고 있는 동안 노랗게 빛나는 고리에 매달려 그네처럼 앞뒤로 흔들려요 · 앞쪽 위로 올라갈 때 떼면 멀리 날아가요 · 날아가는 중에 다시 누르면 다음 고리');
+    banner(off[was] || '뛰어내려!', st.seen.rope ? '한 번 누르면 로프 발사 · 또 누르면 끊고 날아가요' : '한 번 누르면(스페이스·화면 톡) 노란 고리로 로프가 날아가 걸리고 그네처럼 흔들려요 · 앞쪽 위로 올라갈 때 한 번 더 누르면 끊고 날아가요 · 날아가는 중에 또 누르면 다음 고리');
     // 탈출하자마자 잡을 고리를 하나 둔다
     items.push({ k: 'anchor', x: P.x + 260, y: 170 });
   } else if (RIDE_NM[ph]) {
@@ -424,8 +426,8 @@ function gameOver() {
     ${st.saved || st.rescued ? `<div>🎈 구한 친구 ${st.saved || 0}번 · 구조받음 ${st.rescued || 0}번</div>` : ''}
     ${st.dist > best && best > 0 ? `<div class="rec">🏆 최고 기록! (지난 최고 ${best.toLocaleString()} m)</div>` : !best ? '<div class="rec">🏁 첫 기록!</div>' : `<div>최고 ${best.toLocaleString()} m · ${(best - st.dist).toLocaleString()} m 모자라요</div>`}
     ${next ? `<small>다음 별: ${next.toLocaleString()} m</small>` : ''}`;
-  if (!opt.race && st.dist > best && cb.saveGhost) cb.saveGhost({ seed: st.seed, path: st.path, dist: st.dist });   // 최고 기록이면 유령으로 남긴다
-  const gh = !opt.race && cb.loadGhost && cb.loadGhost();
+  if (!opt.race && st.dist > best && cb.saveGhost) cb.saveGhost({ seed: st.seed, path: st.path, dist: st.dist, v: GHOST_V });   // 최고 기록이면 유령으로 남긴다
+  const gh = !opt.race && ghost();
   r.querySelector('.esGhost').classList.toggle('hidden', !gh);
   r.querySelector('.esRank').innerHTML = '';
   easyBtn();
@@ -542,7 +544,7 @@ function draw() {
   }
   if (st.easy && !st.riding && !st.pass && !st.over) {   // 🐢 연습 모드: 지금 할 일을 아래에 늘 보여 준다
     const ph = st.phase, tip = ph === 'plane' ? (matchMedia('(pointer: coarse)').matches ? '✈️ 화면을 누른 채 끌어서 움직여요' : '✈️ 방향키·WASD로 움직여요')
-      : ph === 'rope' ? (P.rope ? (P.vx > 120 && P.vy < -60 ? '🪢 지금! 손을 떼면 앞으로 날아가요' : '🪢 매달려 흔들리는 중 · 앞쪽 위로 올라갈 때 떼기') : '🪢 노란 고리가 보이면 누르고 있기')
+      : ph === 'rope' ? (P.rope ? (P.vx > 120 && P.vy < -60 ? '🪢 지금! 누르면 끊고 앞으로 날아가요' : '🪢 그네 타는 중 · 앞쪽 위로 올라갈 때 누르기') : '🪢 노란 고리가 보이면 한 번 누르기')
       : ph === 'core' ? `💠 누르면 중력이 ${P.gdir > 0 ? '위' : '아래'}로 바뀌어요 · 기둥 틈에 맞춰서` : '' + ((RIDE_NM[ph] || [])[1] || '').split(' · ')[0];
     g.fillStyle = 'rgba(6,12,24,.6)'; g.fillRect(0, H - 120, W, 40); g.fillStyle = '#ffe066'; g.font = '800 18px sans-serif'; g.textAlign = 'center'; g.fillText(tip, W / 2, H - 93);
     g.textAlign = 'left'; g.font = '700 16px sans-serif'; g.fillStyle = '#9dffcf'; g.fillText('🐢 연습 모드', 24, 116);
