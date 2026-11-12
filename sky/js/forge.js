@@ -11,7 +11,7 @@ const UPS = [
   { id: 'gold', icon: '💰', name: '금화 수집', max: 15, cost: l => Math.round(70 * Math.pow(1.8, l)), desc: l => `얻는 금화 +${20 * l}%` },
   { id: 'slots', icon: '🧰', name: '보관 칸', max: 4, cost: l => Math.round(300 * Math.pow(4, l)), desc: l => `칸 ${8 + l}개` },
 ];
-let S, cb, el, dragFrom = null, ghost = null, genT = 0, fever = 0, feverT = 0;
+let S, cb, el, dragFrom = null, ghost = null, genT = 0, fever = 0, feverT = 0, made = 0;
 const F = () => S.forge;
 const slots = () => 8 + F().up.slots;
 const tierOf = lv => TIER[Math.floor((lv - 1) / 3) % TIER.length];
@@ -113,7 +113,7 @@ function up(e) {
   if (!c) return;
   const b = +c.dataset.i;
   if (b === a || b >= slots()) return;
-  if (g[b] === g[a]) { g[b]++; g[a] = 0; noteMax(g[b]); cb.sfx('levelup'); cb.merged(g[b]); }
+  if (g[b] === g[a]) { g[b]++; g[a] = 0; noteMax(g[b]); cb.sfx('levelup'); cb.merged(g[b]); fillPending(); }
   else { const t = g[b]; g[b] = g[a]; g[a] = t; cb.sfx('click'); }
   render();
 }
@@ -122,7 +122,7 @@ function tick(dt, running) {
   const iv = 6 / (1 + 0.18 * F().up.spd);
   if (running) {
     genT += dt;
-    if (genT >= iv) { genT = 0; if (place(1 + F().up.gen)) cb.sfx('xp'); }
+    if (genT >= iv) { genT = 0; made++; if (place(1 + F().up.gen)) cb.sfx('xp'); else F().pend = Math.min(30, (F().pend || 0) + 1); }   // 칸이 차면 대기 바구니로
   }
   if (feverT > 0) feverT -= dt; else fever = Math.max(0, fever - dt * 0.08);
   const bar = el.querySelector('#fGen');
@@ -134,7 +134,7 @@ function tick(dt, running) {
   el.querySelector('#fBuy').disabled = F().gold < buyCost();
 }
 // 화면을 톡톡 두드리면 열기가 차고, 다 차면 5초 동안 표창 폭풍(던지기 3배)
-function tap() { if (feverT > 0) return; fever += 0.05; if (fever >= 1) { fever = 0; feverT = 5; cb.sfx('rush'); cb.toast('표창 폭풍! 5초 동안 3배로 던진다'); } }
+function tap(v = 0.05) { if (feverT > 0) return; fever += v; if (fever >= 1) { fever = 0; feverT = 5; cb.sfx('rush'); cb.toast('표창 폭풍! 5초 동안 3배로 던진다'); } }
 function addGold(n) { const v = n * goldMult(); F().gold += v; F().earned += v; return v; }
 function equipped() { return F().grid.slice(0, slots()).filter(Boolean).sort((a, b) => b - a).slice(0, 5); }
 
@@ -149,7 +149,7 @@ function render() {
     g.append(d);
   }
   const eq = equipped();
-  el.querySelector('#fInfo').innerHTML = `장착 ${eq.map(l => `<b style="color:${tierOf(l)}">${l}</b>`).join(' ')} · 최고 Lv ${F().maxLv} · ✨ 별조각 ${F().shards}`;
+  el.querySelector('#fInfo').innerHTML = `${F().pend ? `📦 대기 ${F().pend} · ` : ''}장착 ${eq.map(l => `<b style="color:${tierOf(l)}">${l}</b>`).join(' ')} · 최고 Lv ${F().maxLv} · ✨ 별조각 ${F().shards}`;
   const gain = rebornGain();
   el.querySelector('#fReborn').innerHTML = `✨ 환생 <small>${gain >= 1 ? `+${gain}` : '구역 10↑'}</small>`;
   renderUps();
@@ -169,7 +169,10 @@ function renderUps() {
     box.append(row);
   }
 }
-function show(on) { el.classList.toggle('hidden', !on); if (on) render(); }
+// 싸우는 동안 칸이 차서 못 넣은 표창은 대기 바구니에 있다가, 합쳐서 칸이 비면 들어온다
+function fillPending() { while ((F().pend || 0) > 0 && place(1 + F().up.gen)) F().pend--; }
+function takeMade() { const m = made; made = 0; return m; }
+function show(on) { el.classList.toggle('hidden', !on); if (on) { fillPending(); render(); } }
 
-return { init, tick, tap, addGold, equipped, starDmg, sprite, tierOf, render, show, fmt, get fever() { return feverT > 0; }, get gold() { return F().gold; } };
+return { init, tick, tap, addGold, fillPending, takeMade, equipped, starDmg, sprite, tierOf, render, show, fmt, get fever() { return feverT > 0; }, get gold() { return F().gold; } };
 })();

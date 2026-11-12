@@ -198,6 +198,16 @@
   .goal.done { border-color: #ffd166; box-shadow: 0 0 calc(var(--u) * 3) rgba(255, 209, 102, .25); } .goal.got { opacity: .5; }
   .note { font-size: calc(var(--u) * 3); opacity: .7; margin: 0; }
   .tab h3 { margin: calc(var(--u) * 1) 0 0; font-size: calc(var(--u) * 3.8); text-align: left; } .tab h3 small { opacity: .6; font-size: .75em; font-weight: 400; }
+  .notice { position: relative; margin: 0 calc(var(--u) * 4) calc(var(--u) * 2); padding: calc(var(--u) * 2) calc(var(--u) * 3); border-radius: calc(var(--u) * 2.4); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); text-align: center; font-size: calc(var(--u) * 3); line-height: 1.55; }
+  .notice p { margin: 0; font-family: "Gowun Batang", serif; color: #f3f0ff; } .notice small { display: block; margin-top: calc(var(--u) * .8); opacity: .6; font-size: calc(var(--u) * 2.4); }
+  .notice.all { background: rgba(255,209,102,.12); border-color: rgba(255,209,102,.5); text-align: left; padding-right: calc(var(--u) * 7); } .notice.all p { font-family: inherit; }
+  .nClose { position: absolute; right: calc(var(--u) * 1.4); top: calc(var(--u) * 1.2); background: none; border: none; color: inherit; font-size: calc(var(--u) * 3.4); opacity: .7; }
+  .letter { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: calc(var(--u) * 5); background: rgba(4,8,18,.78); animation: fadeIn .4s; }
+  .lCard { max-width: 92%; padding: calc(var(--u) * 5) calc(var(--u) * 5) calc(var(--u) * 4); border-radius: calc(var(--u) * 4); background: linear-gradient(#fffaf0, #ffeccc); color: #3a2a1a; text-align: center; box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 8) rgba(0,0,0,.5); }
+  .lTop { font-size: calc(var(--u) * 10); margin-top: calc(var(--u) * -10); } .lCard b { display: block; font-size: calc(var(--u) * 4.6); margin: calc(var(--u) * 1) 0 calc(var(--u) * 2); }
+  .lCard p { font-family: "Gowun Batang", serif; font-size: calc(var(--u) * 3.6); line-height: 1.7; margin: 0 0 calc(var(--u) * 3); white-space: normal; } .lCard small { display: block; opacity: .6; font-size: calc(var(--u) * 2.6); margin-bottom: calc(var(--u) * 3); }
+  .lCard button { font: inherit; font-weight: 800; font-size: calc(var(--u) * 3.4); padding: calc(var(--u) * 2.2) calc(var(--u) * 4); border-radius: calc(var(--u) * 3); border: none; background: #ff8a5e; color: #fff; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   .pilot { width: 100%; padding: 0 calc(var(--u) * 4) calc(var(--u) * 1.5); display: flex; align-items: center; gap: calc(var(--u) * 2); font-size: calc(var(--u) * 3); }
   .pilot .lv { background: linear-gradient(#ffe7a3, #c8962e); color: #2a1c02; font-weight: 900; border-radius: 99px; padding: calc(var(--u) * .6) calc(var(--u) * 2.4); white-space: nowrap; }
   .pilot i { flex: 1; height: calc(var(--u) * 1.8); background: rgba(0, 0, 0, .5); border-radius: 99px; overflow: hidden; border: 1px solid rgba(255, 255, 255, .15); }
@@ -259,6 +269,10 @@
     border-radius: 50%; border: 1px solid rgba(255, 209, 102, .45); background: rgba(16, 24, 38, .8); font-size: calc(var(--u) * 4); }
 
   /* 표창 공방 */
+  #fRest { display: flex; align-items: center; gap: calc(var(--u) * 2); margin-bottom: calc(var(--u) * 1.6); padding: calc(var(--u) * 1.6) calc(var(--u) * 2); border-radius: calc(var(--u) * 2); background: rgba(255,209,102,.12); border: 1px solid rgba(255,209,102,.5); font-size: calc(var(--u) * 2.7); line-height: 1.4; text-align: left; }
+  #fRest.hidden { display: none; } #fRestT { flex: 1; } #fRestT b { color: #ffe066; }
+  #fGo { flex: none; font: inherit; font-weight: 900; font-size: calc(var(--u) * 3.4); padding: calc(var(--u) * 2) calc(var(--u) * 3); border-radius: calc(var(--u) * 2); border: none; background: linear-gradient(#ffe066, #ffb347); color: #2a1a00; animation: pulse .8s infinite alternate; }
+  #forge.rest { height: 46%; }
   #forge { position: absolute; left: 0; right: 0; bottom: 0; height: 35%; z-index: 4; padding: calc(var(--u) * 2) calc(var(--u) * 3) max(calc(var(--u) * 2), env(safe-area-inset-bottom));
     background: linear-gradient(rgba(14, 20, 34, .92), rgba(6, 9, 18, .97)); border-top: 2px solid rgba(255, 209, 102, .5); display: flex; flex-direction: column; gap: calc(var(--u) * 1.4); touch-action: none; font-size: calc(var(--u) * 3); }
   .fTop { display: flex; gap: calc(var(--u) * 1.4); align-items: center; }
@@ -316,6 +330,7 @@
   </div>
 
   <div id="forge" class="hidden">
+    <div id="fRest" class="hidden"><div id="fRestT"></div><button id="fGo">▶ 출격</button></div>
     <div class="fTop"><span class="fGoldBox">💰 <b id="fGold">0</b></span><button id="fBuy">⭐ 사기</button><button id="fUpBtn">⬆ 강화</button><button id="fReborn">✨ 환생</button></div>
     <div class="fBars"><i><b id="fGen"></b></i><i class="fev"><b id="fFever"></b></i></div>
     <div id="fGrid"></div>
@@ -329,6 +344,7 @@
       <div class="wallet"><span id="scrap">🔩 0</span><span id="bestTxt"></span></div>
     </header>
     <div id="pilot" class="pilot"></div>
+    <div id="notice" class="notice hidden"></div>
     <nav class="tabs">
       <button data-tab="sortie">🚀 출격</button><button data-tab="ship">✈️ 기체</button><button data-tab="look">🎨 꾸미기</button><button data-tab="arms">🔫 무기</button>
       <button data-tab="parts">⚙️ 부품</button><button data-tab="research">🔬 연구</button>
@@ -420,6 +436,7 @@
 <script src="js/forge.js"></script>
 <script src="js/rank.js"></script>
 <script src="js/cloud.js"></script>
+<script src="js/notice.js"></script>
 <script src="js/lobby.js"></script>
 <script src="js/game.js"></script>
 </body>
