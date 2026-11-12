@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.32';
+const VERSION = '0.33';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -2000,6 +2000,7 @@ function drawFoe(e) {
     ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(Art.glow(c, 40), e.x - e.r * 1.8, e.y - e.r * 1.8, e.r * 3.6, e.r * 3.6); ctx.globalCompositeOperation = 'source-over';
     if (e.sh > 0) { ctx.strokeStyle = 'rgba(127,216,255,.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 8, 0, TAU * e.sh / (e.maxHp * 0.7)); ctx.stroke(); }
   }
+  if (e.tell && Math.floor(T * 14) % 2) { ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(Art.glow('#ff5d5d', 40), e.x - e.r * 2, e.y - e.r * 2, e.r * 4, e.r * 4); ctx.globalCompositeOperation = 'source-over'; }   // 표창 공방: 곧 쏜다
   if (e.harmless || CRITTER[e.type]) { drawEmojiFoe(e); return; }
   if (e.balloonT > 0) { drawBalloon(e); return; }
   ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(rot);
@@ -3197,7 +3198,9 @@ function drawUpDrop(d) {
 }
 
 // ---------- 표창 공방: 넓은 들판에서 로봇을 직접 몰아 사방의 적을 피하며 싸우고, 웨이브 사이 정비 시간에 표창을 몰아서 합친다 ----------
-const AW = 1300, AH = 1900, cam = { x: 0, y: 0 };
+const AW = 2000, AH = 2800, cam = { x: 0, y: 0 };   // 표창 공방 들판 크기(0.33에서 1300×1900 → 넓힘)
+// 표창 공방 적의 탄(0.33, 사용자: 표창으로 붙어 싸우는데 피하기 어렵다): 탄 빠르기, 쏘는 간격 배수, 이 거리 안·화면 안에서만 쏨, 쏘기 전 깜빡임(초)
+const ARENA_SHOT = { sp: 150, fanSp: 140, ringSp: 115, every: 1.5, range: 520, tell: 0.45, ringN: 7, keeperRing: 10 };
 const bounds = () => (run && run.arena ? [30, AW - 30, 40, AH - 40] : [22, W - 22, 90, H - 70]);
 const offView = (x, y, m) => x < cam.x - m || x > cam.x + W + m || y < cam.y - m || y > cam.y + H + m;
 const ARENA_FOES = { scout: { sp: 125 }, weaver: { sp: 85, shoot: 2.8 }, diver: { sp: 60, dash: 1 }, splitter: { sp: 70 }, tank: { sp: 42, ring: 3.2 }, turret: { sp: 0, shoot: 2.2, fan: 1 } };
@@ -3239,11 +3242,12 @@ function arenaAI(e, dt) {
     e.vx = (dx / d * want - dy / d * side) * sp; e.vy = (dy / d * want + dx / d * side) * sp;
   }
   e.x = clamp(e.x + e.vx * dt, 10, AW - 10); e.y = clamp(e.y + e.vy * dt, 10, AH - 10);
-  if (d > 680) return;
-  if (A0.shoot && (e.fireT -= dt) <= 0) { e.fireT = A0.shoot / fr; const a = Math.atan2(dy, dx); if (A0.fan) fan(e.x, e.y, a, 3, 0.4, 190, { color: '#ffb347' }); else eShot(e.x, e.y, a, 210, { color: '#c58bff' }); }
+  if (d > ARENA_SHOT.range || offView(e.x, e.y, -20)) { e.tell = false; return; }   // 화면 밖에서는 쏘지 않는다
+  e.tell = (A0.shoot || A0.ring) && e.fireT < ARENA_SHOT.tell;   // 곧 쏜다: 깜빡임
+  if (A0.shoot && (e.fireT -= dt) <= 0) { e.fireT = A0.shoot * ARENA_SHOT.every / fr; const a = Math.atan2(dy, dx); if (A0.fan) fan(e.x, e.y, a, 3, 0.4, ARENA_SHOT.fanSp, { color: '#ffb347' }); else eShot(e.x, e.y, a, ARENA_SHOT.sp, { color: '#c58bff' }); }
   if (A0.ring && (e.fireT -= dt) <= 0) {
-    e.fireT = (e.keeper ? 2.1 : A0.ring) / fr; ring(e.x, e.y, e.keeper ? 14 : 9, e.t, 150, { color: '#ff8a5e' });
-    if (e.keeper) fan(e.x, e.y, Math.atan2(dy, dx), 5, 0.6, 230, { color: '#ff5d8f' });
+    e.fireT = (e.keeper ? 2.6 : A0.ring * ARENA_SHOT.every) / fr; ring(e.x, e.y, e.keeper ? ARENA_SHOT.keeperRing : ARENA_SHOT.ringN, e.t, ARENA_SHOT.ringSp, { color: '#ff8a5e' });
+    if (e.keeper) fan(e.x, e.y, Math.atan2(dy, dx), 3, 0.5, ARENA_SHOT.fanSp + 30, { color: '#ff5d8f' });
   }
 }
 function arenaTick(dt) {
@@ -3301,10 +3305,10 @@ function makeObst(x, y, kind) {
   return { x, y, kind, r: kind === 'spire' ? rnd(30, 42) : kind === 'mill' ? 24 : kind === 'bldg' ? rnd(24, 32) : 22, h: kind === 'spire' ? rnd(80, 115) : kind === 'mill' ? 125 : kind === 'bldg' ? rnd(130, 180) : 145, ph: Math.random() * TAU, bump: 0 };
 }
 function arenaObstacles() {
-  const list = [], n = 9 + Math.min(6, run.stage);
+  const list = [], n = 5 + Math.min(3, run.stage / 3 | 0);   // 0.33: 9~15개 → 5~8개(넓어진 들판에 듬성듬성)
   for (let k = 0; k < 300 && list.length < n; k++) {
     const x = rnd(130, AW - 130), y = rnd(170, AH - 130);
-    if (Math.hypot(x - AW / 2, y - AH / 2) < 260 || list.some(o => Math.hypot(o.x - x, o.y - y) < 230)) continue;
+    if (Math.hypot(x - AW / 2, y - AH / 2) < 340 || list.some(o => Math.hypot(o.x - x, o.y - y) < 420)) continue;
     list.push(makeObst(x, y));
   }
   run.obst = list;
