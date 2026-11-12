@@ -22,7 +22,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.11';
+const VERSION = '0.12';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -389,8 +389,8 @@ function flakTick(dt) {   // 대공포 표적: 붉은 원이 조여 들다가 �
     if (f.t >= f.warn && !f.done) {
       f.done = true;
       explode(f.x, f.y, 26, '#ffb347'); A.sfx('hit');
-      if (Math.hypot(P.x - f.x, P.y - f.y) < 58 && !(P.down > 0)) hurtPlayer(run.d.dmg);
-      ring(f.x, f.y, 6 + 2 * run.loop, rnd(0, TAU), 130, { color: '#ffb347', r: 6 });
+      if (Math.hypot(P.x - f.x, P.y - f.y) < (f.mini ? 46 : 58) && !(P.down > 0)) hurtPlayer(run.d.dmg * (f.mini ? 0.6 : 1));
+      if (!f.mini) ring(f.x, f.y, 6 + 2 * run.loop, rnd(0, TAU), 130, { color: '#ffb347', r: 6 });
     }
   }
   run.flak = run.flak.filter(f => f.t < f.warn + 0.3);
@@ -401,8 +401,8 @@ function drawFlak() {
     if (f.done) continue;
     const k = f.t / f.warn;
     ctx.strokeStyle = `rgba(255,70,70,${0.4 + 0.5 * k})`; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(f.x, f.y, 58, 0, TAU); ctx.stroke();
-    ctx.fillStyle = `rgba(255,60,60,${0.12 + 0.25 * k})`; ctx.beginPath(); ctx.arc(f.x, f.y, 58 * k, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(f.x, f.y, (f.mini ? 46 : 58), 0, TAU); ctx.stroke();
+    ctx.fillStyle = `rgba(255,60,60,${0.12 + 0.25 * k})`; ctx.beginPath(); ctx.arc(f.x, f.y, (f.mini ? 46 : 58) * k, 0, TAU); ctx.fill();
     ctx.beginPath(); ctx.moveTo(f.x - 12, f.y); ctx.lineTo(f.x + 12, f.y); ctx.moveTo(f.x, f.y - 12); ctx.lineTo(f.x, f.y + 12); ctx.stroke();
   }
 }
@@ -650,40 +650,110 @@ function dojoEnd(r) {
   $('result').classList.remove('hidden');
 }
 
-// ---------- 갈림길: 위험 항로(강한 적, 보상 2배)와 보급 항로(회복) 중 하나를 지나간다 ----------
+// ---------- 갈림길: 항로 문 2~3개 중 하나를 지나간다. 단계가 오르면 새 항로가 열리고, 희귀·전설 항로는 드물게 나온다 ----------
+const ROUTES = {
+  danger: { icon: '⚠️', name: '위험 항로', sub: '강한 적 22초 · 보상 ×2', c: '#ff5d5d', tier: 0, lv: 1 },
+  supply: { icon: '✚', name: '보급 항로', sub: '체력 35% · 고철', c: '#6ee37a', tier: 0, lv: 1 },
+  storm: { icon: '⛈️', name: '폭풍 항로', sub: '돌풍 3번 · 경험치 ×2', c: '#8fb8ff', tier: 0, lv: 2 },
+  barrage: { icon: '☄️', name: '포격 지대', sub: '포탄을 피하면 고철 ×2', c: '#ff9a3c', tier: 0, lv: 2 },
+  treasure: { icon: '💰', name: '보물 항로', sub: '황금 수송선이 나타난다', c: '#ffd166', tier: 1, lv: 2 },
+  hunt: { icon: '👑', name: '정예 사냥', sub: '정예 3기 · 부품 확정', c: '#c58bff', tier: 1, lv: 3 },
+  overdrive: { icon: '🔥', name: '과열 항로', sub: '연사 2배 + 분신 10초', c: '#ffb347', tier: 1, lv: 3 },
+  shortcut: { icon: '⏩', name: '지름길', sub: '보스가 20초 빨리 · 점수 +', c: '#7fd8ff', tier: 1, lv: 4 },
+  card: { icon: '🃏', name: '강화 항로', sub: '카드를 바로 1번 고른다', c: '#9dffcf', tier: 2, lv: 3 },
+  gamble: { icon: '🎲', name: '운명 항로', sub: '대박? 쪽박?', c: '#ff7ad9', tier: 2, lv: 4 },
+};
+const TIER = [{ name: '일반', c: '#dfe6ee', w: 5 }, { name: '희귀', c: '#5fb8ff', w: 2.6 }, { name: '전설', c: '#ffd166', w: 1 }];
 function spawnGates() {
   run.gateLast = run.t;
-  run.gates = [{ x: W * 0.27, y: -90, kind: 'danger' }, { x: W * 0.73, y: -90, kind: 'supply' }];
-  say('갈림길! 한쪽 문을 지나가세요', W / 2, H * 0.3, '#ffffff', 24, 2); A.sfx('charge');
+  const lv = run.stage + (run.loop || 0) * 5 + (run.mode === 'endless' ? run.wave >> 1 : 0);
+  const pool = Object.keys(ROUTES).filter(k => ROUTES[k].lv <= lv && k !== run.lastRoute && !(k === 'storm' && run.theme === 3));   // 바로 전에 고른 항로는 쉬게 한다
+  const n = lv >= 4 && Math.random() < 0.5 ? 3 : 2, offer = [];
+  while (offer.length < n && pool.length) {
+    let roll = Math.random() * pool.reduce((a, k) => a + TIER[ROUTES[k].tier].w, 0), i = 0;
+    for (; i < pool.length - 1; i++) if ((roll -= TIER[ROUTES[pool[i]].tier].w) <= 0) break;
+    offer.push(pool.splice(i, 1)[0]);
+  }
+  if (!offer.some(k => ['supply', 'overdrive', 'card', 'treasure'].includes(k))) offer[offer.length - 1] = 'supply';   // 안전한 길 하나는 꼭
+  const xs = n === 3 ? [0.19, 0.5, 0.81] : [0.27, 0.73];
+  run.gates = offer.map((kind, i) => ({ x: W * xs[i], y: -110, kind, hw: n === 3 ? 50 : 64, t: 0 }));
+  say('⑂ 갈림길! 하나를 골라 지나가세요', W / 2, H * 0.3, '#ffffff', 24, 2); A.sfx('charge');
 }
 function updateGates(dt) {
   for (const g of run.gates) {
-    g.y += 85 * dt;
-    if (run.phase !== 'dead' && [P, ...allies].some(s => !(s.down > 0) && Math.abs(s.x - g.x) < 70 && Math.abs(s.y - g.y) < 40)) { chooseGate(g.kind); return; }
+    g.y += 85 * dt; g.t += dt;
+    if (run.phase !== 'dead' && [P, ...allies].some(s => !(s.down > 0) && Math.abs(s.x - g.x) < g.hw && Math.abs(s.y - g.y) < 40)) { chooseGate(g.kind, g); return; }
   }
   if (run.gates[0].y > H + 100) run.gates = null;
 }
-function chooseGate(kind) {
-  run.gates = null;
-  if (kind === 'danger') { run.dangerT = 22; run.banner = { kind: 'boss', title: '위험 항로', sub: '22초 동안 강한 적이 몰려온다 · 보상 2배!', t: 0, life: 2 }; A.sfx('warning'); buzz([80, 40, 80]); }
-  else {
+function chooseGate(kind, g) {
+  const R = ROUTES[kind] || ROUTES.supply;
+  for (const o of run.gates) if (o !== g) spark(o.x, o.y, 14, '#8a96a8', 160, 0.5, 3);   // 고르지 않은 문은 부서진다
+  run.gates = null; run.lastRoute = kind;
+  ringFx(P.x, P.y, 110, R.c); flash = Math.max(flash, 0.25); buzz(40);
+  S.routes = S.routes || {};
+  if (!S.routes[kind]) { S.routes[kind] = 1; say(`📖 새 항로 발견! (${Object.keys(S.routes).length}/${Object.keys(ROUTES).length})`, W / 2, H * 0.42, '#ffd166', 20, 2.2); }
+  else S.routes[kind]++;
+  const banner = (sub, k = 'trap') => { run.banner = { kind: k, title: `${R.icon} ${R.name}`, sub, t: 0, life: 2 }; };
+  if (kind === 'danger') { run.dangerT = 22; banner('22초 동안 강한 적이 몰려온다 · 보상 2배!', 'boss'); A.sfx('warning'); buzz([80, 40, 80]); }
+  else if (kind === 'supply') {
     if (!run.gambler) { P.hp = Math.min(P.maxHp, P.hp + P.maxHp * 0.35); for (const a of allies) if (!(a.down > 0)) a.hp = Math.min(a.maxHp, a.hp + a.maxHp * 0.35); }
     for (let i = 0; i < 8; i++) drops.push({ kind: 'scrap', x: P.x + rnd(-80, 80), y: P.y - 200 + rnd(-40, 40), vy: 60, v: 2 });
     if (Math.random() < 0.15) drops.push({ kind: 'part', x: P.x, y: P.y - 250, vy: 50, v: 1 });
-    run.banner = { kind: 'trap', title: '보급 항로', sub: '체력 회복과 고철 보급', t: 0, life: 1.8 }; A.sfx('heal');
+    banner('체력 회복과 고철 보급'); A.sfx('heal');
+  } else if (kind === 'storm') { run.stormN = 3; run.xpBoostT = 22; banner('돌풍 3번을 버티면 · 22초 경험치 2배'); }
+  else if (kind === 'barrage') { run.barrageT = 14; run.it_gold = 16; banner('14초 동안 포탄이 떨어진다 · 고철 2배', 'boss'); A.sfx('warning'); }
+  else if (kind === 'treasure') { addFoe('treasure', -70, rnd(170, 240), { vx: 75, by: 200 }); banner('황금 수송선을 놓치지 마세요!'); A.sfx('part'); }
+  else if (kind === 'hunt') {
+    for (let i = 0; i < 3; i++) { const e = addFoe(i === 1 ? 'tank' : 'turret', W * (0.25 + 0.25 * i), -50 - i * 40, { ty: rnd(140, 240), bounty: true }); e.mod = pick(['shield', 'swift', 'volatile']); e.elite = true; e.xp = Math.ceil(e.xp * 1.5) + 1; if (e.mod === 'shield') e.sh = e.maxHp * 0.7; }
+    banner('정예 3기를 잡으면 부품을 준다', 'boss'); A.sfx('warning');
+  } else if (kind === 'overdrive') { useItem('rapid'); run.it_rapid = 10; P.twinT = 10; banner('10초 동안 연사 2배 + 분신'); }
+  else if (kind === 'shortcut') {
+    if (run.mode === 'endless') run.nextBoss = Math.max(run.t + 5, run.nextBoss - 20); else run.t = Math.min(run.waveDur - 4, run.t + 20);
+    run.score += 1500 * run.stage; banner(`보스가 20초 빨리 온다 · 점수 +${1500 * run.stage}`); A.sfx('charge');
+  } else if (kind === 'card') { banner('강화 카드를 고르세요'); setTimeout(() => { if (run && state === 'play') openCards(); }, 700); }
+  else if (kind === 'gamble') {
+    if (Math.random() < 0.55) {
+      run.clover = true; for (let i = 0; i < 14; i++) drops.push({ kind: 'scrap', x: P.x + rnd(-120, 120), y: P.y - 220 + rnd(-60, 60), vy: 60, v: 2 });
+      drops.push({ kind: 'part', x: P.x, y: P.y - 260, vy: 50, v: 1 }); banner('🎉 대박! 고철·부품, 다음 카드 4장', 'stage'); A.sfx('levelup');
+    } else { run.dangerT = 16; banner('💀 쪽박! 적이 몰려온다(그래도 보상 2배)', 'boss'); A.sfx('warning'); }
   }
-  ringFx(P.x, P.y, 90, kind === 'danger' ? '#ff5d5d' : '#6ee37a');
+}
+function gateRunTick(dt) {   // 항로 효과의 시간 흐름
+  if (run.xpBoostT > 0) run.xpBoostT -= dt;
+  if (run.barrageT > 0) {
+    run.barrageT -= dt;
+    if ((run.barT = (run.barT || 0) - dt) <= 0) { run.barT = 0.45; if (!run.flak) run.flak = []; run.flak.push({ x: clamp(P.x + rnd(-150, 150), 40, W - 40), y: clamp(P.y + rnd(-200, 60), 120, H - 60), t: 0, warn: 1.0, mini: true }); }
+  }
+  if (run.stormN > 0 && run.hz && !run.hz.wind && (run.stormT = (run.stormT || 1) - dt) <= 0) { run.stormN--; run.stormT = 2; hzStart('gust'); }
 }
 function drawGates() {
   if (!run.gates) return;
   for (const g of run.gates) {
-    const c = g.kind === 'danger' ? '#ff5d5d' : '#6ee37a', y = g.y;
-    ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(Art.glow(c, 60), g.x - 95, y - 80, 190, 150); ctx.globalCompositeOperation = 'source-over';
-    ctx.lineWidth = 9; ctx.strokeStyle = '#0b0f18';
-    ctx.beginPath(); ctx.moveTo(g.x - 70, y + 40); ctx.lineTo(g.x - 70, y - 10); ctx.arc(g.x, y - 10, 70, Math.PI, 0); ctx.lineTo(g.x + 70, y + 40); ctx.stroke();
-    ctx.lineWidth = 5; ctx.strokeStyle = c; ctx.stroke();
-    txt(g.kind === 'danger' ? '⚠ 위험 항로' : '✚ 보급 항로', g.x, y - 4, 18, c, 'center', 900);
-    txt(g.kind === 'danger' ? '강한 적 · 보상 ×2' : '회복 · 고철', g.x, y + 20, 12, '#ffffff', 'center', 700);
+    const R = ROUTES[g.kind] || ROUTES.supply, c = R.c, y = g.y, hw = g.hw || 64, tc = TIER[R.tier], a = g.t === undefined ? 1 : Math.min(1, g.t * 2);
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(Art.glow(c, 60), g.x - hw * 1.5, y - 90, hw * 3, 170);
+    const fld = ctx.createLinearGradient(0, y - 60, 0, y + 40); fld.addColorStop(0, c + '00'); fld.addColorStop(0.5, c + '55'); fld.addColorStop(1, c + '10');   // 빛의 막
+    ctx.fillStyle = fld; ctx.fillRect(g.x - hw + 10, y - 60, hw * 2 - 20, 100);
+    ctx.strokeStyle = c + '99'; ctx.lineWidth = 2;
+    for (let i = 0; i < 5; i++) { const xx = g.x - hw + 14 + ((i * 0.23 + g.t * 0.6) % 1) * (hw * 2 - 28); ctx.beginPath(); ctx.moveTo(xx, y - 56); ctx.lineTo(xx + Math.sin(g.t * 5 + i) * 4, y + 36); ctx.stroke(); }
+    ctx.globalCompositeOperation = 'source-over';
+    for (const s of [-1, 1]) {   // 양쪽 기둥
+      const px = g.x + s * hw;
+      const gr = ctx.createLinearGradient(px - 9, 0, px + 9, 0); gr.addColorStop(0, '#2a3242'); gr.addColorStop(0.5, '#7d8aa0'); gr.addColorStop(1, '#1d2330');
+      ctx.fillStyle = gr; ctx.fillRect(px - 9, y - 66, 18, 112);
+      ctx.fillStyle = '#11151d'; ctx.fillRect(px - 12, y + 40, 24, 8); ctx.fillRect(px - 12, y - 72, 24, 8);
+      for (let k = 0; k < 4; k++) { const on = ((g.t * 6 + k) | 0) % 4 === k; ctx.fillStyle = on ? c : c + '55'; ctx.fillRect(px - 4, y - 54 + k * 24, 8, 12); }
+    }
+    ctx.lineWidth = 6; ctx.strokeStyle = '#0b0f18'; ctx.beginPath(); ctx.arc(g.x, y - 66, hw, Math.PI, 0); ctx.stroke();
+    ctx.lineWidth = 3; ctx.strokeStyle = c; ctx.stroke();
+    ctx.fillStyle = '#0b0f18'; ctx.beginPath(); ctx.arc(g.x, y - 66 - hw * 0.55, 22, 0, TAU); ctx.fill();   // 아이콘 동그라미
+    ctx.lineWidth = 3; ctx.strokeStyle = tc.c; ctx.stroke();
+    ctx.font = '24px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(R.icon, g.x, y - 65 - hw * 0.55); ctx.textBaseline = 'alphabetic';
+    if (R.tier) txt(tc.name, g.x, y - 66 - hw * 0.55 - 30, 12, tc.c, 'center', 900);
+    txt(R.name, g.x, y - 10, hw > 55 ? 17 : 15, c, 'center', 900);
+    txt(R.sub, g.x, y + 12, 11, '#ffffff', 'center', 700);
+    ctx.restore();
   }
 }
 
@@ -863,7 +933,8 @@ function killFoe(e) {
     say('황금 수송선 격파! 고철이 쏟아진다', W / 2, H * 0.3, '#ffd166', 26, 2); flash = 0.4;
   }
   if (run.mode === 'auto') { const gv = Forge.addGold((e.elite ? 4 : 1) * Math.pow(1.17, run.stage - 1)); if (!Q.low && Math.random() < 0.5) say('💰' + Forge.fmt(gv), e.x, e.y - 10, '#ffd166', 13, 0.6); Forge.tap(0.025); Forge.kill(); }
-  if (e.xp) drops.push({ kind: 'xp', x: e.x, y: e.y, vy: 60, v: e.xp * dm });
+  if (e.xp) drops.push({ kind: 'xp', x: e.x, y: e.y, vy: 60, v: e.xp * dm * (run.xpBoostT > 0 ? 2 : 1) });
+  if (e.bounty) { drops.push({ kind: 'part', x: e.x, y: e.y, vy: 50, v: 1 }); say('👑 정예 격파! 부품', e.x, e.y - 30, '#c58bff', 18, 1.2); }
   if (dm > 1 && Math.random() < 0.5) drops.push({ kind: 'scrap', x: e.x, y: e.y, vy: 70, v: 1 });
   if (Math.random() < (run.mode === 'auto' ? 0.2 : 0.3) || e.elite) drops.push({ kind: 'scrap', x: e.x + rnd(-10, 10), y: e.y, vy: 70, v: e.elite ? 6 : 1 });
   if (Math.random() < 0.02) drops.push({ kind: 'heart', x: e.x, y: e.y, vy: 60, v: 20 });
@@ -1098,6 +1169,7 @@ function update(dt) {
     if (Math.random() < 0.7) { addFoe('treasure', -70, 200, { vx: 75, by: 200 }); say('★ 황금 수송선 출현! 놓치지 마!', W / 2, H * 0.3, '#ffd166', 26, 2); A.sfx('rush'); }
   }
   if (run.gates) updateGates(dt);
+  gateRunTick(dt);
   if (run.dangerT > 0) run.dangerT -= dt;
   if (run.rush) updateRush();
 
@@ -2696,14 +2768,14 @@ function obstTick(dt) {
       if (d < m) {
         if (Math.abs(dy) < 1) P.x = o.x + (dx >= 0 ? 1 : -1) * m;
         else { const k = d || 1; P.x = o.x + dx / k * m; P.y = cy + dy / k * m; }
-        if (o.bump <= 0) { o.bump = 0.5; shake = Math.max(shake, 4); A.sfx('hit'); }
+        if (o.bump <= 0) { o.bump = 0.7; shake = Math.max(shake, 4); A.sfx('hit'); hurtPlayer(run.d.dmg * (run.arena ? 0.35 : 0.5)); }
       }
       continue;
     }
     const dx = P.x - o.x, dy = P.y - o.y, d = Math.hypot(dx, dy), m = o.r + 20;
     if (d < m) {   // 부딪히면 밀려난다(다치지는 않는다)
       const k = d || 1; P.x = o.x + dx / k * m; P.y = o.y + dy / k * m;
-      if (o.bump <= 0) { o.bump = 0.5; shake = Math.max(shake, 4); A.sfx('hit'); }
+      if (o.bump <= 0) { o.bump = 0.7; shake = Math.max(shake, 4); A.sfx('hit'); hurtPlayer(run.d.dmg * (run.arena ? 0.35 : 0.5)); }
     }
     if (run.arena) for (const e of foes) {
       if (e.type === 'boss' || e.dead) continue;
@@ -2772,22 +2844,30 @@ function obstShape(o, x, y) {
 // ---------- 하늘의 사건: 돌풍·토네이도(맵과 단계에 따라), 쏘면 안 되는 배달 드론·민간 여객기 ----------
 // 스테이지·무한에서만(협동·보스 러시·표창 공방 제외). 단계가 오를수록 종류가 늘고 자주 온다.
 const hzLv = () => run.stage + (run.loop || 0) * 5 + (run.mode === 'endless' ? run.wave >> 1 : 0);
-function hzKinds() {
-  const lv = hzLv(), th = run.theme, out = [];
-  if (th === 3) { if (lv >= 3) out.push('drone'); return out; }   // 우주: 바람이 없다
-  if (lv >= 2) out.push('gust', 'drone');
-  if ((th === 1 && lv >= 2) || lv >= 5) out.push('tornado');
-  if (lv >= 3) out.push('liner');
-  return out;
+function hzKinds() {   // 맵마다 어울리는 사건만: 바다 섬은 바람·여객기, 사막은 토네이도, 밤 도시는 드론·여객기, 우주는 없음
+  const lv = hzLv(), MAP = [
+    [['gust', 2], ['liner', 3], ['drone', 5]],
+    [['tornado', 2], ['gust', 4]],
+    [['drone', 2], ['liner', 3], ['gust', 6]],
+    [],
+  ][run.theme] || [];
+  return MAP.filter(m => lv >= m[1]).map(m => m[0]);
 }
 function hazardTick(dt) {
   if (run.arena || run.coop || !(run.mode === 'stage' || run.mode === 'endless')) return;
   if (!run.hz) run.hz = { t: /fast/.test(location.hash) ? 4 : 14, wind: null, tw: [], seen: {} };
   const Z = run.hz;
-  if (run.phase === 'waves' && !boss && (Z.t -= dt) <= 0) {
-    const ks = hzKinds();
-    Z.t = rnd(12, 18) * Math.max(0.6, 1 - hzLv() * 0.04);
-    if (ks.length) hzStart(pick(ks));
+  if (run.phase === 'waves' && !boss && !run.gates && !(run.barrageT > 0) && !(run.stormN > 0) && (Z.t -= dt) <= 0) {   // 갈림길 효과와 겹치지 않게
+    const ks = hzKinds(), key = ks.join();
+    if (Z.key !== key) {   // 판(구역)마다 그날의 하늘: 열린 것 중 1~2가지만 나온다. 가끔은 맑은 하늘
+      Z.key = key;
+      const lv = hzLv(), mix = ks.slice().sort(() => Math.random() - 0.5);
+      Z.set = ks.length && Math.random() < (lv >= 6 ? 0.1 : 0.22) ? [] : mix.slice(0, lv >= 6 ? 2 : 1);
+      const NM = { gust: '💨 돌풍', tornado: '🌪️ 토네이도', drone: '🚁 배달 드론', liner: '✈️ 민간 여객기' };
+      if (ks.length) say(Z.set.length ? '오늘의 하늘: ' + Z.set.map(k => NM[k]).join(' · ') : '오늘의 하늘: ☀️ 맑음', W / 2, H * 0.22, '#cfeaff', 18, 2.4);
+    }
+    Z.t = rnd(15, 24) * Math.max(0.6, 1 - hzLv() * 0.04);
+    if (Z.set.length) hzStart(pick(Z.set));
   }
   const w = Z.wind;   // 돌풍: 경고 뒤 4초 동안 옆으로 민다
   if (w) {
