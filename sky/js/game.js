@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.19';
+const VERSION = '0.20';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -108,6 +108,7 @@ function rollDaily() {
   while (picks.length < 3) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; picks.push(pool.splice(seed % pool.length, 1)[0]); }
   S.daily = { date: t, picks, cnt: {}, claimed: {} };
   if (S.attend.last !== t) {
+    comebackGift(S.attend.last, t);
     S.attend.last = t; S.attend.days++;
     const r = ATTEND[(S.attend.days - 1) % 7];
     S.scrap += r;
@@ -123,12 +124,80 @@ function showPopup() {
   return true;
 }
 function gainScrap(v) {   // 고철 얻기(고철 수집 연구가 적용된다)
-  run.scrapCarry = (run.scrapCarry || 0) + v * (1 + 0.05 * rs('salvage')) * (run.gambler ? 2 : 1) * (itemOn('gold') ? 2 : 1) * (run.coop ? 1.2 : 1);   // 황금 시간 2배, 함께 하면 20% 더
+  run.scrapCarry = (run.scrapCarry || 0) + v * (1 + 0.05 * rs('salvage')) * (run.gambler ? 2 : 1) * (itemOn('gold') ? 2 : 1) * (run.coop ? 1.2 : 1) * (run.comeback ? 1.5 : 1);   // 황금 시간 2배, 함께 하면 20% 더, 돌아온 조종사 1.5배
   const whole = Math.floor(run.scrapCarry);
   run.scrapCarry -= whole; S.scrap += whole; run.scrapGot += whole;
   if (whole) dcount('scrap', whole);
 }
 
+// ---------- 주간 도전(로드맵 6단계): 판마다 주간 별을 모아 25칸을 연다. 모두 무료, 지난주 못 받은 칸은 자동으로 받는다 ----------
+const WEEK = { tiers: 25, step: 3 };   // 칸마다 주간 별 3개(일주일에 20판쯤이면 다 연다)
+function weekReward(i) {   // i: 1~25
+  if (i === 25) return { k: 'title', v: 150, icon: '🏆', txt: '칭호 「주간 완주자」 + 고철 150' };
+  if (i === 10 || i === 20) return { k: 'look', v: 0, icon: '🎨', txt: '꾸미기 하나 무료' };
+  if (i === 5 || i === 15) return { k: 'part', v: 0, icon: '⚙️', txt: '새 부품(다 모았으면 고철 60)' };
+  return { k: 'scrap', v: 20 + i * 4, icon: '🔩', txt: `고철 ${20 + i * 4}` };
+}
+function weekKey(d = new Date()) { d = new Date(d); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }   // 그 주 월요일
+function weekRoll() {
+  S.week = S.week || { key: '', pts: 0, got: {} };
+  const k = weekKey(); if (S.week.key === k) return;
+  if (S.week.key) {   // 지난주에 열어 두고 못 받은 칸은 자동으로 준다(놓쳐서 잃는 일이 없게)
+    const reach = Math.min(WEEK.tiers, Math.floor(S.week.pts / WEEK.step)), got = [];
+    for (let i = 1; i <= reach; i++) if (!S.week.got[i]) got.push(weekGive(i));
+    if (got.length) popups.push({ title: '지난주 도전 보상', html: `<div>받지 않은 칸 ${got.length}개를 챙겨 왔어요</div><div class="rules">${got.join('<br>')}</div>` });
+  }
+  S.week = { key: k, pts: 0, got: {} }; save();
+}
+function weekGive(i) {
+  const r = weekReward(i); S.week.got[i] = 1;
+  if (r.k === 'scrap') { S.scrap += r.v; return `🔩 고철 ${r.v}`; }
+  if (r.k === 'title') { S.weekDone = (S.weekDone || 0) + 1; S.scrap += r.v; return `🏆 「주간 완주자」 + 고철 ${r.v}`; }
+  if (r.k === 'part') {
+    const cand = D.PARTS.filter(p => !S.parts[p.id]);
+    if (!cand.length) { S.scrap += 60; return '🔩 고철 60(부품을 다 모았어요)'; }
+    const p = pick(cand); S.parts[p.id] = 1; if (!S.equip[p.slot]) S.equip[p.slot] = p.id; return `${p.icon} 새 부품 ${p.name}`;
+  }
+  S.owned = S.owned || {};   // 꾸미기: 아직 없는 것 중 하나(값이 높은 것부터 가능성 크게)
+  const cand = []; for (const cat of Object.keys(LOOKS)) for (const it of LOOKS[cat].list) if (it[3] && !S.owned[cat + ':' + it[0]]) cand.push([cat, it]);
+  if (!cand.length) { S.scrap += 80; return '🔩 고철 80(꾸미기를 다 모았어요)'; }
+  const [cat, it] = pick(cand); S.owned[cat + ':' + it[0]] = 1; return `🎨 ${LOOKS[cat].name.replace(/^\S+ /, '')}: ${it[1]}`;
+}
+const weekReach = () => Math.min(WEEK.tiers, Math.floor(S.week.pts / WEEK.step));
+const weekOpen = () => { weekRoll(); let n = 0; for (let i = 1; i <= weekReach(); i++) if (!S.week.got[i]) n++; return n; };
+function weekGain() {   // 결과 화면에서: 판마다 주간 별
+  weekRoll();
+  const win = $('rTitle').className === 'win';
+  let n = 1 + (win ? 2 : 0);
+  if (run) { n += { S: 2, A: 1 }[run.bossRank] || 0; n += Math.min(2, Math.floor((run.kills || 0) / 60)); }
+  const before = weekReach(); S.week.pts += n; const after = weekReach(); save();
+  return `<div class="wkGain">📅 주간 별 +${n} <small>${after > before ? `· 새 칸 ${after - before}개 열림! (임무 탭)` : `· 다음 칸까지 ${WEEK.step - S.week.pts % WEEK.step}`}</small></div>`;
+}
+function renderWeekly(el) {
+  weekRoll();
+  const reach = weekReach(), open = weekOpen();
+  const end = new Date(); end.setDate(end.getDate() + (7 - (end.getDay() + 6) % 7)); end.setHours(0, 0, 0, 0);
+  const left = Math.max(0, end - Date.now()), dd = Math.floor(left / 864e5), hh = Math.floor(left / 36e5) % 24;
+  el.innerHTML = `<div class="wkHead"><b>⭐ ${S.week.pts}</b><span>${reach} / ${WEEK.tiers}칸</span><small>⏳ ${dd ? dd + '일 ' : ''}${hh}시간 남음 · 판을 할 때마다 별(이기면·랭크·많이 부수면 더)</small>${open ? `<button id="wkAll" class="btn">🎁 ${open}칸 받기</button>` : ''}</div>
+    <div class="wkRow">${Array.from({ length: WEEK.tiers }, (_, k) => { const i = k + 1, r = weekReward(i), got = S.week.got[i], ok = i <= reach; return `<div class="wkCell${got ? ' got' : ok ? ' ok' : ''}${i % 5 === 0 ? ' big' : ''}" title="${r.txt}"><em>${i}</em><span>${got ? '✔' : r.icon}</span><i>${r.k === 'scrap' ? r.v : r.k === 'title' ? '칭호' : r.k === 'look' ? '꾸미기' : '부품'}</i></div>`; }).join('')}</div>`;
+  const b = el.querySelector('#wkAll');
+  if (b) b.addEventListener('click', () => {
+    const got = []; for (let i = 1; i <= reach; i++) if (!S.week.got[i]) got.push(weekGive(i));
+    save(); A.sfx('levelup');
+    popups.push({ title: '🎁 주간 도전 보상', html: `<div class="rules">${got.join('<br>')}</div>` }); showPopup(); renderHangar();
+  });
+  requestAnimationFrame(() => { const row = el.querySelector('.wkRow'), c = row && row.children[Math.max(0, reach - 2)]; if (c) row.scrollLeft = c.offsetLeft - 8; });
+}
+// 돌아온 조종사: 3일 이상 쉬었다가 오면 반가운 선물(고철 + 다음 3판 고철 1.5배)
+function comebackGift(last, t) {
+  const p = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  if (!last) return;
+  const gap = Math.round((p(t) - p(last)) / 864e5);
+  if (gap < 3) return;
+  const g = 60 + 20 * Math.min(gap, 7);
+  S.scrap += g; S.comeback = 3;
+  popups.push({ title: '돌아온 조종사, 반가워요!', html: `<div>${gap}일 만이에요</div><div class="big">🔩 ${g}</div><div>🎁 다음 3판은 고철 1.5배</div><div class="rules">쉬어도 잃는 건 없어요. 출석도 그대로 이어집니다.</div>` });
+}
 // 게임 모드: 스테이지(이야기처럼 하나씩), 무한 생존, 보스 러시, 자동 출격(방치)
 const MODES = [
   { id: 'stage', icon: '🗺️', name: '스테이지', go: '출격! ▶', desc: '한 판 약 3분. 보스를 잡으면 다음 스테이지가 열리고 점점 어려워집니다. 스테이지마다 별 3개.' },
@@ -240,6 +309,7 @@ const TITLES = [
   { id: 'flash', name: '번개 사냥꾼', hint: '보스 5종을 기준 시간 안에', ok: () => D.BOSSES.every(b => (bk().boss[b.id] || {}).fast) },
   ...D.BOSSES.map(b => ({ id: 'b_' + b.id, name: `${b.name} 사냥꾼`, hint: `${b.name} 5번 잡기`, ok: () => ((bk().boss[b.id] || {}).k || 0) >= 5 })),
   { id: 'combo', name: '연쇄 폭발 장인', hint: '콤보 100', ok: () => S.stats.bestCombo >= 100 },
+  { id: 'weekly', name: '주간 완주자', hint: '주간 도전 25칸 모두', ok: () => (S.weekDone || 0) >= 1 },
   { id: 'rhythm', name: '박자의 신', hint: '리듬 도장 8단계 열기', ok: () => S.dojo.open >= 8 },
   { id: 'ace', name: '에이스', hint: '성장 단계 「에이스」', ok: () => myTierV >= 4 },
   { id: 'myth', name: '신화의 조종사', hint: '성장 단계 「신화」', ok: () => myTierV >= 6 },
@@ -504,6 +574,7 @@ function startRun(stage, md = 'stage') {
     barrierReady: false, barrierT: 0, ultKind: null, ultT: 0, swarmQ: 0, swarmT: 0, ga: 0, novaR: 0, trap: null };
   if (md === 'auto') arenaStart();
   run.tut = S.plays === 0 && md === 'stage';   // 첫 판 안내
+  if (S.comeback > 0 && !run.coop) { run.comeback = true; S.comeback--; run.banner.sub += ` · 🎁 고철 1.5배(${S.comeback}판 남음)`; }
   S.plays++; dcount('runs'); save();
   state = 'play';
   for (const id of ['hangar', 'cards', 'pause', 'result']) $(id).classList.add('hidden');
@@ -1750,6 +1821,7 @@ async function keepAwake(on) {   // 자동 출격 중에는 화면이 꺼지지 
   } catch (e) { /* 안 되는 기기 */ }
 }
 function resultFx() {   // 결과 점수가 0부터 올라가고, 최고 기록이면 반짝인다
+  if ($('rStats')) $('rStats').insertAdjacentHTML('beforeend', weekGain());   // 주간 별
   const el = $('rStats') && $('rStats').querySelector('.big'); if (!el || !el.firstChild || el.firstChild.nodeType !== 3) return;
   const node = el.firstChild, goal = +node.textContent.replace(/[^0-9]/g, ''); if (!goal) return;
   const t0 = performance.now(), dur = Math.min(1400, 500 + goal / 50); let tick = 0;
@@ -2439,7 +2511,7 @@ function renderHangar() {
   if (tab === 'settings') renderCtl($('ctlBox'));
   if (tab === 'look') { renderLook($('tab-look')); $('tab-look').append(lookSetsBox()); }
   if (tab === 'book') renderBook($('tab-book'));
-  const claimable = GOALS.filter(g => !S.claimed[g.id] && g.val() >= g.need).length;
+  const claimable = GOALS.filter(g => !S.claimed[g.id] && g.val() >= g.need).length + weekOpen();
   $('goalBadge').textContent = claimable || '';
   $('goalBadge').classList.toggle('hidden', !claimable);
   const mb = $('modes'); mb.innerHTML = '';
@@ -2588,6 +2660,7 @@ function renderHangar() {
     rl.append(row);
   }
   rollDaily();
+  renderWeekly($('weekly'));
   const at = $('attend'); at.innerHTML = '';
   const cyc = (S.attend.days - 1) % 7;
   ATTEND.forEach((r, i) => at.insertAdjacentHTML('beforeend', `<div class="${i <= cyc ? 'got' : ''} ${i === cyc ? 'today' : ''}">${i + 1}일<br>🔩${r}${i <= cyc ? '<br>✔' : ''}</div>`));

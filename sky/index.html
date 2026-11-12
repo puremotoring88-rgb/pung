@@ -194,6 +194,18 @@
   .phIn img { max-width: 100%; max-height: 70vh; border-radius: calc(var(--u) * 2.5); box-shadow: 0 0 calc(var(--u) * 6) rgba(0,0,0,.6); }
   .phIn .row { display: flex; gap: calc(var(--u) * 1.5); flex-wrap: wrap; justify-content: center; } .phIn a.btn { text-decoration: none; display: inline-flex; align-items: center; }
   .phIn small { opacity: .6; font-size: calc(var(--u) * 2.8); }
+  /* 주간 도전 */
+  .weekly { display: flex; flex-direction: column; gap: calc(var(--u) * 1.5); margin-bottom: calc(var(--u) * 2); }
+  .wkHead { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--u) * 1) calc(var(--u) * 2.5); font-size: calc(var(--u) * 3.4); }
+  .wkHead b { font-size: 1.4em; color: #ffd166; } .wkHead small { flex-basis: 100%; opacity: .65; font-size: .82em; }
+  .wkHead .btn { margin-left: auto; padding: calc(var(--u) * 1.4) calc(var(--u) * 3); animation: newDot 0.8s ease-in-out infinite alternate; }
+  .wkRow { display: flex; gap: calc(var(--u) * 1); overflow-x: auto; padding-bottom: calc(var(--u) * 1); scroll-behavior: smooth; }
+  .wkCell { flex: 0 0 calc(var(--u) * 12); border-radius: calc(var(--u) * 2); background: rgba(255,255,255,.06); display: flex; flex-direction: column; align-items: center; padding: calc(var(--u) * 1) 0; font-size: calc(var(--u) * 2.6); opacity: .55; position: relative; }
+  .wkCell em { font-style: normal; opacity: .6; } .wkCell span { font-size: calc(var(--u) * 5.5); line-height: 1.3; } .wkCell i { font-style: normal; }
+  .wkCell.big { background: rgba(255,209,102,.1); box-shadow: 0 0 0 1px rgba(255,209,102,.35) inset; }
+  .wkCell.ok { opacity: 1; background: rgba(255,209,102,.25); box-shadow: 0 0 0 2px #ffd166 inset; }
+  .wkCell.got { opacity: 1; background: rgba(110,227,122,.15); } .wkCell.got span { color: #6ee37a; }
+  .wkGain { margin-top: calc(var(--u) * 1.5); color: #ffd166; font-weight: 700; } .wkGain small { color: #cfe0f5; font-weight: 400; }
   /* 성장이 보이게: 전투력·성장 단계 */
   .pvShip { position: relative; cursor: pointer; }
   .pvShip::after { content: '🔍'; position: absolute; right: calc(var(--u) * 1.5); bottom: calc(var(--u) * 1); font-size: calc(var(--u) * 3); opacity: .6; }
@@ -442,6 +454,7 @@
     <section id="tab-parts" class="tab hidden"><div id="slots" class="slots"></div><div id="partList"></div></section>
     <section id="tab-research" class="tab hidden"><p class="note">고철로 연구하면 모든 기체가 영구히 강해집니다.</p><div id="research"></div></section>
     <section id="tab-goals" class="tab hidden">
+      <h3>⭐ 이번 주 도전 <small>(월요일마다 새로, 모두 무료)</small></h3><div id="weekly" class="weekly glass"></div>
       <h3>📅 출석 <small>(들어온 날마다 하나씩, 빠져도 이어집니다)</small></h3><div id="attend" class="attend"></div>
       <h3>☀️ 오늘의 임무 <small>(날마다 바뀝니다)</small></h3><div id="daily"></div>
       <h3>🏅 도전 과제</h3><div id="goals"></div>
