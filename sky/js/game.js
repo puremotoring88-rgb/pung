@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.29';
+const VERSION = '0.30';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -2882,7 +2882,7 @@ $('go').addEventListener('click', () => {
   if (!S.seenHelp) { afterHelp = go; $('howto').classList.remove('hidden'); } else go();
 });
 function startEscape(o) {   // 탈출 작전(js/escape.js)
-  $('hangar').classList.add('hidden'); A.music('stage', 0);
+  $('hangar').classList.add('hidden'); A.music('escape', 0);
   const SND = { rope: 'tap', release: 'click', flap: 'tap', coin: 'scrap', hurt: 'hurt', phase: 'click', alarm: 'warning', boom: 'boomL', star: 'levelup' };
   Escape.start({
     sfx: k => A.sfx(SND[k] || 'click'),

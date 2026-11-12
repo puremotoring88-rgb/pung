@@ -119,9 +119,38 @@ const SONGS = [
     pat: { k: 'x.........x.....', S: '....x.......x...', h: 'oooooooooooooooo' } },
 ];
 const ROOTS = [45, 48, 43, 50, 41, 52, 40, 47, 53];   // 스테이지 배경마다 다른 조(A, C, G, D)
+// 맵마다 다른 음악: 빠르기·화음·북 무늬·악기·가락(mel: 마디마다 16칸, 숫자 = 그 마디 화음의 몇 번째 음(3~5는 한 옥타브 위), '-' 늘임, '.' 쉼)
+const MAPMUS = [
+  { nm: '바다 섬', bpm: 124, root: 57, prog: [[0, 4, 7], [7, 11, 14], [9, 12, 16], [5, 9, 12]], bass: 'sine', bassPat: 'x..x..x.x..x..x.', arpWave: 'triangle', arp: [0, 1, 2, 1], arpHalf: true, lead: 'square', pad: true,
+    pat: { k: 'x...x...x...x...', s: '...x..x....x..x.', h: '..o...o...o...o.' }, mel: ['0-2.1.3-..2.1.0.', '3-.2.1.0-..1.2-.'] },
+  { nm: '사막', bpm: 112, root: 52, prog: [[0, 3, 7], [1, 5, 8], [0, 3, 7], [10, 13, 17]], bass: 'triangle', bassPat: 'x.....x...x.....', arpWave: 'sawtooth', arp: [0, 1, 2, 1, 0, 2], lead: 'triangle', pad: true,
+    pat: { k: 'x.....x...x.....', r: '....x.......x.x.', h: 'o..o..o.o..o..o.' }, mel: ['0--.1.0.2---1.0.', '3--.2.1.0---....'] },
+  { nm: '밤 도시', bpm: 118, root: 55, prog: [[0, 3, 7], [8, 12, 15], [3, 7, 10], [10, 14, 17]], bass: 'sawtooth', bassPat: 'x.o.x.o.x.o.x.o.', arpWave: 'square', arp: [0, 1, 2, 3, 2, 1, 0, 1], lead: 'sawtooth', pad: true,
+    pat: { k: 'x...x...x...x...', s: '....x.......x...', h: '..o...o...o...o.' }, mel: ['3-.3-.2-1-0-....', '2-.2-.1-0-1-....'] },
+  { nm: '우주', bpm: 100, root: 50, prog: [[0, 4, 11], [2, 5, 9], [7, 11, 14], [5, 9, 16]], bass: 'sine', bassPat: 'x.......x.......', arpWave: 'sine', arp: [0, 2, 1, 3], lead: 'sine', soft: true, pad: true,
+    pat: { k: 'x.........x.....', h: 'o...o...o...o...' }, mel: ['0-------2-------', '1-------3-------'] },
+  { nm: '공장', bpm: 132, root: 48, prog: [[0, 3, 7], [0, 3, 7], [6, 10, 13], [5, 8, 12]], bass: 'square', bassPat: 'x.xox.xox.xox.xo', arpWave: 'square', arp: [0, 0, 2, 0, 1, 0, 3, 0], lead: 'square',
+    pat: { k: 'x..x..x.x..x..x.', S: '....x.......x...', n: '..x...x...x...xx', h: 'oooooooooooooooo' }, mel: ['0.0.3.0.0.2.0.1.', '0.0.3.0.2.1.0...'] },
+  { nm: '설원', bpm: 108, root: 59, prog: [[0, 4, 7], [9, 12, 16], [5, 9, 12], [7, 11, 14]], bass: 'triangle', bassPat: 'x.......x...x...', arpWave: 'sine', arp: [0, 2, 3, 2, 1, 2, 3, 2], lead: 'triangle', soft: true, pad: true,
+    pat: { k: 'x.......x.x.....', r: '....x.......x...', h: 'o.o.o.o.o.o.o.o.' }, mel: ['5.4.3.2.3...1...', '4.3.2.1.2.......'] },
+  { nm: '화산', bpm: 140, root: 52, prog: [[0, 7, 12], [1, 8, 13], [0, 7, 12], [10, 17, 22]], bass: 'sawtooth', bassPat: 'xxxxxxxxxxxxxxxx', arpWave: 'sawtooth', arp: [0, 1, 0, 2], arpHalf: true, lead: 'sawtooth',
+    pat: { k: 'x.x...x.x.x...x.', S: '....x.......x...', h: 'x.x.x.x.x.x.x.x.' }, mel: ['0-..0-..1-2-3---', '3-..2-..1-0-....'] },
+  { nm: '정글', bpm: 116, root: 53, prog: [[0, 3, 7], [10, 14, 17], [8, 12, 15], [10, 14, 17]], bass: 'sine', bassPat: 'x..x..x...x.x...', arpWave: 'triangle', arp: [0, 2, 1, 2], arpHalf: true, lead: 'triangle',
+    pat: { k: 'x..x..x...x..x..', r: '..x...x.x...x..x', s: '....x.......x...', h: 'o.oo.o.oo.o.oo.o' }, mel: ['0..1..2.3..2..1.', '2..1..0...1.2...'] },
+  { nm: '구름 위 성', bpm: 120, root: 60, prog: [[0, 4, 7], [5, 9, 12], [2, 5, 9], [7, 11, 14]], bass: 'triangle', bassPat: 'x...x...x...x...', arpWave: 'triangle', arp: [0, 1, 2, 3], lead: 'square', pad: true,
+    pat: { k: 'x.......x.......', s: '....x.......x...', h: 'o.o.o.o.o.o.o.o.', o: '..........x.....' }, mel: ['0---1---2---3---', '4---3---2-1-0---'] },
+];
+const BOSS_PAT = { k: 'x.x.x.x.x.x.x.x.', S: '....x.......x...', h: 'xoxoxoxoxoxoxoxo' };
+// 탈출 작전: 모험 느낌의 경쾌한 곡
+const ESC_MUS = { bpm: 136, root: 57, prog: [[0, 4, 7], [5, 9, 12], [9, 12, 16], [7, 11, 14]], bass: 'square', bassPat: 'x.o.x.o.x.o.x.o.', arpWave: 'triangle', arp: [0, 1, 2, 1], arpHalf: true, lead: 'square', pad: true,
+  pat: { k: 'x...x...x...x...', s: '....x.......x..o', h: 'o.x.o.x.o.x.o.x.' }, mel: ['0.1.2.3-2.1.2---', '3.2.1.0-1.2.3---'] };
 function music(m, th) {
   if (!ac) return;
   if (m === mood && (th || 0) === theme) return;
+  const mm = MAPMUS[(th || 0) % MAPMUS.length];
+  if (m === 'stage') MOODS.stage = Object.assign({ drums: 'beat' }, mm);
+  if (m === 'boss') MOODS.boss = Object.assign({ drums: 'hard' }, mm, { bpm: Math.min(160, mm.bpm + 24), pat: Object.assign({}, mm.pat, BOSS_PAT), arpWave: 'sawtooth', arp: [0, 2, 1, 3, 0, 2, 1, 3], arpHalf: false, soft: false, stab: true });
+  if (m === 'escape') MOODS.escape = Object.assign({ drums: 'beat' }, ESC_MUS);
   mood = m; theme = th || 0; step = 0; nextT = ac.currentTime + 0.08; startT = nextT;
 }
 // 리듬 결투: 박자 수 세기 + 악보의 음표마다 가락을 미리 예약한다. 0번째 박의 시각을 돌려준다
@@ -173,6 +202,18 @@ function playStep(M, s, t, sp) {
       o.connect(fl); fl.connect(g); g.connect(musicBus); o.start(t); o.stop(t + dd + 0.05);
     }
     if (M.pad && i === 0) ch.forEach(c => osc(musicBus, 'sine', mtof(root + 12 + c), mtof(root + 12 + c), t, sp * 15, 0.03, 0.4));
+    if (M.arp && !M.noArp && (!M.arpHalf || i % 2 === 0)) {   // 맵 음악의 아르페지오
+      const k = M.arp[(M.arpHalf ? i / 2 | 0 : i) % M.arp.length], n = root + 12 + ch[k % 3] + (k >= 3 ? 12 : 0);
+      osc(musicBus, M.arpWave, mtof(n), mtof(n), t, sp * (M.arpHalf ? 1.8 : 0.9), (M.soft ? 0.022 : 0.026));
+    }
+    if (M.mel) {   // 가락: 화음의 음을 고르고 '-'만큼 늘인다
+      const ln = M.mel[bar % M.mel.length], c = ln[i];
+      if (c >= '0' && c <= '5') {
+        const d = +c, n = root + 24 + ch[d % 3] + (d >= 3 ? 12 : 0); let len = 1; while (ln[i + len] === '-') len++;
+        osc(musicBus, M.lead || 'square', mtof(n), mtof(n), t, sp * len * 0.92, M.lead === 'sawtooth' ? 0.024 : M.lead === 'sine' ? 0.045 : 0.03);
+      }
+    }
+    if (M.stab && [0, 3, 6, 10].includes(i)) { const n = root + 24 + ch[(i / 3 | 0) % 3]; osc(musicBus, 'square', mtof(n), mtof(n), t, sp * 1.4, 0.022); }
     return;
   }
   if (M.drums) {
