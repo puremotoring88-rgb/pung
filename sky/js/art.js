@@ -361,5 +361,6 @@ function enemyShadow(type) {
   return once('ens' + type, () => mk(EN, EN, g => { g.drawImage(enemyBase(type), 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(0, 0, EN, EN); }));
 }
 
-return { TH, lands: th => (far(th), LANDS[th]), glow, fire, smoke, far, near, ship, shipShadow, SHIP, SS, enemy, enemyShadow, EN, ES, metal };
+function setFar(theme, img, lands) { cache["far" + theme] = img; LANDS[theme] = lands; }   // 그림 파일 배경으로 바꾸기
+return { TH, setFar, lands: th => (far(th), LANDS[th]), glow, fire, smoke, far, near, ship, shipShadow, SHIP, SS, enemy, enemyShadow, EN, ES, metal };
 })();

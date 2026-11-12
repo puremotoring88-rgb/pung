@@ -199,8 +199,17 @@ function playStep(M, s, t, sp) {
   if (mood === 'stage' && bar % 2 === 1 && (i === 0 || i === 6 || i === 10)) { const n = root + 24 + ch[(i / 4 | 0) % 3]; osc(musicBus, 'triangle', mtof(n), mtof(n), t, sp * 2.5, 0.035); }
 }
 
+// 연속 처치: 콤보가 오를수록 한 음씩 올라가는 맑은 소리(5음계)
+const PENTA = [0, 2, 4, 7, 9];
+function chain(n) {
+  if (!ac || !sfxOn || ac.state !== 'running') return;
+  const t = ac.currentTime + 0.005; if (last.chain && t - last.chain < 0.045) return; last.chain = t;
+  const k = Math.min(n, 24), st = PENTA[k % 5] + 12 * Math.floor(k / 5), f = 523 * Math.pow(2, Math.min(st, 24) / 12);
+  try { osc(sfxBus, 'triangle', f, f, t, 0.09, 0.05); osc(sfxBus, 'sine', f * 2, f * 2, t, 0.06, 0.018); } catch (e) {}
+}
+
 return {
-  init, sfx, music, clock, duel, SONGS,
+  init, sfx, chain, music, clock, duel, SONGS,
   stopMusic() { mood = null; },
   setMusic(on) { musicOn = on; if (musicBus) musicBus.gain.value = on ? 0.3 : 0; },
   setSfx(on) { sfxOn = on; if (sfxBus) sfxBus.gain.value = on ? 0.55 : 0; },

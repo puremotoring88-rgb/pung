@@ -22,7 +22,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.14';
+const VERSION = '0.15';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -136,6 +136,9 @@ MODES.push({ id: 'coop', icon: '🤝', name: '친구와 함께', go: '함께 출
 let selMode = 'stage', dojoLv = 1;
 const STAR_RULES = ['클리어', '체력 절반 이상 남기고 클리어', '콤보 30 이상 만들기'];
 const STAR_REWARD = 15;
+// 손맛 숫자(해 보고 조정): 큰 적·정예를 부술 때 잠깐 멈춤(초), 보스 처치 느린 화면(초·빠르기), 피해 숫자 간격(초)
+const FEEL = { stopBig: 0.065, stopElite: 0.045, stopBoss: 0.14, slowBoss: 1.5, slowK: 0.3, numGap: 0.16 };
+let hitStop = 0, slowT = 0, dnums = [];
 
 // ---------- 그림 파일(있으면 쓰고 없으면 코드로 그린 그림) ----------
 const IMG = {};
@@ -144,8 +147,11 @@ function loadImg(key) {
   const next = i => { if (i >= exts.length) return; const im = new Image(); im.onload = () => { IMG[key] = im; }; im.onerror = () => next(i + 1); im.src = `assets/${key}.${exts[i]}`; };
   next(0);
 }
-const ASSET_KEYS = ['falcon', 'turtle', 'hornet', 'phoenix'].map(k => 'ship-' + k).concat(['spider', 'whale', 'twins', 'knight', 'core'].map(k => 'boss-' + k), ['scout', 'weaver', 'diver', 'turret', 'splitter', 'tank', 'netter', 'treasure'].map(k => 'enemy-' + k), ['civ-ddrone', 'civ-liner']);   // 그림 파일을 넣으면 여기에 이름을 적는다(예: 'ship-falcon', 'boss-spider'). 비어 있으면 찾지 않는다
+const ASSET_KEYS = ['falcon', 'turtle', 'hornet', 'phoenix'].map(k => 'ship-' + k).concat(['spider', 'whale', 'twins', 'knight', 'core'].map(k => 'boss-' + k), ['scout', 'weaver', 'diver', 'turret', 'splitter', 'tank', 'netter', 'treasure'].map(k => 'enemy-' + k), ['civ-ddrone', 'civ-liner', 'obst-tower', 'obst-spire', 'obst-bldg']);   // 그림 파일을 넣으면 여기에 이름을 적는다(예: 'ship-falcon', 'boss-spider'). 비어 있으면 찾지 않는다
 ASSET_KEYS.forEach(loadImg);
+// 맵 배경 그림(540×1600, 위아래 거울로 이어 붙인 것). 섬 자리에 높은 구조물이 선다
+const BG_LANDS = { 0: [[130, 130], [432, 250], [122, 395], [432, 555], [148, 672]], 2: [[158, 129], [420, 263], [125, 397], [404, 520], [172, 665]] };
+[0, 1, 2, 3].forEach(th => { const im = new Image(); im.onload = () => { const L = BG_LANDS[th]; Art.setFar(th, im, L ? L.flatMap(([x, y]) => [{ x, y, r: 62 }, { x, y: 1600 - y, r: 62 }]) : th === 1 ? null : []); }; im.src = `assets/bg-${th}.jpg`; });
 const silCache = {};
 function silhouette(key) {   // 그림 파일의 그림자(검은 실루엣)
   const im = IMG[key]; if (!im) return null;
@@ -158,7 +164,7 @@ let state = 'hangar', run = null, P = null, st = null, boss = null;
 let shots = [], foes = [], ebul = [], drops = [], fx = [], texts = [], lasers = [];
 let T = 0, shake = 0, flash = 0, bgY = 0, nearY = 0, drag = null, keys = {}, hangarStage = Math.min(S.next, S.maxStage), tab = 'sortie';
 const Q = { low: false, acc: 0, n: 0 };   // 느린 기기면 효과를 줄인다
-const SKY = window.SKY = { god: false, get state() { return state; }, get run() { return run; }, get P() { return P; }, get S() { return S; }, get boss() { return boss; } };   // 점검용
+const SKY = window.SKY = { god: false, get state() { return state; }, get run() { return run; }, get P() { return P; }, get S() { return S; }, get boss() { return boss; }, get feel() { return { hitStop, slowT, nums: dnums.length }; } };   // 점검용
 
 function buildStats() {
   const F = frameOf(S.frame), Wp = weaponOf(S.weapon), wl = S.weapons[Wp.id] || 1;
@@ -515,6 +521,8 @@ function bossAI(dt) {
 
 function bossDown() {
   run.phase = 'clear'; run.endT = run.mode === 'stage' ? 3.6 : 2.6; run.chain = 14;
+  if (!net) { hitStop = FEEL.stopBoss; slowT = FEEL.slowBoss; flash = Math.max(flash, 0.6); shake = Math.max(shake, 1.2); buzz([60, 40, 120]); }   // 보스 처치: 잠깐 멈췄다가 느린 화면
+  for (let i = 0; i < 7; i++) explode(boss.x + rnd(-90, 90), boss.y + rnd(-60, 60), rnd(40, 80), pick(['#ffd166', '#ffb06b', '#ff7a5e']));
   ebul.forEach(b => spark(b.x, b.y, 3, b.color, 80, 0.3, 2)); ebul = []; lasers = [];
   if (P.trap) freeTrap(true);
   const x = boss.x, y = boss.y;
@@ -658,7 +666,7 @@ function dojoEnd(r) {
   });
   Rank.after('dojo', lv * 1000 + Math.round(r.acc * 999), `Lv ${lv} · ${r.rank} 랭크 · 정확도 ${Math.round(r.acc * 100)}%`);
   $('copy').dataset.text = `🎵 볼트윙 리듬 도장 Lv ${lv} ${r.rank} 랭크 · 정확도 ${Math.round(r.acc * 100)}% · 콤보 ${r.maxCombo}`;
-  $('result').classList.remove('hidden');
+  $('result').classList.remove('hidden'); resultFx();
 }
 
 // ---------- 갈림길: 항로 문 2~3개 중 하나를 지나간다. 단계가 오르면 새 항로가 열리고, 희귀·전설 항로는 드물게 나온다 ----------
@@ -914,6 +922,10 @@ function hitFoe(e, dmg, own) {
   }
   if (e.balloonT > 0) dmg *= 4;   // 풍선은 잘 터진다
   e.hp -= dmg; e.flash = 0.06;
+  if (S.dmgNum !== false && run.mode !== 'auto' && !Q.low) {   // 피해 숫자: 짧은 간격으로 모아서 띄운다
+    e.dAcc = (e.dAcc || 0) + dmg;
+    if (!(e.dT > T)) { e.dT = T + FEEL.numGap; if (dnums.length < 40) dnums.push({ x: e.x + rnd(-12, 12), y: e.y - (e.r || 20) * 0.6, v: Math.max(1, Math.round(e.dAcc)), t0: T, big: !!e.isBoss || e.dAcc > 40 }); e.dAcc = 0; }
+  }
   if (own && own !== P) own.ult = Math.min(100, own.ult + dmg / run.d.hp * 0.09 * run.m.ult);
   else P.ult = Math.min(100, P.ult + dmg / run.d.hp * 0.09 * st.ult * run.m.ult);
   if (e.hp <= 0) killFoe(e);
@@ -924,6 +936,7 @@ function killFoe(e) {
   e.dead = true;
   run.kills++; S.stats.kills++; dcount('kills');
   run.combo++; run.comboT = 2.5; run.maxCombo = Math.max(run.maxCombo, run.combo);
+  if (run.mode !== 'auto') { if (A.chain) A.chain(run.combo); if (!net && !e.isBoss) { if (e.r > 25) hitStop = Math.max(hitStop, FEEL.stopBig); else if (e.elite || e.mod) hitStop = Math.max(hitStop, FEEL.stopElite); } }
   if (run.combo % 10 === 0) say(`${run.combo} 콤보!`, e.x, e.y - 30, '#ffd166', 26, 1);
   run.score += Math.round(e.score * comboMul());
   if (e.harmless) { spark(e.x, e.y, 10, '#fff3a0', 160, 0.4, 3); A.sfx('xp'); critterDown(e); return; }
@@ -1440,7 +1453,7 @@ function endOther(win) {   // 무한 생존·보스 러시·자동 출격의 결
   if (m === 'endless') Rank.after('endless', run.score, `WAVE ${run.wave} · ${fmt(run.t)}`, !run.coop);
   if (m === 'rush') Rank.after('rush', run.score, run.bossIdx >= 5 || win ? `완주 · ${fmt(run.t)}` : `보스 ${run.bossIdx}/5`, !run.coop);
   $('copy').dataset.text = `⚡ 볼트윙 ${MODES.find(x => x.id === m).name} ${title.replace(/<[^>]+>/g, ' ').trim()} · 점수 ${run.score.toLocaleString()}`;
-  $('result').classList.remove('hidden');
+  $('result').classList.remove('hidden'); resultFx();
 }
 let wakeLock = null;
 async function keepAwake(on) {   // 자동 출격 중에는 화면이 꺼지지 않게(되는 기기에서만)
@@ -1448,6 +1461,13 @@ async function keepAwake(on) {   // 자동 출격 중에는 화면이 꺼지지 
     if (on && 'wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
     else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
   } catch (e) { /* 안 되는 기기 */ }
+}
+function resultFx() {   // 결과 점수가 0부터 올라가고, 최고 기록이면 반짝인다
+  const el = $('rStats') && $('rStats').querySelector('.big'); if (!el || !el.firstChild || el.firstChild.nodeType !== 3) return;
+  const node = el.firstChild, goal = +node.textContent.replace(/[^0-9]/g, ''); if (!goal) return;
+  const t0 = performance.now(), dur = Math.min(1400, 500 + goal / 50); let tick = 0;
+  const step = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); node.textContent = Math.round(goal * e).toLocaleString(); if (++tick % 4 === 0 && k < 1) A.sfx('xp'); if (k < 1) requestAnimationFrame(step); else if (el.textContent.includes('최고')) { el.classList.add('record'); A.sfx('levelup'); } };
+  requestAnimationFrame(step);
 }
 function endRun(win) {
   state = 'result';
@@ -1465,6 +1485,7 @@ function endRun(win) {
   if (now.some(Boolean)) S.stars[run.stage] = now;
   S.scrap += newStars * STAR_REWARD;
   if (win) { S.cleared = Math.max(S.cleared, run.stage); S.maxStage = Math.max(S.maxStage, run.stage + 1); S.next = run.stage + 1; }
+  S.lastRun = S.lastRun || {}; const prevScore = S.lastRun['stage' + run.stage]; S.lastRun['stage' + run.stage] = run.score;   // 지난번과 비교
   const newBest = run.score > S.best;
   S.best = Math.max(S.best, run.score);
   dcount('combo', run.maxCombo, true);
@@ -1479,6 +1500,7 @@ function endRun(win) {
   $('rStars').innerHTML = now.map((v, i) => `<span class="${v ? 'on' : ''} ${v && !old[i] ? 'new' : ''}" title="${STAR_RULES[i]}">★</span>`).join('');
   $('rStats').innerHTML = [
     `<div class="big">${run.score.toLocaleString()}<small>점${newBest ? ' · 최고 기록!' : ''}</small></div>`,
+    prevScore !== undefined ? `<div class="cmp ${run.score >= prevScore ? 'up' : 'down'}">지난번보다 ${run.score >= prevScore ? '+' : ''}${(run.score - prevScore).toLocaleString()}점 ${run.score >= prevScore ? '▲' : '▼'}</div>` : '',
     run.bossRank ? `<div>보스 랭크 <b class="gold">${run.bossRank}</b> · ${run.bossTime.toFixed(1)}초 · 맞은 횟수 ${run.hits - run.hitsAtBoss}${S.ranks && S.ranks[run.stage] ? ` · 최고 ${S.ranks[run.stage]}` : ''}</div>` : '',
     run.assist ? '<div>🛟 지원 출격으로 깼습니다(별 2·3과 S·A 랭크는 지원 없이 도전)</div>' : '',
     `<div>처치 <b>${run.kills}</b> · 최고 콤보 <b>${run.maxCombo}</b> · 레벨 <b>${run.level}</b></div>`,
@@ -1498,7 +1520,7 @@ function endRun(win) {
   mk('격납고', 'sub', showHangar);
   Rank.after('stage', run.score, `STAGE ${run.stage}${win ? ' 클리어' : ''} · ${st.F.name}`, !run.coop && !run.assist);
   $('copy').dataset.text = `⚡ 볼트윙 스테이지 ${run.stage} ${win ? '클리어' : '도전'} ${now.map(v => (v ? '★' : '☆')).join('')} 점수 ${run.score.toLocaleString()} · 콤보 ${run.maxCombo} · ${st.F.name}+${st.Wp.name}`;
-  $('result').classList.remove('hidden');
+  $('result').classList.remove('hidden'); resultFx();
 }
 
 // ---------- 그리기: 배경(먼 층은 눕힌 캔버스에, 가까운 층은 위 캔버스에) ----------
@@ -1912,6 +1934,12 @@ function segBar(x, y, w, h, k, c1, c2, segs) {
   if (segs) { ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 1.5; for (let i = 1; i < segs; i++) { const sx = x + w * i / segs; ctx.beginPath(); ctx.moveTo(sx, y); ctx.lineTo(sx, y + h); ctx.stroke(); } }
   rrect(x, y, w, h, h / 2); ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 1; ctx.stroke();
 }
+function drawNums() {   // 피해 숫자: 떠오르며 사라진다
+  if (!dnums.length) return;
+  dnums = dnums.filter(n => T - n.t0 < 0.65);
+  for (const n of dnums) { const a = T - n.t0; ctx.globalAlpha = Math.min(1, (1 - a / 0.65) * 1.8); txt(String(n.v), n.x, n.y - a * 46, n.big ? 20 : 14, n.big ? '#ffd166' : '#ffffff', 'center', 900); }
+  ctx.globalAlpha = 1;
+}
 function txt(s, x, y, size, color, align = 'left', weight = 700) {
   ctx.font = `${weight} ${size}px sans-serif`; ctx.textAlign = align; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(3,6,14,.8)';
   ctx.strokeText(s, x, y); ctx.fillStyle = color; ctx.fillText(s, x, y);
@@ -2080,6 +2108,7 @@ function draw() {
   drawLasers();
   drawFx();
   if (!run.arena) drawHazards(true);
+  drawNums();
   ctx.restore();
   ctx.restore();
   if (flash > 0) { ctx.fillStyle = `rgba(255,250,235,${flash * 0.6})`; ctx.fillRect(0, 0, W, H); }
@@ -2372,6 +2401,7 @@ function renderCtl(el) {
   const n = document.createElement('div'); n.className = 'acNote';
   n.textContent = (S.touch || 'pad') === 'pad' ? '화면 아래 조종판 안을 누르고 가고 싶은 쪽으로 밀어요. 많이 밀수록 빨라지고, 손을 떼면 멈춰요.' : (S.touch === 'above') ? '기체가 손가락보다 한 뼘 위에 떠요. 손에 가리지 않지만 화면 맨 아래로는 못 내려가요.' : '팁: 화면 아래쪽 빈 곳에서 끌면 손이 기체를 가리지 않아요. 손가락을 기체 위에 둘 필요가 없어요.';
   el.append(n);
+  row('피해 숫자', [[true, '🔢 보이기'], [false, '끄기']], S.dmgNum !== false, v => { S.dmgNum = v; });
 }
 const duelPtr = {};
 const endDrag = e => { if (drag && drag.pad && P) { P.tx = P.x; P.ty = P.y; } drag = null; if (e && duelPtr[e.pointerId] !== undefined) { if (state === 'duel') Duel.release(duelPtr[e.pointerId]); delete duelPtr[e.pointerId]; } };
@@ -2889,6 +2919,8 @@ function drawObst(front) {   // front: 로봇보다 앞(아래)에 있는 것만
 function obstShape(o, x, y) {
   const { r, h } = o;
   ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(x + h * 0.32, y + 6, r * 1.15 + h * 0.18, r * 0.5, -0.25, 0, TAU); ctx.fill();   // 그림자
+  const oim = IMG['obst-' + o.kind];
+  if (oim) { const ht = h * 1.3, wd = ht * oim.width / oim.height; ctx.drawImage(oim, x - wd / 2, y - ht * 0.9, wd, ht); return; }   // 그림 파일 구조물(밑동 가운데가 땅에 닿게)
   if (o.kind === 'bldg') {   // 밤 도시의 높은 빌딩
     const w = r * 1.5, gr = ctx.createLinearGradient(x - w / 2, 0, x + w / 2, 0); gr.addColorStop(0, '#1b2740'); gr.addColorStop(0.55, '#33476b'); gr.addColorStop(1, '#141c2e');
     ctx.fillStyle = gr; ctx.fillRect(x - w / 2, y - h, w, h);
@@ -3509,7 +3541,7 @@ function guestEnd(m) {
   const b2 = document.createElement('button'); b2.className = 'btn sub'; b2.textContent = '방 나가기';
   b2.addEventListener('click', () => { A.sfx('click'); leaveRoom(); showHangar(); }); btns.append(b2);
   $('copy').dataset.text = `⚡ 볼트윙 친구와 함께 ${m.mode === 'endless' ? 'WAVE ' + m.wave : 'STAGE ' + m.stage + (m.win ? ' 클리어' : '')} · 팀 점수 ${m.score.toLocaleString()}`;
-  $('result').classList.remove('hidden');
+  $('result').classList.remove('hidden'); resultFx();
 }
 
 // --- 그리기: 친구 기체 ---
@@ -3631,9 +3663,11 @@ let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now; T += dt;
+  let gdt = dt;   // 손맛: 잠깐 멈춤·느린 화면(협동 중에는 쓰지 않음)
+  if (hitStop > 0) { hitStop -= dt; gdt = 0; } else if (slowT > 0) { slowT -= dt; gdt = dt * FEEL.slowK; }
   if (state === 'duel') { Duel.update(dt); tickFx(dt); }
   else if (state === 'play') {
-    if (net && net.mode === 'guest') guestTick(dt); else update(dt);
+    if (net && net.mode === 'guest') guestTick(dt); else if (gdt > 0 || net) update(net ? dt : gdt);
     Q.acc += dt; Q.n++;
     if (Q.n >= 120) { if (!Q.low && Q.acc / Q.n > 0.024) Q.low = true; Q.acc = 0; Q.n = 0; }   // 평균 40프레임 아래면 효과를 줄인다
   } else if (state === 'hangar') { bgY += dt * 30; nearY += dt * 70; tickFx(dt); }

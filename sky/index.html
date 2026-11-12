@@ -316,6 +316,8 @@
   .stats { background: linear-gradient(160deg, rgba(36, 54, 86, .5), rgba(10, 16, 28, .8)); border: 1px solid rgba(140, 180, 230, .25); border-radius: calc(var(--u) * 4);
     padding: calc(var(--u) * 3); width: 100%; text-align: left; line-height: 1.75; display: flex; flex-direction: column; gap: calc(var(--u) * .6); }
   .stats .big { font-size: calc(var(--u) * 9); font-weight: 900; text-align: center; } .stats .big small { font-size: .35em; opacity: .7; margin-left: .4em; }
+  .stats .cmp { text-align: center; font-weight: 800; margin-top: calc(var(--u) * -1); } .stats .cmp.up { color: #7dffb0; } .stats .cmp.down { color: #9aa6b4; }
+  .stats .big.record { color: #ffd166; animation: rec .55s ease 3; } @keyframes rec { 50% { transform: scale(1.12); text-shadow: 0 0 calc(var(--u) * 3) #ffd166; } }
   .stats .gold { color: #ffe7a3; } .stats .rules { font-size: .85em; opacity: .85; }
 </style>
 </head>
