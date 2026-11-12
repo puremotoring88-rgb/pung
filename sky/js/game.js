@@ -21,8 +21,8 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   weapons: { vulcan: 1, spread: 1 }, frame: 'falcon', weapon: 'vulcan', music: true, sfx: true, vib: true, plays: 0,
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
-  pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {} } });
-const VERSION = '0.7';
+  pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0 } });
+const VERSION = '0.8';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -131,7 +131,7 @@ const MODES = [
   { id: 'rush', icon: '👑', name: '보스 러시', go: '보스 러시 ▶', desc: '보스 다섯을 쉬지 않고 연달아 잡습니다. 다 잡으면 걸린 시간이 기록됩니다. 보스마다 부품 상자!' },
   { id: 'auto', icon: '⭐', name: '표창 공방', go: '공방 열기 ▶', desc: '넓은 들판에서 로봇을 직접 몰아 사방에서 몰려오는 적을 피하며 싸웁니다. 가장 좋은 표창 다섯이 둘레를 돌며 적에게 날아가고, 싸우는 동안 표창이 생겨 쌓입니다. 40초를 버티면 대장 등장! 쓰러뜨리면 정비 시간에 쌓인 표창을 몰아서 합쳐요(같은 단계 둘 → 한 단계 위). 적을 많이 쓰러뜨리면 표창 폭풍. 꺼 두어도 비운 시간만큼 금화를 받아요(최대 8시간, 절반 속도). 구역 10을 넘기면 환생해서 영원히 강해집니다.' },
 ];
-MODES.push({ id: 'dojo', icon: '🎵', name: '리듬 도장', go: '리듬 결투 ▶', desc: '비행은 쉬고 리듬 게임만! 4줄로 떨어지는 음표를 박자에 맞춰 누릅니다. B 랭크 이상이면 다음 단계가 열립니다.' });
+MODES.push({ id: 'dojo', icon: '🎵', name: '리듬 도장', go: '리듬 결투 ▶', desc: '비행은 쉬고 리듬 게임만! 8가지 장르 곡 중에 골라, 4줄로 떨어지는 음표를 박자에 맞춰 누릅니다. B 랭크 이상이면 다음 단계가 열립니다.' });
 MODES.push({ id: 'coop', icon: '🤝', name: '친구와 함께', go: '함께 출격 ▶', desc: '친구 1~2명과 같은 하늘에서 함께 싸웁니다. 한 명이 방을 만들고 코드나 초대 링크를 보내면 됩니다. 휴대폰과 PC가 섞여도 됩니다.' });
 let selMode = 'stage', dojoLv = 1;
 const STAR_RULES = ['클리어', '체력 절반 이상 남기고 클리어', '콤보 30 이상 만들기'];
@@ -213,7 +213,7 @@ function startRun(stage, md = 'stage') {
   for (const id of ['hangar', 'cards', 'pause', 'result']) $(id).classList.add('hidden');
   $('hud').classList.remove('hidden');
   A.music('stage', run.theme);
-  if (md === 'dojo') { state = 'duel'; $('hud').classList.add('hidden'); Duel.start({ level: dojoLv, title: '리듬 도장', onEnd: dojoEnd }); }
+  if (md === 'dojo') { state = 'duel'; $('hud').classList.add('hidden'); Duel.start({ level: dojoLv, title: '리듬 도장', song: S.dojo.song, sync: S.dojo.sync, onEnd: dojoEnd }); }
   if (net && net.mode === 'host' && allies.length && (md === 'stage' || md === 'endless')) coopBegin();
 }
 
@@ -545,7 +545,7 @@ function startDuelEvent() {
   state = 'duel'; drag = null;
   $('hud').classList.add('hidden');
   ebul = []; lasers = [];
-  Duel.start({ level: Math.min(8, run.stage + run.loop * 2 + (run.mode === 'endless' ? run.wave >> 1 : 0)), title: '중간 보스', onEnd: duelEnd });
+  Duel.start({ level: Math.min(8, run.stage + run.loop * 2 + (run.mode === 'endless' ? run.wave >> 1 : 0)), title: '중간 보스', sync: S.dojo.sync, onEnd: duelEnd });
 }
 function duelEnd(r) {
   state = 'play'; $('hud').classList.remove('hidden');
@@ -568,17 +568,22 @@ function dojoEnd(r) {
   const reward = Math.round({ S: 20, A: 12, B: 6, C: 2, D: 0 }[r.rank] * (1 + 0.25 * (lv - 1)));
   S.scrap += reward; S.stats.perfects += r.p; dcount('perfect', r.p);
   save(); A.music('hangar', 0);
-  $('rTitle').innerHTML = `<small>리듬 도장 Lv ${lv}</small>${r.rank} 랭크`; $('rTitle').className = pass ? 'win' : 'lose';
+  $('rTitle').innerHTML = `<small>리듬 도장 Lv ${lv} · 🎵 ${r.songName}</small>${r.rank} 랭크`; $('rTitle').className = pass ? 'win' : 'lose';
+  const lagTxt = r.p + r.g + r.o < 8 ? '' : Math.abs(r.lag) < 25 ? '박자에 딱 맞게 눌렀어요 👍' : `평균 ${Math.abs(r.lag)}ms ${r.lag > 0 ? '늦게' : '빠르게'} 눌렀어요`;
   $('rStars').innerHTML = '';
   $('rStats').innerHTML = [`<div class="big">${Math.round(r.acc * 100)}<small>% 정확도</small></div>`,
     `<div>PERFECT <b>${r.p}</b> · GREAT <b>${r.g}</b> · GOOD <b>${r.o}</b> · MISS <b>${r.m}</b></div>`,
     `<div>최고 콤보 <b>${r.maxCombo}</b> / ${r.total} · 이 단계 최고 <b class="gold">${S.dojo.best[lv]}</b></div>`,
-    `<div>얻은 고철 🔩 <b>${reward}</b></div>`, opened ? `<div class="gold">🔓 Lv ${lv + 1} 열림!</div>` : pass ? '' : '<div>B 랭크 이상이면 다음 단계가 열립니다.</div>'].join('');
+    `<div>얻은 고철 🔩 <b>${reward}</b></div>`, lagTxt ? `<div>⏱️ ${lagTxt}</div>` : '', opened ? `<div class="gold">🔓 Lv ${lv + 1} 열림!</div>` : pass ? '' : '<div>B 랭크 이상이면 다음 단계가 열립니다.</div>'].join('');
   const btns = $('rBtns'); btns.innerHTML = '';
   const mk = (label, cls, fn) => { const b = document.createElement('button'); b.className = 'btn ' + cls; b.textContent = label; b.addEventListener('click', () => { A.sfx('click'); fn(); }); btns.append(b); };
   if (lv < S.dojo.open) mk(`Lv ${lv + 1} 도전 ▶`, 'big', () => { dojoLv = lv + 1; startRun(1, 'dojo'); });
   mk('다시 하기', lv < S.dojo.open ? 'sub' : 'big', () => { dojoLv = lv; startRun(1, 'dojo'); });
   mk('격납고', 'sub', showHangar);
+  if (Math.abs(r.lag) >= 25) mk(`🎧 싱크 맞추기 (${r.lag > 0 ? '+' : ''}${r.lag}ms)`, 'sub', () => {   // 늘 늦거나 빠르면 판정을 그만큼 옮긴다
+    S.dojo.sync = Math.max(-250, Math.min(250, S.dojo.sync + r.lag)); save();
+    const b = btns.lastElementChild; b.textContent = `✅ 싱크 ${S.dojo.sync}ms로 맞췄어요`; b.disabled = true;
+  });
   Rank.after('dojo', lv * 1000 + Math.round(r.acc * 999), `Lv ${lv} · ${r.rank} 랭크 · 정확도 ${Math.round(r.acc * 100)}%`);
   $('copy').dataset.text = `🎵 볼트윙 리듬 도장 Lv ${lv} ${r.rank} 랭크 · 정확도 ${Math.round(r.acc * 100)}% · 콤보 ${r.maxCombo}`;
   $('result').classList.remove('hidden');
@@ -1866,6 +1871,19 @@ function renderHangar() {
       row.append(b);
     }
     $('modeInfo').append(row);
+    const sr = document.createElement('div'); sr.className = 'dojoLv dojoSong';   // 곡 고르기
+    [{ id: 'random', name: '🎲 아무 곡', genre: '' }, ...(A.SONGS || [])].forEach(s => {
+      const b = document.createElement('button'); b.className = S.dojo.song === s.id ? 'on' : '';
+      b.innerHTML = s.genre ? `${s.name}<i>${s.genre}</i>` : s.name;
+      b.addEventListener('click', () => { S.dojo.song = s.id; save(); A.sfx('click'); renderHangar(); });
+      sr.append(b);
+    });
+    $('modeInfo').append(sr);
+    const sy = document.createElement('div'); sy.className = 'dojoSync';   // 싱크(이어폰이면 소리가 늦게 들린다)
+    const sb = (t, v) => { const b = document.createElement('button'); b.textContent = t; b.addEventListener('click', () => { S.dojo.sync = v === 0 ? 0 : Math.max(-250, Math.min(250, S.dojo.sync + v)); save(); A.sfx('click'); renderHangar(); }); return b; };
+    sy.append(document.createTextNode(`🎧 싱크 ${S.dojo.sync > 0 ? '+' : ''}${S.dojo.sync}ms `), sb('−10', -10), sb('+10', 10), sb('0', 0));
+    const tip = document.createElement('small'); tip.textContent = ' 판정이 늘 늦게 나오면 +, 빠르면 − (블루투스 이어폰은 보통 +100~200)';
+    sy.append(tip); $('modeInfo').append(sy);
   }
   $('stageMap').classList.toggle('hidden', selMode !== 'stage' && !(selMode === 'coop' && net && net.mode === 'host'));
   if (selMode === 'coop') $('modeInfo').append(coopPanel());

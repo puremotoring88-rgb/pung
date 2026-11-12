@@ -99,6 +99,25 @@ const MOODS = {
   boss: { bpm: 152, prog: [[0, 3, 7], [0, 3, 7], [8, 12, 15], [10, 14, 17]], drums: 'hard', bass: 'sawtooth', arpWave: 'sawtooth', arp: [0, 2, 1, 3, 0, 2, 1, 3] },
   duel: { bpm: 140, prog: [[0, 3, 7], [8, 12, 15], [5, 8, 12], [7, 11, 14]], drums: 'beat', bass: 'square', arpWave: 'triangle', arp: [0], noArp: true },
 };
+// 리듬 곡: 장르마다 화음 진행·북 무늬(16칸: x 크게, o 작게)·베이스·가락 소리가 다르다. 떨어지는 음표가 가락이 된다.
+const SONGS = [
+  { id: 'neon', name: '네온 질주', genre: '신스팝', k: 1, root: 57, prog: [[0, 3, 7], [8, 12, 15], [3, 7, 10], [10, 14, 17]], lead: 'square', bass: 'sawtooth',
+    pat: { k: 'x...x...x...x...', s: '....x.......x...', h: 'o.o.o.o.o.o.o.o.' } },
+  { id: 'chip', name: '8비트 모험', genre: '칩튠', k: 1.05, root: 60, prog: [[0, 4, 7], [5, 9, 12], [7, 11, 14], [0, 4, 7]], lead: 'square', bass: 'square', bassPat: 'x.o.x.o.x.o.x.o.',
+    pat: { k: 'x.......x.x.....', n: '....x.......x...', h: '..o...o...o...o.' } },
+  { id: 'house', name: '한밤 클럽', genre: '하우스', k: 0.97, root: 55, prog: [[0, 3, 7], [5, 8, 12], [3, 7, 10], [7, 10, 14]], lead: 'sawtooth', bass: 'sawtooth', bassPat: '..x...x...x...x.',
+    pat: { k: 'x...x...x...x...', s: '....x.......x...', o: '..x...x...x...x.', h: 'o.o.o.o.o.o.o.o.' }, pad: true },
+  { id: 'lofi', name: '구름 다방', genre: '로파이', k: 0.8, root: 53, prog: [[0, 4, 11], [5, 9, 16], [2, 5, 12], [7, 11, 17]], lead: 'triangle', bass: 'triangle', bassPat: 'x.....x...x.....', soft: true,
+    pat: { k: 'x.......x.x.....', r: '....x.......x...', h: 'o...o.o.o...o.o.' }, pad: true },
+  { id: 'rock', name: '불꽃 록', genre: '록', k: 1.06, root: 52, prog: [[0, 7, 12], [10, 17, 22], [8, 15, 20], [7, 14, 19]], lead: 'sawtooth', bass: 'sawtooth', bassPat: 'xxxxxxxxxxxxxxxx',
+    pat: { k: 'x.....x.x.......', S: '....x.......x...', h: 'x.x.x.x.x.x.x.x.' } },
+  { id: 'tropic', name: '파도 축제', genre: '트로피컬', k: 0.9, root: 62, prog: [[0, 4, 7], [7, 11, 14], [9, 12, 16], [5, 9, 12]], lead: 'triangle', bass: 'sine', bassPat: 'x..x..x.x..x..x.',
+    pat: { k: 'x...x...x...x...', s: '...x..x....x..x.', h: '..o...o...o...o.' }, pad: true },
+  { id: 'funk', name: '반짝 펑크', genre: '펑크', k: 0.94, root: 55, prog: [[0, 3, 10], [5, 9, 15], [0, 3, 10], [7, 10, 17]], lead: 'square', bass: 'square', bassPat: 'x..x..x...x.x...',
+    pat: { k: 'x..x..x...x.....', s: '....x..o....x..o', h: 'oooooooooooooooo' } },
+  { id: 'dnb', name: '번개 브레이크', genre: '드럼앤베이스', k: 1.1, root: 50, prog: [[0, 3, 7], [0, 3, 7], [8, 12, 15], [7, 10, 14]], lead: 'sawtooth', bass: 'sine', bassPat: 'x.......x.x.....',
+    pat: { k: 'x.........x.....', S: '....x.......x...', h: 'oooooooooooooooo' } },
+];
 const ROOTS = [45, 48, 43, 50];   // 스테이지 배경마다 다른 조(A, C, G, D)
 function music(m, th) {
   if (!ac) return;
@@ -106,19 +125,19 @@ function music(m, th) {
   mood = m; theme = th || 0; step = 0; nextT = ac.currentTime + 0.08; startT = nextT;
 }
 // 리듬 결투: 박자 수 세기 + 악보의 음표마다 가락을 미리 예약한다. 0번째 박의 시각을 돌려준다
-function duel(chart, bpm, countIn) {
-  const beat = 60 / bpm;
+function duel(chart, bpm, countIn, song) {
+  const beat = 60 / bpm, S = song || SONGS[0];
   if (!ac || ac.state !== 'running') return performance.now() / 1000 + countIn * beat + 0.3;
-  MOODS.duel.bpm = bpm;
+  MOODS.duel = { bpm, prog: S.prog, root: S.root, pat: S.pat, bass: S.bass, bassPat: S.bassPat, soft: S.soft, pad: S.pad, noArp: true, drums: 'beat' };
   mood = 'duel'; theme = 0; step = 0; nextT = ac.currentTime + 0.1; startT = nextT;
   const t0 = startT + countIn * beat;
   for (let i = 0; i < countIn; i++) osc(sfxBus, 'square', i === countIn - 1 ? 1760 : 1320, i === countIn - 1 ? 1760 : 1320, startT + i * beat, 0.06, 0.08);
-  const root = 57;
-  for (const n of chart) {
-    const ch = MOODS.duel.prog[Math.floor(n.b / 4) % 4], t = t0 + n.b * beat;
-    const midi = root + 12 + ch[0] + [0, 3, 7, 12][n.lane];
-    osc(musicBus, 'square', mtof(midi), mtof(midi), t, beat * (n.len || 0.42), 0.05);
-    osc(musicBus, 'triangle', mtof(midi + 12), mtof(midi + 12), t, beat * 0.3, 0.035);
+  const lv = S.soft ? 0.7 : 1;
+  for (const n of chart) {   // 줄마다 그 마디 화음의 음: 1·3·5도와 한 옥타브 위
+    const ch = S.prog[Math.floor(n.b / 4) % 4], t = t0 + n.b * beat;
+    const midi = S.root + 12 + [ch[0], ch[1], ch[2], ch[0] + 12][n.lane];
+    osc(musicBus, S.lead, mtof(midi), mtof(midi), t, beat * (n.len || (S.lead === 'triangle' ? 0.3 : 0.42)), (S.lead === 'sawtooth' ? 0.04 : 0.05) * lv);
+    osc(musicBus, 'triangle', mtof(midi + 12), mtof(midi + 12), t, beat * 0.3, 0.035 * lv);
   }
   return t0;
 }
@@ -134,7 +153,28 @@ function tick() {
   while (nextT < ac.currentTime + 0.12) { playStep(M, step, nextT, sp); nextT += sp; step++; }
 }
 function playStep(M, s, t, sp) {
-  const bar = Math.floor(s / 16) % 4, i = s % 16, ch = M.prog[bar], root = mood === 'hangar' ? 50 : ROOTS[theme % 4];
+  const bar = Math.floor(s / 16) % 4, i = s % 16, ch = M.prog[bar], root = M.root ? M.root - 12 : mood === 'hangar' ? 50 : ROOTS[theme % 4];
+  if (M.pat) {   // 리듬 곡의 북 무늬
+    const P = M.pat, on = (p, ...c) => p && c.includes(p[i]), sv = M.soft ? 0.55 : 1;
+    if (on(P.k, 'x')) osc(musicBus, 'sine', M.soft ? 110 : 150, 40, t, 0.18, 0.5 * sv);
+    if (on(P.s, 'x')) { noise(musicBus, t, 0.14, 0.16, 'bandpass', 1800, 1200, 0.8); osc(musicBus, 'triangle', 220, 180, t, 0.08, 0.07); }
+    if (on(P.s, 'o')) noise(musicBus, t, 0.06, 0.05, 'bandpass', 2000, 1600, 0.8);
+    if (on(P.S, 'x')) { noise(musicBus, t, 0.2, 0.22, 'bandpass', 1500, 900, 0.6); osc(musicBus, 'triangle', 200, 150, t, 0.1, 0.1); }
+    if (on(P.n, 'x')) noise(musicBus, t, 0.1, 0.12, 'highpass', 3000, 3000);
+    if (on(P.r, 'x')) osc(musicBus, 'square', 900, 700, t, 0.03, 0.05);
+    if (on(P.h, 'x', 'o')) noise(musicBus, t, 0.04, (P.h[i] === 'x' ? 0.05 : 0.025) * sv, 'highpass', 7000, 7000);
+    if (on(P.o, 'x')) noise(musicBus, t, 0.16, 0.04, 'highpass', 6000, 6000);
+    const bp = M.bassPat || 'x.x.x.x.x.x.x.x.';
+    if (bp[i] !== '.') {
+      const f = mtof(root + ch[0] + (bp[i] === 'o' ? 12 : 0)), o = ac.createOscillator(), fl = ac.createBiquadFilter(), g = ac.createGain(), dd = sp * 1.8;
+      o.type = M.bass; o.frequency.value = f;
+      fl.type = 'lowpass'; fl.frequency.setValueAtTime(M.soft ? 500 : 1000, t); fl.frequency.exponentialRampToValueAtTime(200, t + dd);
+      env(g, t, 0.005, dd, M.soft ? 0.12 : 0.15);
+      o.connect(fl); fl.connect(g); g.connect(musicBus); o.start(t); o.stop(t + dd + 0.05);
+    }
+    if (M.pad && i === 0) ch.forEach(c => osc(musicBus, 'sine', mtof(root + 12 + c), mtof(root + 12 + c), t, sp * 15, 0.03, 0.4));
+    return;
+  }
   if (M.drums) {
     if (i % 4 === 0 && (M.drums === 'hard' || i % 8 === 0 || i === 12)) osc(musicBus, 'sine', 150, 40, t, 0.18, 0.5);
     if (i === 4 || i === 12) { noise(musicBus, t, 0.14, 0.16, 'bandpass', 1800, 1200, 0.8); osc(musicBus, 'triangle', 220, 180, t, 0.08, 0.07); }
@@ -160,7 +200,7 @@ function playStep(M, s, t, sp) {
 }
 
 return {
-  init, sfx, music, clock, duel,
+  init, sfx, music, clock, duel, SONGS,
   stopMusic() { mood = null; },
   setMusic(on) { musicOn = on; if (musicBus) musicBus.gain.value = on ? 0.3 : 0; },
   setSfx(on) { sfxOn = on; if (sfxBus) sfxBus.gain.value = on ? 0.55 : 0; },

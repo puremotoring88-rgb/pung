@@ -3,7 +3,7 @@
 window.Duel = (() => {
 'use strict';
 const W = 540, H = 960, TAU = Math.PI * 2, LANES = 4;
-const WIN = { p: 0.04, g: 0.075, o: 0.11 };      // PERFECT, GREAT, GOOD로 인정하는 어긋남(초) — 예전보다 좁다
+const WIN = { p: 0.05, g: 0.09, o: 0.135 };      // PERFECT, GREAT, GOOD로 인정하는 어긋남(초) — 0.8에서 가볍게 즐기도록 넓힘
 let APPROACH = 1.3;                              // 음표가 위에서 판정선까지 오는 시간(초). 단계가 오를수록 짧아진다(빨라짐)
 const COLORS = ['#ff6ad5', '#4cc9ff', '#ffd166', '#6ee37a'];
 const KEYS = ['D', 'F', 'J', 'K'];
@@ -52,12 +52,13 @@ function makeChart(level, beats) {
 function start(opt) {
   A = window.AudioKit; Art = window.Art;
   const level = Math.max(1, Math.min(8, opt.level | 0)), beats = 40, countIn = 4;
-  const bpm = Math.min(180, 124 + level * 7), beat = 60 / bpm;
-  APPROACH = Math.max(0.92, 1.3 - 0.055 * (level - 1));
+  const song = (A.SONGS || []).find(s => s.id === opt.song) || (A.SONGS || [])[R((A.SONGS || [1]).length)] || null;
+  const bpm = Math.round(Math.min(168, 112 + level * 6) * (song ? song.k : 1)), beat = 60 / bpm;
+  APPROACH = Math.max(1.0, 1.45 - 0.05 * (level - 1));
   const chart = makeChart(level, beats);
-  const t0 = A.duel(chart, bpm, countIn);   // 0번째 박이 울리는 시각
+  const t0 = A.duel(chart, bpm, countIn, song);   // 0번째 박이 울리는 시각
   d = {
-    level, bpm, beat, t0, countIn, name: NAMES[(level - 1) % NAMES.length], title: opt.title || 'RHYTHM DUEL',
+    level, bpm, beat, t0, countIn, name: song ? song.name : NAMES[(level - 1) % NAMES.length], genre: song ? song.genre : '', song: song && song.id, sync: (opt.sync || 0) / 1000, dev: [], title: opt.title || 'RHYTHM DUEL',
     notes: chart.map(n => ({ t: t0 + n.b * beat, lane: n.lane, j: null, half: n.b % 1 !== 0, end: n.len ? t0 + (n.b + n.len) * beat : 0, tail: null })),
     end: t0 + beats * beat + 0.6, cnt: { p: 0, g: 0, o: 0, m: 0, x: 0 }, combo: 0, maxCombo: 0, down: [false, false, false, false],
     judge: null, judgeT: 0, judgeLane: 0, flash: [0, 0, 0, 0], hits: [], done: false, resT: 0, onEnd: opt.onEnd, res: null,
@@ -71,15 +72,16 @@ function judgeOf(dt) { return dt <= WIN.p ? 'p' : dt <= WIN.g ? 'g' : dt <= WIN.
 function press(lane) {
   if (!d || d.done) return;
   d.flash[lane] = 1;
-  const t = now();
+  const t = now() - d.sync;   // 싱크: 이어폰 등으로 소리가 늦게 들리는 만큼 당겨서 판정
   let best = null, bd = 9;
   for (const n of d.notes) { if (n.j || n.lane !== lane) continue; const dt = Math.abs(t - n.t); if (dt < bd) { bd = dt; best = n; } }
   d.down[lane] = true;
   const j = best ? judgeOf(bd) : null;
-  if (!j) {   // 헛누름: 근처에 음표가 없는데 누르면 콤보가 끊기고 정확도가 조금 깎인다(마구 누르기 방지)
-    if (t > d.t0 - 0.2 && !(best && bd < 0.3)) { d.cnt.x++; if (d.combo >= 5) { d.judge = '헛누름'; d.judgeT = 0.35; } d.combo = 0; }
+  if (!j) {   // 헛누름: 근처에 음표가 하나도 없을 때만 정확도가 아주 조금 깎인다(콤보는 그대로)
+    if (t > d.t0 - 0.2 && !(best && bd < 0.45)) d.cnt.x++;
     return;
   }
+  d.dev.push(t - best.t);
   best.j = j; d.cnt[j]++; d.combo++; d.maxCombo = Math.max(d.maxCombo, d.combo);
   if (best.end) best.hold = true;
   d.judge = { p: 'PERFECT', g: 'GREAT', o: 'GOOD' }[j]; d.judgeT = 0.45; d.judgeLane = lane;
@@ -91,22 +93,23 @@ function pressX(x) { const l = Math.max(0, Math.min(3, Math.floor(x / (W / LANES
 function release(lane) {   // 손을 떼면: 길게 누르는 음표를 끝나기 전에 놓으면 꼬리를 놓친다
   if (!d) return;
   d.down[lane] = false;
-  const t = now();
+  const t = now() - d.sync;
   for (const n of d.notes) if (n.hold && n.lane === lane && !n.tail) {
-    if (t >= n.end - WIN.g) tailOk(n); else { n.tail = 'm'; n.hold = false; d.cnt.m++; d.combo = 0; d.judge = '놓쳤다'; d.judgeT = 0.4; d.judgeLane = lane; }
+    if (t >= n.end - Math.max(WIN.o, d.beat * 0.35)) tailOk(n); else { n.tail = 'm'; n.hold = false; d.cnt.m++; d.combo = 0; d.judge = '놓쳤다'; d.judgeT = 0.4; d.judgeLane = lane; }
   }
 }
 function tailOk(n) { n.tail = 'p'; n.hold = false; d.cnt.p++; d.combo++; d.maxCombo = Math.max(d.maxCombo, d.combo); d.hits.push({ lane: n.lane, t: 0, j: 'p' }); A.sfx('perfect'); }
-const score = () => { const c = d.cnt; return (c.p + 0.7 * c.g + 0.3 * c.o) / ((d.total || 1) + 0.25 * c.x); };
+const score = () => { const c = d.cnt; return (c.p + 0.8 * c.g + 0.45 * c.o) / ((d.total || 1) + 0.1 * c.x); };
 function result() {
   const c = d.cnt, acc = Math.max(0, score());
-  const rank = acc >= 0.96 ? 'S' : acc >= 0.88 ? 'A' : acc >= 0.76 ? 'B' : acc >= 0.58 ? 'C' : 'D';
-  return { rank, acc, p: c.p, g: c.g, o: c.o, m: c.m, x: c.x, maxCombo: d.maxCombo, total: d.total, level: d.level };
+  const rank = acc >= 0.94 ? 'S' : acc >= 0.85 ? 'A' : acc >= 0.72 ? 'B' : acc >= 0.55 ? 'C' : 'D';
+  const dv = d.dev.slice().sort((a, b) => a - b), lag = dv.length >= 8 ? Math.round(dv[dv.length >> 1] * 1000) : 0;   // 가운데 값(ms): +면 늦게 누름
+  return { rank, acc, p: c.p, g: c.g, o: c.o, m: c.m, x: c.x, maxCombo: d.maxCombo, total: d.total, level: d.level, song: d.song, songName: d.name, lag };
 }
 
 function update(dt) {
   if (!d) return;
-  const t = now();
+  const t = now() - (d.sync || 0);
   for (const n of d.notes) {
     if (!n.j && t - n.t > WIN.o) { n.j = 'm'; d.cnt.m++; d.combo = 0; d.judge = 'MISS'; d.judgeT = 0.4; d.judgeLane = n.lane; if (n.end) { n.tail = 'm'; d.cnt.m++; } }
     if (n.hold && !n.tail) { if (t >= n.end) tailOk(n); else if (!d.down[n.lane]) release(n.lane); else if (Math.random() < 0.3) d.flash[n.lane] = Math.max(d.flash[n.lane], 0.6); }
@@ -235,7 +238,7 @@ function draw(g, T) {
   drawDJ(g, W / 2, 112, T, kick);
   rr(g, 90, 176, W - 180, 12, 6); g.fillStyle = 'rgba(0,0,0,.6)'; g.fill();
   rr(g, 90, 176, (W - 180) * Math.max(0, 1 - dealt), 12, 6); g.fillStyle = '#ff5da2'; g.fill();
-  text(g, `${d.title} · DJ 「${d.name}」 Lv ${d.level}`, W / 2, 168, 15, '#ffd6f5', 800);
+  text(g, `${d.title} · 🎵 「${d.name}」${d.genre ? ` ${d.genre}` : ''} · Lv ${d.level}`, W / 2, 168, 15, '#ffd6f5', 800);
   // 진행 줄
   const prog = Math.max(0, Math.min(1, (t - d.t0) / (d.end - d.t0)));
   g.fillStyle = 'rgba(255,255,255,.15)'; g.fillRect(0, 0, W, 5); g.fillStyle = '#ff6ad5'; g.fillRect(0, 0, W * prog, 5);
@@ -244,7 +247,7 @@ function draw(g, T) {
     const left = Math.ceil((d.t0 - t) / d.beat);
     text(g, left > 3 ? 'READY' : String(left), W / 2, H * 0.48, left > 3 ? 54 : 96, '#ffffff');
     text(g, '음표가 흰 선에 닿을 때 그 줄을 누르세요', W / 2, H * 0.48 + 56, 18, '#e8d8ff', 700);
-    text(g, d.fog ? '긴 음표는 끝까지 누르고 · 구름 속 음표는 소리로!' : d.level >= 2 ? '긴 음표는 꼬리까지 누르고 있기 · 마구 누르면 감점' : '마구 누르면 감점', W / 2, H * 0.48 + 86, 15, '#ffd6f5', 700);
+    text(g, d.fog ? '긴 음표는 끝까지 누르고 · 구름 속 음표는 소리로!' : d.level >= 2 ? '긴 음표는 꼬리까지 누르고 있기 · 소리를 들으며 편하게' : '소리를 들으며 편하게 즐겨요', W / 2, H * 0.48 + 86, 15, '#ffd6f5', 700);
   }
   // 판정과 콤보
   if (d.judgeT > 0 && d.judge) {
