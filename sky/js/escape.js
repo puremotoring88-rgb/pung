@@ -326,7 +326,8 @@ function gameOver() {
   const r = box.querySelector('.esRes'); r.classList.remove('hidden');
   const RI = { bird: '🐦', spider: '🕷️', whale: '🐋', knight: '⚔️', core: '💠' };
   const next = K.stars.find(s => s > st.dist);
-  r.querySelector('.esStat').innerHTML = `<div class="esStars">${[0, 1, 2].map(i => `<span class="${i < st.stars ? 'on' : ''}" style="animation-delay:${0.2 + i * 0.25}s">⭐</span>`).join('')}</div>
+  const pil = cb.img && cb.img('esc-pilot');
+  r.querySelector('.esStat').innerHTML = `${pil ? `<img class="esPilot" src="${pil.src}" alt="">` : ''}<div class="esStars">${[0, 1, 2].map(i => `<span class="${i < st.stars ? 'on' : ''}" style="animation-delay:${0.2 + i * 0.25}s">⭐</span>`).join('')}</div>
     <div class="big">${st.dist.toLocaleString()} m</div>
     <div>🪙 ${st.coins} · 🔩 고철 +${scrap}${starBonus ? ` <b>+ 별 보너스 ${starBonus}</b>` : ''}</div>
     ${st.rides.length ? `<div>타 본 탈것 ${st.rides.map(k => RI[k]).join(' ')}</div>` : ''}
@@ -349,10 +350,25 @@ function raceRank() {   // 같이 달리기 순위(모두 끝나면 확정)
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function finish(quit) { if (!st || st.over) { close(); return; } if (quit) { st.hearts = 0; gameOver(); } }
 // ---------- 그리기 ----------
+let bgTop = null;
+function drawBg() {   // 그림 배경(esc-bg): 높이 640으로 줄여 느리게 흐르고, 이어 붙일 때 한 장 걸러 좌우를 뒤집어 이음매를 숨긴다
+  const im = cb.img && cb.img('esc-bg'); if (!im) return false;
+  const h = 640, w = Math.round(im.width * h / im.height), top = GROUND + 20 - h, ox = cam * 0.22;
+  if (!bgTop) { try { const c = document.createElement('canvas'); c.width = 8; c.height = 1; const cg = c.getContext('2d'); cg.drawImage(im, 0, 0, im.width, 4, 0, 0, 8, 1); const d = cg.getImageData(0, 0, 8, 1).data; let r = 0, gg = 0, b = 0; for (let i = 0; i < 32; i += 4) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; } bgTop = `rgb(${r >> 3},${gg >> 3},${b >> 3})`; } catch (e) { bgTop = '#2f3046'; } }
+  const sky = g.createLinearGradient(0, 0, 0, top + 2); sky.addColorStop(0, '#191a2a'); sky.addColorStop(1, bgTop);
+  g.fillStyle = sky; g.fillRect(0, 0, W, top + 2);
+  for (let i = Math.floor(ox / w); i * w - ox < W; i++) {
+    const x = i * w - ox;
+    if (i % 2) { g.save(); g.translate(x + w, top); g.scale(-1, 1); g.drawImage(im, 0, 0, w, h); g.restore(); } else g.drawImage(im, x, top, w, h);
+  }
+  g.fillStyle = 'rgba(20,16,26,.25)'; g.fillRect(0, 0, W, H);   // 조금 어둡게(앞의 것이 잘 보이게)
+  return true;
+}
 function draw() {
+  const hasBg = drawBg();
   const sky = g.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#2b4f86'); sky.addColorStop(0.6, '#7fa8d6'); sky.addColorStop(1, '#f2b58a');
-  g.fillStyle = sky; g.fillRect(0, 0, W, H);
-  for (const [k, c, base, amp] of [[0.2, '#5a77a3', 640, 90], [0.45, '#3f5a80', 720, 70]]) {   // 먼 산(느리게)
+  if (!hasBg) { g.fillStyle = sky; g.fillRect(0, 0, W, H); }
+  for (const [k, c, base, amp] of hasBg ? [[0.45, 'rgba(30,24,34,.85)', 800, 60]] : [[0.2, '#5a77a3', 640, 90], [0.45, '#3f5a80', 720, 70]]) {   // 먼 산(느리게). 그림 배경이 있으면 가까운 바위 한 겹만
     g.fillStyle = c; g.beginPath(); g.moveTo(0, H);
     for (let x = 0; x <= W; x += 20) { const wx = x + cam * k; g.lineTo(x, base - Math.abs(Math.sin(wx / 160)) * amp - Math.sin(wx / 53) * 12); }
     g.lineTo(W, H); g.fill();
@@ -392,7 +408,10 @@ function draw() {
   const ghost = ghostAt();
   if (ghost) drawOther(ghost);
   for (const o of others) drawOther(o);
-  if (P.rope) { g.strokeStyle = '#f4e3b5'; g.lineWidth = 3; g.beginPath(); g.moveTo(P.rope.a.x, P.rope.a.y); g.lineTo(P.x, P.y); g.stroke(); }
+  if (P.rope) {   // 로프는 조종사 손까지(그림이 있으면 몸 중심에서 줄 쪽으로 36px)
+    const dx = P.rope.a.x - P.x, dy = P.rope.a.y - P.y, d = Math.hypot(dx, dy) || 1, hk = cb.img && cb.img('esc-p-rope') ? Math.min(36, d) : 0;
+    g.strokeStyle = '#f4e3b5'; g.lineWidth = 3; g.beginPath(); g.moveTo(P.rope.a.x, P.rope.a.y); g.lineTo(P.x + dx / d * hk, P.y + dy / d * hk); g.stroke();
+  }
   if (P.miss > 0) { g.strokeStyle = `rgba(255,180,180,${P.miss * 3})`; g.lineWidth = 2; g.beginPath(); g.moveTo(P.x, P.y); g.lineTo(P.x + 160, P.y - 260); g.stroke(); }
   drawHero();
   for (const p of parts) {
@@ -451,7 +470,12 @@ function drawHero() {
     g.fillStyle = '#4cc9ff'; g.beginPath(); g.moveTo(34, 0); g.lineTo(-26, -14); g.lineTo(-20, 0); g.lineTo(-26, 14); g.closePath(); g.fill();
     g.fillStyle = '#2a8fc4'; g.beginPath(); g.moveTo(4, 0); g.lineTo(-14, -30); g.lineTo(-22, -30); g.lineTo(-10, 0); g.lineTo(-22, 30); g.lineTo(-14, 30); g.closePath(); g.fill();
     g.fillStyle = '#ffb347'; g.beginPath(); g.ellipse(-30 - Math.random() * 6, 0, 10, 5, 0, 0, TAU); g.fill();
-  } else if (st.phase === 'bird') {   // 새
+  } else if (st.phase === 'bird' && img('esc-bird1')) {   // 새 그림: 오를 때 날개 펼침, 떨어질 때 접음
+    g.rotate(P.tilt * 0.7);
+    const up = P.vy < 60 || P.flapT > 0.08, bi = img(up ? 'esc-bird1' : 'esc-bird2'), s = 118;
+    g.drawImage(bi, -s / 2, -s / 2, s, s);
+    const sit = img('esc-p-sit'); if (sit) g.drawImage(sit, -10, up ? -66 : -60, 50, 50);   // 안장 위 조종사
+  } else if (st.phase === 'bird') {   // 새(그림이 없을 때)
     g.rotate(P.tilt);
     const wf = Math.sin(t * (hold ? 26 : 8)) * 0.9;
     g.fillStyle = '#e8d8b8'; g.beginPath(); g.ellipse(0, 0, 30, 15, 0, 0, TAU); g.fill();
@@ -461,6 +485,14 @@ function drawHero() {
     g.fillStyle = '#ff7a5e'; g.beginPath(); g.arc(-2, -20, 9, 0, TAU); g.fill();   // 등에 탄 조종사
   } else {   // 조종사(로프)
     const sp = Math.hypot(P.vx, P.vy), ang = P.rope ? Math.atan2(P.rope.a.y - P.y, P.rope.a.x - P.x) + Math.PI / 2 : clamp(P.vx / 900, -0.6, 0.6);
+    const pose = P.rope ? 'esc-p-rope' : P.vy > 380 || st.inv > 0.9 ? 'esc-p-fall' : 'esc-p-fly', pim = img(pose);
+    if (pim) {   // 조종사 그림: 로프에 매달림 · 날아감 · 떨어짐
+      if (P.rope) { g.rotate(ang); const s = 80; g.drawImage(pim, -s * 0.42, -s * 0.5, s, s); }
+      else if (pose === 'esc-p-fly') { g.rotate(clamp(Math.atan2(P.vy, Math.max(80, P.vx)), -0.7, 0.9)); const s = 84; g.drawImage(pim, -s / 2, -s / 2, s, s); }
+      else { g.rotate(Math.sin(t * 9) * 0.15); const s = 78; g.drawImage(pim, -s / 2, -s / 2, s, s); }
+      if (sp > 700) { g.strokeStyle = 'rgba(255,255,255,.4)'; g.lineWidth = 2; for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(-30 - i * 6, 10 + i * 6); g.lineTo(-54 - i * 8, 14 + i * 6); g.stroke(); } }
+      g.restore(); return;
+    }
     g.rotate(ang);
     g.fillStyle = '#ff7a5e'; g.beginPath(); g.ellipse(0, 4, 12, 16, 0, 0, TAU); g.fill();
     g.fillStyle = '#ffe0c0'; g.beginPath(); g.arc(0, -14, 10, 0, TAU); g.fill();
@@ -496,7 +528,8 @@ function drawRide(ph, im) {
   }
   g.restore();
   // 등에 탄 조종사(거미가 천장에 있으면 아래쪽에 매달림)
-  const py = (ph === 'spider' && P.side < 0 ? 40 : -40) + bob;
+  const py = (ph === 'spider' && P.side < 0 ? 40 : -40) + bob, sit = cb.img && cb.img('esc-p-sit');
+  if (sit) { g.save(); g.translate(-6, py); if (ph === 'spider' && P.side < 0) g.scale(1, -1); g.drawImage(sit, -26, -34, 52, 52); g.restore(); return; }
   g.fillStyle = '#ff7a5e'; g.beginPath(); g.arc(-6, py, 10, 0, TAU); g.fill();
   g.fillStyle = '#ffe0c0'; g.beginPath(); g.arc(-6, py - (P.side < 0 && ph === 'spider' ? -12 : 12), 7, 0, TAU); g.fill();
 }
@@ -513,8 +546,9 @@ function drawBalloon(col, blink) {   // (0,0)에 매달린 조종사 + 위의 �
   g.fillStyle = blink ? '#ffffff' : col; g.beginPath(); g.ellipse(0, -80, 26, 32, 0, 0, TAU); g.fill();
   g.fillStyle = 'rgba(255,255,255,.45)'; g.beginPath(); g.ellipse(-9, -90, 6, 10, -0.4, 0, TAU); g.fill();
   g.fillStyle = col; g.beginPath(); g.moveTo(-5, -47); g.lineTo(5, -47); g.lineTo(0, -53); g.fill();
-  g.fillStyle = '#ff7a5e'; g.beginPath(); g.ellipse(0, 4, 11, 14, 0, 0, TAU); g.fill();
-  g.fillStyle = '#ffe0c0'; g.beginPath(); g.arc(0, -12, 9, 0, TAU); g.fill();
+  const pr = cb.img && cb.img('esc-p-rope');   // 풍선 줄에 매달린 조종사
+  if (pr) g.drawImage(pr, -60 * 0.42, -14, 60, 60);
+  else { g.fillStyle = '#ff7a5e'; g.beginPath(); g.ellipse(0, 4, 11, 14, 0, 0, TAU); g.fill(); g.fillStyle = '#ffe0c0'; g.beginPath(); g.arc(0, -12, 9, 0, TAU); g.fill(); }
   g.restore();
 }
 function drawOther(o) {   // 친구·유령은 반투명하게(부딪히지 않는다)
@@ -523,9 +557,10 @@ function drawOther(o) {   // 친구·유령은 반투명하게(부딪히지 않�
     g.globalAlpha = 1; g.fillStyle = o.color; g.font = '800 16px sans-serif'; g.textAlign = 'center'; g.fillText(`🎈 ${o.name} 구해 줘!`, o.x, o.y + 46);
     g.strokeStyle = 'rgba(157,255,207,.6)'; g.lineWidth = 3; g.beginPath(); g.arc(o.x, o.y - 40, 60 + Math.sin(t * 6) * 6, 0, TAU); g.stroke(); return;
   }
-  const im = cb.img ? (o.ph === 'plane' ? cb.img('ship-' + (o.frame || 'falcon')) : isRide(o.ph) ? cb.img('boss-' + o.ph) : null) : null;
+  const im = cb.img ? (o.ph === 'plane' ? cb.img('ship-' + (o.frame || 'falcon')) : isRide(o.ph) ? cb.img('boss-' + o.ph) : o.ph === 'bird' ? cb.img('esc-bird1') : o.ph === 'rope' ? cb.img('esc-p-fly') : null) : null;
   g.save(); g.globalAlpha = o.over ? 0.22 : 0.5; g.translate(o.x, o.y);
-  if (im) { g.rotate(o.ph === 'plane' ? Math.PI / 2 : -Math.PI / 2); const s = o.ph === 'plane' ? 62 : 100; g.drawImage(im, -s / 2, -s / 2, s, s); }
+  if (im && (o.ph === 'bird' || o.ph === 'rope')) { const s = o.ph === 'bird' ? 100 : 70; g.drawImage(im, -s / 2, -s / 2, s, s); }
+  else if (im) { g.rotate(o.ph === 'plane' ? Math.PI / 2 : -Math.PI / 2); const s = o.ph === 'plane' ? 62 : 100; g.drawImage(im, -s / 2, -s / 2, s, s); }
   else if (o.ph === 'rope') { g.fillStyle = o.color; g.beginPath(); g.ellipse(0, 4, 12, 16, 0, 0, TAU); g.fill(); g.beginPath(); g.arc(0, -14, 9, 0, TAU); g.fill(); }
   else { g.fillStyle = o.color; g.beginPath(); g.ellipse(0, 0, 30, 14, 0, 0, TAU); g.fill(); }
   g.restore();
@@ -533,9 +568,10 @@ function drawOther(o) {   // 친구·유령은 반투명하게(부딪히지 않�
   g.fillText(o.over ? `${o.name} 💥` : o.name, o.x, o.y - (o.ph === 'rope' ? 34 : 52)); g.globalAlpha = 1;
 }
 function drawWreck(w) {   // 버린 탈것(빙글빙글 떨어진다, 그을려 어둡게)
-  const im = cb.img ? cb.img(w.k === 'plane' ? 'ship-' + (cb.frame || 'falcon') : 'boss-' + w.k) : null;
+  const im = cb.img ? cb.img(w.k === 'plane' ? 'ship-' + (cb.frame || 'falcon') : w.k === 'bird' ? (Math.floor(t * 8) % 2 ? 'esc-bird1' : 'esc-bird2') : 'boss-' + w.k) : null;
   g.save(); g.translate(w.x, w.y); g.rotate(w.rot); g.filter = w.k === 'bird' ? 'none' : 'brightness(0.55)';
-  if (im && w.k !== 'bird') { g.rotate(w.k === 'plane' ? Math.PI / 2 : -Math.PI / 2); const s = w.k === 'plane' ? 72 : 120; g.drawImage(im, -s / 2, -s / 2, s, s); }
+  if (im && w.k === 'bird') g.drawImage(im, -55, -55, 110, 110);
+  else if (im) { g.rotate(w.k === 'plane' ? Math.PI / 2 : -Math.PI / 2); const s = w.k === 'plane' ? 72 : 120; g.drawImage(im, -s / 2, -s / 2, s, s); }
   else { g.fillStyle = w.k === 'bird' ? '#e8d8b8' : w.k === 'plane' ? '#4cc9ff' : '#7a8696'; g.beginPath(); g.ellipse(0, 0, 32, 15, 0, 0, TAU); g.fill(); }
   g.filter = 'none'; g.restore();
 }

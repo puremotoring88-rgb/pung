@@ -221,6 +221,8 @@
   #escape .esRk div.me { outline: 2px solid #ffd166; }
   #escape .esRk i { opacity: .6; font-size: .8em; }
   #escape .esRes .row .hidden { display: none; }
+  #escape .esPilot { width: calc(var(--u) * 26); height: calc(var(--u) * 26); object-fit: contain; display: block; margin: 0 auto calc(var(--u) * -2); animation: esBob 2s ease-in-out infinite; }
+  @keyframes esBob { 50% { transform: translateY(-6px); } }
   #escape .esStars { font-size: calc(var(--u) * 10); letter-spacing: calc(var(--u) * 1); }
   #escape .esStars span { display: inline-block; filter: grayscale(1) brightness(.4); }
   #escape .esStars span.on { filter: none; animation: esStar .5s both; }
