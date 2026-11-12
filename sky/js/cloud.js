@@ -1,15 +1,26 @@
 // 볼트윙 — 계정(아이디·비밀번호)으로 기록 이어 하기. 기기가 바뀌어도 로그인하면 이어서 한다.
 // 서버(Supabase)의 acct_* 함수로만 오간다(server/ranking.sql 3번). 비밀번호는 서버에서 bcrypt로 바꿔 저장한다.
 // 다른 기기에서 그사이 저장했으면 덮어쓰지 않고 어느 기록을 쓸지 묻는다.
+// 게임은 로그인해야 할 수 있다(첫 화면의 로그인 문). "로그인 유지"를 고르지 않으면 창을 닫을 때 로그아웃된다.
+// 이 기기의 기록이 누구 것인지(OWN) 적어 두고, 다른 아이디로 들어오면 섞지 않는다. 로그아웃하면 이 기기 기록을 비운다(계정에 있으니까).
 window.Cloud = (() => {
 'use strict';
 const URL = 'https://karluttarljwyutztbgx.supabase.co';
 const KEY = 'sb_publishable_oT_Z6aYJ3uDZxcJeF3ArIA_4ivykkte';
 const AK = 'boltwing.acct';   // 로그인 정보(아이디·접속표). 기록(S)과 따로 둬서 저장 코드에 섞이지 않게
-let lastId = '', getS, saveKey, canReload, sfx, onUi, acct = null, timer = null, busy = false, msg = '', choose = null;
+const OWN = 'boltwing.owner';   // 이 기기 기록의 주인 { uid, at, dirty }
+let leaving = false, lastId = '', getS, saveKey, canReload, sfx, onUi, acct = null, timer = null, busy = false, msg = '', choose = null;
 
-const read = () => { try { return JSON.parse(localStorage.getItem(AK) || 'null'); } catch (e) { return null; } };
-const store = () => { try { if (acct) localStorage.setItem(AK, JSON.stringify(acct)); else localStorage.removeItem(AK); } catch (e) { /* 무시 */ } };
+const read = () => { try { return JSON.parse(localStorage.getItem(AK) || sessionStorage.getItem(AK) || 'null'); } catch (e) { return null; } };
+const owner = () => { try { return JSON.parse(localStorage.getItem(OWN) || 'null'); } catch (e) { return null; } };
+const store = () => {
+  try {
+    localStorage.removeItem(AK); sessionStorage.removeItem(AK);
+    if (!acct) return;
+    (acct.keep ? localStorage : sessionStorage).setItem(AK, JSON.stringify(acct));
+    localStorage.setItem(OWN, JSON.stringify({ uid: acct.uid, at: acct.at || null, dirty: !!acct.dirty }));
+  } catch (e) { /* 무시 */ }
+};
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const why = e => {
   const m = String(e && e.message || e);
@@ -29,6 +40,7 @@ function kicked() { if (acct) lastId = acct.uid; acct = null; store(); msg = '�
 function init(o) {
   getS = o.getS; saveKey = o.saveKey; canReload = o.canReload || (() => true); sfx = o.sfx || (() => {}); onUi = o.onUi;
   acct = read();
+  if (acct) { if (acct.keep === undefined) acct.keep = true; store(); }   // 이 기능 전에 로그인해 둔 기기는 유지
   if (acct) check(!!acct.dirty);   // 앱을 열 때 저절로 하는 저장보다 먼저, 이 기기에 안 올린 기록이 있었는지를 기준으로
   document.addEventListener('visibilitychange', () => { if (!acct) return; if (document.hidden) push(true); else if (canReload()) check(); });
   window.addEventListener('pagehide', () => { if (acct) push(true); });
@@ -53,7 +65,7 @@ async function push(keepalive) {
 function apply(save, at) {   // 계정 기록으로 바꾸고 다시 연다
   try { localStorage.setItem(saveKey, JSON.stringify(save)); } catch (e) { /* 무시 */ }
   acct.at = at; acct.dirty = false; acct.last = Date.now(); store();
-  location.reload();
+  leaving = true; location.reload();
 }
 // 서버 기록과 맞춰 보기
 async function check(wasDirty) {
@@ -71,27 +83,46 @@ async function check(wasDirty) {
     } else if (acct.dirty) await push();
   } catch (e) { msg = '☁️ ' + why(e); ui(); }
 }
-async function enter(kind, id, pw) {
+function startFresh() {   // 이 기기 기록을 비우고 새로 시작(다시 열면 빈 기록이 계정에 올라간다)
+  try { localStorage.removeItem(saveKey); } catch (e) { /* 무시 */ }
+  acct.at = null; acct.dirty = true; store();
+  leaving = true; location.reload();
+}
+async function enter(kind, id, pw, keep) {
+  if (busy) return;
   id = String(id || '').trim().toLowerCase(); lastId = id;
   if (!/^[a-z0-9_]{4,16}$/.test(id)) { msg = '아이디는 영어 소문자·숫자·_ 로 4~16글자예요.'; ui(); return; }
   if (String(pw || '').length < 6) { msg = '비밀번호는 6글자 이상이에요.'; ui(); return; }
   msg = kind === 'signup' ? '만드는 중…' : '로그인하는 중…'; ui();
   try {
     const token = await rpc(kind === 'signup' ? 'acct_signup' : 'acct_login', { p_uid: id, p_pw: pw });
-    acct = { uid: id, token, at: null, dirty: true }; store(); msg = '';
-    sfx('part');
-    if (kind === 'signup') { await push(); msg = '계정을 만들고 지금 기록을 올렸어요. 다른 기기에서 이 아이디로 로그인하면 이어서 할 수 있어요.'; ui(); return; }
-    const r = (await rpc('acct_load', { p_token: token }) || [])[0], S = getS();
-    if (!r || !r.save) { await push(); msg = '로그인했어요. 이 기기 기록을 계정에 올렸어요.'; ui(); return; }
-    if (!S.plays && !S.cleared) { apply(r.save, r.save_at); return; }   // 이 기기는 새것이면 바로 계정 기록으로
+    const own = owner(), S = getS(), mine = !!own && own.uid === id;
+    const legacy = !own && !!(S.plays || S.cleared);   // 계정이 생기기 전부터 이 기기에서 하던 기록
+    acct = { uid: id, token, at: mine ? own.at : null, dirty: mine ? !!own.dirty : true, keep: !!keep };
+    sfx('part'); msg = '';
+    if (own && !mine) {   // 이 기기 기록은 다른 아이디 것: 섞지 않고 내 계정 기록을 받거나 새로 시작
+      const r = kind === 'login' ? (await rpc('acct_load', { p_token: token }) || [])[0] : null;
+      if (r && r.save) apply(r.save, r.save_at); else startFresh();
+      return;
+    }
+    store();
+    if (kind === 'signup') { await push(); msg = legacy ? '계정을 만들고 이 기기에서 하던 기록을 올렸어요.' : '계정을 만들었어요. 즐거운 비행!'; ui(); return; }
+    if (mine) { await check(acct.dirty); ui(); return; }
+    const r = (await rpc('acct_load', { p_token: token }) || [])[0];
+    if (!r || !r.save) { await push(); ui(); return; }
+    if (!legacy) { apply(r.save, r.save_at); return; }   // 이 기기는 새것이면 바로 계정 기록으로
     choose = { save: r.save, at: r.save_at }; ui();
   } catch (e) { msg = why(e); ui(); }
 }
 async function logout() {
   if (!acct) return;
-  await push();
-  const t = acct.token; acct = null; store(); msg = '로그아웃했어요. 기록은 이 기기에도 남아 있어요.'; ui();
-  rpc('acct_logout', { p_token: t }).catch(() => {});
+  acct.dirty = true; await push();   // 마지막 기록을 꼭 올리고 나서
+  if (!acct) return;   // 그사이 다른 기기 로그인으로 나가졌다
+  if (acct.dirty) { msg = '☁️ 아직 계정에 저장하지 못해서 로그아웃하지 않았어요. 인터넷 연결을 확인해 주세요.'; ui(); return; }
+  const t = acct.token; acct = null; store();
+  try { localStorage.removeItem(saveKey); localStorage.removeItem(OWN); } catch (e) { /* 무시 */ }   // 기록은 계정에 있으니 이 기기에서는 비운다
+  rpc('acct_logout', { p_token: t }, true).catch(() => {});
+  leaving = true; location.reload();
 }
 async function passwd() {
   const o = window.prompt('지금 비밀번호'); if (!o) return;
@@ -115,23 +146,27 @@ function render(el) {
     return;
   }
   if (!acct) {
-    add('<b>👤 계정</b> <small>기기가 바뀌어도 이어서 하려면</small>', 'acHead');
+    add('<b>👤 로그인</b> <small>아이디로 들어와서 해요</small>', 'acHead');
     const f = add('', 'acForm');
     const id = document.createElement('input'); id.placeholder = '아이디 (영어 소문자·숫자 4~16)'; id.maxLength = 16; id.autocapitalize = 'none'; id.autocomplete = 'username'; id.spellcheck = false; id.value = lastId;
     const pw = document.createElement('input'); pw.type = 'password'; pw.placeholder = '비밀번호 (6글자 이상)'; pw.maxLength = 64; pw.autocomplete = 'current-password';
     f.append(id, pw);
+    const kp = add('', 'acKeep', 'label'), keep = document.createElement('input'); keep.type = 'checkbox';
+    kp.append(keep, document.createTextNode(' 이 기기에서 로그인 유지 (내 기기일 때만)'));
+    const go = kind => enter(kind, id.value, pw.value, keep.checked);
+    pw.addEventListener('keydown', e => { if (e.key === 'Enter') go('login'); });
     const r = add('', 'acRow');
-    r.append(btn('로그인', () => enter('login', id.value, pw.value), 'main'), btn('새로 만들기', () => enter('signup', id.value, pw.value)));
-    add('이메일·실명은 받지 않아요. 비밀번호를 잊으면 되찾을 수 없으니 잘 기억해 두세요.', 'acNote');
+    r.append(btn('로그인', () => go('login'), 'main'), btn('처음이면 새로 만들기', () => go('signup')));
+    add('이메일·실명은 받지 않아요. 비밀번호를 잊으면 되찾을 수 없으니 잘 기억해 두세요. 유지를 고르지 않으면 창을 닫을 때 로그아웃돼요.', 'acNote');
   } else {
     const when = acct.last ? new Date(acct.last).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
     add(`<b>👤 ${esc(acct.uid)}</b> <small>로그인됨 · ${acct.dirty ? '저장 대기 중' : when ? `☁️ ${when} 저장됨` : '☁️ 저장됨'}</small>`, 'acHead');
     const r = add('', 'acRow');
     r.append(btn('☁️ 지금 저장', async () => { acct.dirty = true; await push(); if (!msg) msg = '저장했어요.'; ui(); }, 'main'), btn('비밀번호 바꾸기', passwd), btn('로그아웃', logout));
-    add('기록은 판이 끝나거나 앱을 닫을 때 저절로 계정에 저장돼요. 한 번에 한 기기에서만 로그인돼요.', 'acNote');
+    add('기록은 판이 끝나거나 앱을 닫을 때 저절로 계정에 저장돼요. 한 번에 한 기기에서만 로그인돼요. 로그아웃하면 이 기기의 기록은 비워지고 계정에 남아요.', 'acNote');
   }
   if (msg) add(esc(msg), 'acMsg');
 }
 
-return { init, dirty, render, check, get uid() { return acct && acct.uid; } };
+return { init, dirty, render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; } };
 })();

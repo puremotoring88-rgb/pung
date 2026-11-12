@@ -107,6 +107,10 @@
   .acBtn { flex: 1; font: inherit; font-size: calc(var(--u) * 3.2); font-weight: 800; padding: calc(var(--u) * 2.2) calc(var(--u) * 2); border-radius: calc(var(--u) * 1.6); border: 1px solid rgba(160,200,255,.4); background: rgba(40,70,120,.6); color: #fff; cursor: pointer; }
   .acBtn.main { background: linear-gradient(#3fa0ff, #2160c0); border-color: transparent; }
   .acBtn.wide { flex-basis: 100%; text-align: left; line-height: 1.4; }
+  #gate { z-index: 30; background: radial-gradient(ellipse at 50% 30%, #12305e, #03060e 70%); }
+  #gate .gateLogo { text-align: center; margin-bottom: calc(var(--u) * 2); } #gate .gateLogo b { font-size: calc(var(--u) * 12); } #gate .gateLogo small { display: block; margin-top: calc(var(--u) * 1); }
+  #gate .acct { width: 100%; max-width: calc(var(--u) * 86); }
+  .acKeep { display: flex; align-items: center; gap: .4em; font-size: calc(var(--u) * 3); color: #cfe0f4; } .acKeep input { width: 1.2em; height: 1.2em; }
   .acNote { font-size: calc(var(--u) * 2.9); color: #9fb0c6; line-height: 1.5; } .acMsg { font-size: calc(var(--u) * 3.1); color: #9dffcf; font-weight: 700; margin-top: calc(var(--u) * 1); }
   .rankLine { margin-top: .4em; color: #ffe7a3; } .rankLine small { color: #9fb0c6; }
   .zone { font-style: normal; font-weight: 800; color: var(--c); white-space: nowrap; }
@@ -419,6 +423,11 @@
     <div id="rStats" class="stats"></div>
     <div class="row" id="rBtns"></div>
     <button id="copy" class="btn sub">📋 결과 복사해서 자랑하기</button>
+  </div>
+
+  <div id="gate" class="overlay center hidden">
+    <div class="logo gateLogo"><b>BOLT<i>WING</i></b><small>볼트윙</small></div>
+    <div id="gateBox" class="acct"></div>
   </div>
 </div>
 <script src="js/data.js"></script>

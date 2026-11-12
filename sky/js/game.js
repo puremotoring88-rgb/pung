@@ -22,7 +22,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {} } });
-const VERSION = '0.5';
+const VERSION = '0.6';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -33,7 +33,7 @@ try {
   S.pilot = Object.assign(fresh().pilot, old.pilot || {});
   S.dojo = Object.assign(fresh().dojo, old.dojo || {});
 } catch (e) { /* 저장소를 못 쓰는 환경 */ }
-const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* 무시 */ } if (window.Cloud) Cloud.dirty(); };   // 로그인했으면 계정에도(잠시 모았다가)
+const save = () => { if (window.Cloud && Cloud.leaving) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* 무시 */ } if (window.Cloud) Cloud.dirty(); };   // 로그인했으면 계정에도(잠시 모았다가)
 A.setMusic(S.music); A.setSfx(S.sfx);
 const buzz = ms => { if (S.vib && navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) { /* 진동 없는 기기 */ } } };
 
@@ -2074,7 +2074,7 @@ window.addEventListener('keydown', e => {
   }
   if (e.key === 'p' || e.key === 'Escape') { if (state === 'play') pauseGame(); else if (state === 'pause') resumeGame(); }
   if (state === 'cards' && ['1', '2', '3'].includes(e.key)) { const ids = $('cards').dataset.ids.split(','); if (ids[+e.key - 1]) takeCard(ids[+e.key - 1]); }
-  if (state === 'hangar' && e.key === 'Enter' && document.activeElement.tagName !== 'INPUT') startRun(hangarStage, selMode);
+  if (state === 'hangar' && e.key === 'Enter' && document.activeElement.tagName !== 'INPUT' && $('gate').classList.contains('hidden')) startRun(hangarStage, selMode);
 });
 window.addEventListener('keyup', e => {
   keys[e.key] = false;
@@ -2975,9 +2975,17 @@ Forge.init({
 { const q = new URLSearchParams(location.search).get('room'); if (q) { selMode = 'coop'; joinCode = q.toUpperCase().slice(0, 5); } }   // 초대 링크로 들어오면
 Notice.init();   // 첫 화면의 한 줄·공지·편지
 Rank.init({ S, save, sfx: n => A.sfx(n), ver: VERSION });
-Cloud.init({ getS: () => S, saveKey: SAVE_KEY, canReload: () => state === 'hangar', sfx: n => A.sfx(n), onUi: () => Cloud.render($('acctBox')) });
+// 로그인 문: 로그인하지 않았거나 어느 기록을 쓸지 고르는 중이면 첫 화면을 덮는다
+let gateJoin = !!(joinCode && selMode === 'coop');   // 초대 링크로 왔으면 로그인한 뒤에 방에 들어간다
+const gateUi = () => {
+  const open = !Cloud.uid || Cloud.choosing;
+  $('gate').classList.toggle('hidden', !open);
+  if (open) { Cloud.render($('gateBox')); return; }
+  if (gateJoin) { gateJoin = false; joinRoom(joinCode); }
+};
+Cloud.init({ getS: () => S, saveKey: SAVE_KEY, canReload: () => state === 'hangar', sfx: n => A.sfx(n), onUi: () => { Cloud.render($('acctBox')); gateUi(); } });
 renderHangar();
-if (joinCode && selMode === 'coop') joinRoom(joinCode);
+gateUi();
 SKY.net = () => net; SKY.allies = allies; SKY.host = hostRoom; SKY.join = joinRoom;
 // 자동 출격을 켜 둔 채 나갔다가 다시 열면: 비운 시간만큼 보상
 if (S.idle.on && S.idle.lastSeen && Date.now() - S.idle.lastSeen > 120000) awayReward((Date.now() - S.idle.lastSeen) / 1000, 'hangar');
