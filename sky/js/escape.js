@@ -1,6 +1,6 @@
 // 볼트윙 「탈출 작전」 시험판(로드맵 9-1): 오른쪽으로 나아가는 한 손가락 모드.
 // 비행기(누르면 오름) → 비상 탈출 → 로프(누르면 앞 위의 고리에 걸려 흔들리고, 떼면 날아감) → 새(누르면 날갯짓, 말을 잘 안 들음) → 다시 로프 …
-// 그림은 아직 단순한 도형. 손맛을 먼저 확인하고 그림·탈것은 9-3·9-4에서 더한다.
+// 그림은 보스·기체 그림을 돌려 쓰고, 없으면 도형. 탈것(9-3): 새·거미·고래·기사·코어.
 window.Escape = (() => {
 'use strict';
 const W = 540, H = 960, TAU = Math.PI * 2, GROUND = H - 70;
@@ -49,6 +49,9 @@ function press(v) {
   if (v === hold) return; hold = v; holdT = 0;
   if (st.phase === 'rope') { if (v) shoot(); else letGo(); }
   if (st.phase === 'bird' && v) flap();
+  if (v && st.phase === 'spider') { P.side = -P.side; P.vy = P.side * -200; sfx('flap'); }
+  if (v && st.phase === 'knight' && !(P.dashT > 0) && !(P.dashCd > 0)) { P.dashT = 0.32; P.dashCd = 0.55; P.vy = -430; sfx('release'); }
+  if (v && st.phase === 'core') { P.gdir = -P.gdir; sfx('flap'); }
 }
 // ---------- 로프 ----------
 function shoot() {
@@ -79,8 +82,13 @@ function gen() {
       for (let i = 1; i <= 3; i++) items.push({ k: 'coin', x: x + i * 60, y: y + 230 + Math.sin(i) * 30 });
       if (lv + st.dist / 4000 > 0.6 && Math.random() < 0.35) items.push({ k: 'spike', x: x + rnd(110, 170), y: rnd(430, 620), r: 26 });
       st.genX += rnd(230, 320) + lv * 15;
-    } else {   // 비행기·새: 위아래 기둥 사이 틈
-      const gap = (ph === 'bird' ? 330 : 300) - Math.min(70, lv * 15), gy = rnd(220, GROUND - 120 - gap);
+    } else if (ph === 'spider') {   // 거미: 천장이나 바닥에서 솟은 반쪽 기둥 → 반대쪽으로 옮겨 붙어야 한다
+      const fromTop = Math.random() < 0.5, len = rnd(330, 470);
+      items.push(fromTop ? { k: 'wall', x, top: 0, bot: len, w: 70 } : { k: 'wall', x, top: GROUND - len, bot: GROUND, w: 70 });
+      for (let i = 0; i < 3; i++) items.push({ k: 'coin', x: x + 35, y: fromTop ? GROUND - 40 - i * 40 : 70 + i * 40 });
+      st.genX += rnd(380, 470) - Math.min(60, lv * 15);
+    } else {   // 비행기·새·보스 탈것: 위아래 기둥 사이 틈
+      const gap = ({ bird: 330, whale: 360, knight: 300, core: 320 }[ph] || 300) - Math.min(70, lv * 15), gy = rnd(220, GROUND - 120 - gap);
       items.push({ k: 'wall', x, top: 0, bot: gy, w: 70 }, { k: 'wall', x, top: gy + gap, bot: GROUND, w: 70 });
       for (let i = 0; i < 3; i++) items.push({ k: 'coin', x: x + 35, y: gy + gap * (0.3 + i * 0.2) });
       st.genX += rnd(360, 440) - Math.min(60, lv * 15);
@@ -88,11 +96,28 @@ function gen() {
   }
   items = items.filter(it => it.x > cam - 200 && !it.gone);
 }
-const ORDER = ['plane', 'rope', 'bird', 'rope'];
-function phaseAt(x) {   // 이 자리가 어느 구간인가(구간 경계 미리 계산)
-  if (!st.plan) { st.plan = []; let at = 0; for (let i = 0; i < 40; i++) { const ph = ORDER[i % 4]; const len = { plane: K.segPlane, rope: K.segRope, bird: K.segBird }[ph]; st.plan.push({ ph, from: at, to: at + len }); at += len; } }
+// 탈것: 새와 보스 기계 4종. 판마다 순서가 섞인다(비행기 → 로프 → 탈것 → 로프 → …)
+const RIDES = ['bird', 'spider', 'whale', 'knight', 'core'];
+const RIDE_NM = {
+  bird: ['🐦 새에 올라탔다!', '누르고 있으면 날갯짓(오름) · 떼면 떨어져요 · 말을 잘 안 들어요!'],
+  spider: ['🕷️ 강철 거미에 올라탔다!', '누를 때마다 천장 ↔ 바닥으로 옮겨 붙어요 · 거미는 용암도 견뎌요'],
+  whale: ['🐋 폭풍 고래에 올라탔다!', '누르면 천천히 오르고 떼면 천천히 내려가요 · 기둥은 몸으로 부숴요 · 동전을 빨아들여요'],
+  knight: ['⚔️ 거울 기사에 올라탔다!', '누를 때마다 앞으로 돌진하며 살짝 떠올라요 · 돌진 중엔 기둥을 베어요'],
+  core: ['💠 코어 요새에 올라탔다!', '누를 때마다 중력이 위아래로 뒤집혀요'],
+};
+function phaseAt(x) {   // 이 자리가 어느 구간인가(구간 경계는 판을 시작할 때 정한다)
+  if (!st.plan) {
+    st.plan = []; let at = 0, bag = [];
+    for (let i = 0; i < 40; i++) {
+      let ph = ['plane', 'rope', 'ride', 'rope'][i % 4];
+      if (ph === 'ride') { if (!bag.length) bag = RIDES.slice().sort(() => Math.random() - 0.5); ph = bag.pop(); }
+      const len = ph === 'plane' ? K.segPlane : ph === 'rope' ? K.segRope : K.segBird;
+      st.plan.push({ ph, from: at, to: at + len }); at += len;
+    }
+  }
   const s = st.plan.find(s => x >= s.from && x < s.to); return s ? s.ph : 'rope';
 }
+const isRide = ph => RIDES.includes(ph) && ph !== 'bird';
 // ---------- 한 프레임 ----------
 function loop(now) {
   if (!on) return;
@@ -114,6 +139,19 @@ function update(dt) {
     if (hold && (P.flapT -= dt) <= 0) flap();
     P.vy += K.birdG * dt; P.vx += (speed - 20 - P.vx) * dt * 1.5 + Math.sin(t * 3.1) * 30 * dt;   // 새는 제멋대로 조금씩 흔들린다
     P.tilt = clamp(P.vy / 1200, -0.5, 0.6);
+  } else if (st.phase === 'spider') {   // 거미: 천장(-1)이나 바닥(1)에 붙어 걷는다
+    P.vx = speed * 0.95; P.vy += P.side * 2600 * dt; P.vy = clamp(P.vy, -900, 900);
+    const top = 70, bot = GROUND - 34;
+    if (P.side > 0 && P.y > bot) { P.y = bot; P.vy = 0; } if (P.side < 0 && P.y < top) { P.y = top; P.vy = 0; }
+    P.tilt = 0;
+  } else if (st.phase === 'whale') {   // 고래: 무겁고 느리다
+    P.vx = speed * 0.85; P.vy += (hold ? -900 : 700) * dt; P.vy = clamp(P.vy, -300, 300); P.tilt = P.vy / 1400;
+    for (const it of items) if (it.k === 'coin' && !it.gone) { const dx = P.x - it.x, dy = P.y - it.y, d = Math.hypot(dx, dy); if (d < 170) { it.x += dx / d * 420 * dt; it.y += dy / d * 420 * dt; } }   // 빨아들이기
+  } else if (st.phase === 'knight') {   // 기사: 누를 때마다 돌진
+    if (P.dashT > 0) P.dashT -= dt; if (P.dashCd > 0) P.dashCd -= dt;
+    P.vx = speed * (P.dashT > 0 ? 2.3 : 0.9); P.vy += 1150 * dt; P.vy = clamp(P.vy, -600, 600); P.tilt = P.dashT > 0 ? -0.1 : P.vy / 1500;
+  } else if (st.phase === 'core') {   // 코어: 중력 뒤집기
+    P.vx = speed; P.vy += P.gdir * 1700 * dt; P.vy = clamp(P.vy, -620, 620); P.tilt = 0;
   } else {   // 로프
     P.vy += K.g * dt;
     if (P.rope) {
@@ -140,13 +178,21 @@ function update(dt) {
   // 부딪힘
   for (const it of items) {
     if (it.k === 'coin' && !it.gone && Math.hypot(it.x - P.x, it.y - P.y) < 30) { it.gone = true; st.coins++; sfx('coin'); spark(it.x, it.y, '#ffd166'); }
+    const hr = isRide(st.phase) ? 26 : 18;
+    if (it.k === 'wall' && !it.gone && P.x + hr > it.x && P.x - hr < it.x + it.w && P.y + hr > it.top && P.y - hr < it.bot) {
+      if (st.phase === 'whale' || (st.phase === 'knight' && P.dashT > 0)) {   // 몸으로 부수기 · 베기
+        it.gone = true; sfx('coin'); for (let i = 0; i < 12; i++) parts.push({ x: it.x + 35, y: clamp(P.y, it.top, it.bot) + rnd(-40, 40), vx: rnd(50, 350), vy: rnd(-300, 100), t: 0, life: 0.9, c: '#6b7484', s: rnd(5, 11) });
+        st.coins++; say(st.phase === 'whale' ? '쾅! 부쉈다' : '싹둑!', '#ffd166'); continue;
+      }
+      if (st.inv <= 0) hurt('기둥에 쾅!');
+    }
     if (st.inv > 0) continue;
-    if (it.k === 'wall' && P.x + 18 > it.x && P.x - 18 < it.x + it.w && P.y + 16 > it.top && P.y - 16 < it.bot) hurt('기둥에 쾅!');
     if (it.k === 'spike' && Math.hypot(it.x - P.x, it.y - P.y) < it.r + 16) hurt('가시 공!');
   }
-  if (P.y > GROUND - 14) {
+  if (st.phase === 'core') { if (P.y < 50) { P.y = 50; P.vy = 0; } }
+  if (P.y > GROUND - 14 && st.phase !== 'spider') {
     if (st.phase === 'rope') { hurt('용암에 빠졌다!'); respawn(); }
-    else { P.y = GROUND - 14; P.vy = -380; if (st.inv <= 0) hurt('땅에 쾅!'); }
+    else { P.y = GROUND - 14; P.vy = st.phase === 'core' ? 0 : -380; if (st.inv <= 0) hurt('용암에 닿았다!'); if (st.phase === 'core') { P.gdir = -1; P.vy = -300; } }
   }
   for (const p of parts) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 600 * dt; }
   parts = parts.filter(p => p.t < p.life);
@@ -157,12 +203,16 @@ function changePhase(ph) {
   if (ph === 'rope') {
     for (let i = 0; i < 14; i++) parts.push({ x: P.x, y: P.y, vx: rnd(-200, 100), vy: rnd(-300, 100), t: 0, life: 1.2, c: was === 'bird' ? '#d9c7a8' : '#9aa6b4', s: rnd(4, 9) });
     P.vx = 320; P.vy = -720;
-    banner(was === 'plane' ? '🚨 엔진 고장! 비상 탈출!' : '🐦 새가 지쳤다! 뛰어내려!', st.seen.rope ? '누르면 로프 · 떼면 날아가요' : '누르고 있으면 앞 위 고리에 로프가 걸려 흔들려요 · 떼면 그 힘으로 날아가요');
+    const off = { plane: '🚨 엔진 고장! 비상 탈출!', bird: '🐦 새가 지쳤다! 뛰어내려!', spider: '🕷️ 거미가 멈췄다! 뛰어내려!', whale: '🐋 고래가 잠들었다! 뛰어내려!', knight: '⚔️ 기사가 무릎을 꿇었다! 뛰어내려!', core: '💠 코어가 꺼졌다! 뛰어내려!' };
+    banner(off[was] || '뛰어내려!', st.seen.rope ? '누르면 로프 · 떼면 날아가요' : '누르고 있으면 앞 위 고리에 로프가 걸려 흔들려요 · 떼면 그 힘으로 날아가요');
     // 탈출하자마자 잡을 고리를 하나 둔다
     items.push({ k: 'anchor', x: P.x + 260, y: 170 });
     st.genX = Math.max(st.genX, P.x + 520);
-  } else if (ph === 'bird') {
-    P.vy = -200; banner('🐦 새에 올라탔다!', st.seen.bird ? '누르면 날갯짓' : '누르고 있으면 날갯짓(오름) · 떼면 떨어져요 · 말을 잘 안 들어요!');
+  } else if (RIDE_NM[ph]) {
+    const nm = RIDE_NM[ph]; P.vy = -150; P.side = 1; P.gdir = 1; P.dashT = 0; P.dashCd = 0;
+    banner(nm[0], st.seen[ph] ? nm[1].split(' · ')[0] : nm[1]);
+    // 탈것으로 바뀌는 자리 바로 앞은 비워 둔다(갑자기 기둥에 부딪히지 않게)
+    items = items.filter(it => !(it.k === 'wall' && it.x > P.x - 40 && it.x < P.x + 320));
   } else { P.vy = -100; banner('✈️ 새 비행기를 잡아탔다!', '누르면 올라가요'); }
   st.seen[ph] = true; st.inv = Math.max(st.inv, 1); sfx('phase');
 }
@@ -244,7 +294,14 @@ function wrapText(s, x, y, maxW, lh) { const words = s.split(' '); let line = ''
 function drawHero() {
   if (st.inv > 0 && Math.floor(st.inv * 12) % 2 === 0 && !st.over) return;
   g.save(); g.translate(P.x, P.y);
-  if (st.phase === 'plane') {   // 비행기(나중에 볼트윙 기체 그림으로)
+  const img = k => cb.img ? cb.img(k) : null;
+  if (isRide(st.phase)) { drawRide(st.phase, img('boss-' + st.phase)); g.restore(); return; }
+  const shipIm = st.phase === 'plane' && img('ship-' + (cb.frame || 'falcon'));
+  if (shipIm) {   // 볼트윙 기체 그림(위를 보는 그림을 오른쪽으로 돌림)
+    g.rotate(P.tilt + Math.PI / 2);
+    g.fillStyle = '#ffb347'; g.globalAlpha = 0.85; g.beginPath(); g.ellipse(0, 34 + Math.random() * 6, 7, 14, 0, 0, TAU); g.fill(); g.globalAlpha = 1;
+    g.drawImage(shipIm, -36, -36, 72, 72);
+  } else if (st.phase === 'plane') {   // 그림이 없으면 도형 비행기
     g.rotate(P.tilt);
     g.fillStyle = '#4cc9ff'; g.beginPath(); g.moveTo(34, 0); g.lineTo(-26, -14); g.lineTo(-20, 0); g.lineTo(-26, 14); g.closePath(); g.fill();
     g.fillStyle = '#2a8fc4'; g.beginPath(); g.moveTo(4, 0); g.lineTo(-14, -30); g.lineTo(-22, -30); g.lineTo(-10, 0); g.lineTo(-22, 30); g.lineTo(-14, 30); g.closePath(); g.fill();
@@ -266,6 +323,37 @@ function drawHero() {
     if (sp > 700) { g.strokeStyle = 'rgba(255,255,255,.4)'; g.lineWidth = 2; for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(-14 - i * 6, 10 + i * 6); g.lineTo(-34 - i * 8, 14 + i * 6); g.stroke(); } }
   }
   g.restore();
+}
+// 보스 기계 탈것: 보스 그림(아래를 보는 그림)을 오른쪽으로 돌려 그리고 등에 조종사를 태운다
+function drawRide(ph, im) {
+  const bob = Math.sin(t * 5) * 3, S0 = 120;
+  g.save();
+  if (ph === 'spider' && P.side < 0) g.scale(1, -1);   // 천장에 붙으면 뒤집힌다
+  g.translate(0, bob);
+  if (ph === 'whale' || ph === 'knight') g.rotate(P.tilt);
+  if (ph === 'core') g.rotate(t * 0.8 * P.gdir);
+  if (ph === 'knight' && P.dashT > 0) {   // 돌진 빛 궤적
+    g.fillStyle = 'rgba(200,230,255,.35)'; g.beginPath(); g.moveTo(40, -30); g.lineTo(-140, -14); g.lineTo(-140, 14); g.lineTo(40, 30); g.fill();
+  }
+  if (im) {
+    g.save(); g.rotate(-Math.PI / 2);
+    if (ph === 'spider') g.rotate(Math.sin(t * 14) * 0.05);   // 걸음
+    g.drawImage(im, -S0 / 2, -S0 / 2, S0, S0); g.restore();
+  } else {   // 그림이 없을 때의 도형
+    const col = { spider: '#7a8696', whale: '#4a90c8', knight: '#c8d4e8', core: '#b48cff' }[ph];
+    g.fillStyle = col; g.beginPath();
+    if (ph === 'core') { for (let i = 0; i < 6; i++) { const a = i * TAU / 6; g.lineTo(Math.cos(a) * 44, Math.sin(a) * 44); } }
+    else g.ellipse(0, 0, ph === 'whale' ? 58 : 44, ph === 'whale' ? 30 : 26, 0, 0, TAU);
+    g.fill();
+    if (ph === 'spider') { g.strokeStyle = col; g.lineWidth = 5; for (let i = 0; i < 4; i++) { const x = -30 + i * 20, s = Math.sin(t * 14 + i * 1.6) * 8; g.beginPath(); g.moveTo(x, 10); g.lineTo(x + s, 40); g.stroke(); } }
+    if (ph === 'knight') { g.fillStyle = '#e8f2ff'; g.fillRect(30, -4, 46, 8); }
+    if (ph === 'core') { g.fillStyle = `rgba(255,255,255,${0.5 + Math.sin(t * 6) * 0.3})`; g.beginPath(); g.arc(0, 0, 14, 0, TAU); g.fill(); }
+  }
+  g.restore();
+  // 등에 탄 조종사(거미가 천장에 있으면 아래쪽에 매달림)
+  const py = (ph === 'spider' && P.side < 0 ? 40 : -40) + bob;
+  g.fillStyle = '#ff7a5e'; g.beginPath(); g.arc(-6, py, 10, 0, TAU); g.fill();
+  g.fillStyle = '#ffe0c0'; g.beginPath(); g.arc(-6, py - (P.side < 0 && ph === 'spider' ? -12 : 12), 7, 0, TAU); g.fill();
 }
 function banner(text, sub) { msgs = msgs.filter(m => !m.big); msgs.push({ text, sub, c: '#ffd166', t: 0, life: 3, big: true }); }
 function say(text, c) { msgs.push({ text, c, t: 0, life: 1.1 }); }
