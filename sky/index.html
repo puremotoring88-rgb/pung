@@ -149,6 +149,32 @@
   .eq span.empty { opacity: .35; }
   .eq sup { position: absolute; right: 1px; bottom: -2px; font-size: calc(var(--u) * 2.4); color: #ffd166; }
   .ultLine { color: #ffe7a3; }
+  /* 성장이 보이게: 전투력·성장 단계 */
+  .pvShip { position: relative; cursor: pointer; }
+  .pvShip::after { content: '🔍'; position: absolute; right: calc(var(--u) * 1.5); bottom: calc(var(--u) * 1); font-size: calc(var(--u) * 3); opacity: .6; }
+  .pwr { display: flex; justify-content: space-between; align-items: baseline; gap: calc(var(--u) * 1); }
+  .pwr b { font-size: 1.25em; color: #fff; text-shadow: 0 0 calc(var(--u) * 2) var(--tc); }
+  .pwr em { font-style: normal; font-weight: 700; color: var(--tc); font-size: .9em; }
+  .tierBar { height: calc(var(--u) * 1.2); background: rgba(255,255,255,.12); border-radius: 99px; overflow: hidden; }
+  .tierBar b { display: block; height: 100%; background: var(--tc); box-shadow: 0 0 calc(var(--u) * 2) var(--tc); }
+  .tierNext { opacity: .7; font-size: .82em; }
+  .pwPop { position: absolute; left: 50%; top: 40%; transform: translateX(-50%); font-weight: 800; font-size: calc(var(--u) * 5); color: #ffe066; text-shadow: 0 0 calc(var(--u) * 2) #000, 0 0 calc(var(--u) * 3) #ffb000; pointer-events: none; animation: pwPop 1.3s ease-out forwards; }
+  .pwPop.down { color: #9fb3c8; text-shadow: 0 0 calc(var(--u) * 2) #000; }
+  @keyframes pwPop { 0% { opacity: 0; transform: translate(-50%, 30%) scale(.6); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -120%) scale(1); } }
+  .tierUp { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; background: radial-gradient(circle, color-mix(in srgb, var(--tc) 45%, transparent), transparent 70%); animation: tierUp 2.6s ease forwards; text-align: center; }
+  .tierUp b { font-size: calc(var(--u) * 7); color: #fff; text-shadow: 0 0 calc(var(--u) * 3) var(--tc), 0 0 calc(var(--u) * 1) #000; }
+  .tierUp small, .tierUp span { font-size: calc(var(--u) * 3); color: #fff; text-shadow: 0 0 calc(var(--u) * 1) #000; }
+  @keyframes tierUp { 0% { opacity: 0; transform: scale(1.6); } 12% { opacity: 1; transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+  #growth { position: fixed; inset: 0; z-index: 60; background: rgba(4,8,16,.82); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #growth .gwIn { width: min(100%, calc(var(--u) * 92)); max-height: 100%; overflow: auto; background: linear-gradient(#18243a, #0c1424); border: 1px solid rgba(255,255,255,.15); border-radius: calc(var(--u) * 4); padding: calc(var(--u) * 4); display: flex; flex-direction: column; gap: calc(var(--u) * 1.5); font-size: calc(var(--u) * 3.4); }
+  .gwT { font-size: 1.3em; text-align: center; }
+  .gwShip canvas { width: 100%; height: auto; display: block; background: radial-gradient(circle at 50% 50%, rgba(60,90,140,.55), transparent 70%); border-radius: calc(var(--u) * 3); }
+  .gwList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(var(--u) * .8); }
+  .gwList li { display: grid; grid-template-columns: calc(var(--u) * 3) auto 1fr auto; align-items: center; gap: calc(var(--u) * 1.5); opacity: .45; font-size: .9em; }
+  .gwList li.on { opacity: 1; } .gwList li.now { background: rgba(255,255,255,.08); border-radius: calc(var(--u) * 1.5); }
+  .gwList li i { width: calc(var(--u) * 2.4); height: calc(var(--u) * 2.4); border-radius: 50%; background: var(--tc); box-shadow: 0 0 calc(var(--u) * 1.5) var(--tc); }
+  .gwList li b { color: var(--tc); } .gwList li span { opacity: .8; } .gwList li em { font-style: normal; opacity: .7; }
+  .gwX { margin-top: calc(var(--u) * 1); padding: calc(var(--u) * 2.2); border-radius: calc(var(--u) * 2); border: 0; background: #2c3e5c; color: #fff; font-size: 1em; }
   .stat { display: flex; align-items: center; gap: calc(var(--u) * 1.4); font-size: calc(var(--u) * 2.8); }
   .stat span { width: 3em; opacity: .75; }
   .stat i { flex: 1; height: calc(var(--u) * 1.6); background: rgba(0, 0, 0, .45); border-radius: 99px; overflow: hidden; }

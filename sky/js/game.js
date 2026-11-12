@@ -22,7 +22,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.15';
+const VERSION = '0.16';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -183,6 +183,82 @@ function buildStats() {
   };
 }
 
+// ---------- 성장이 보이게: 전투력과 성장 단계(단계가 오르면 기체 모습이 바뀐다). 숫자는 해 보고 조정 ----------
+const TIERS = [
+  { p: 0, name: '견습', c: '#9fb3c8', fx: '기본 모습' },
+  { p: 680, name: '정비 완료', c: '#7fd8ff', fx: '엔진 불꽃이 커진다' },
+  { p: 820, name: '강화', c: '#4dff9e', fx: '날개 끝에 빛' },
+  { p: 980, name: '정예', c: '#c58bff', fx: '몸 둘레에 빛' },
+  { p: 1160, name: '에이스', c: '#ffb347', fx: '불꽃 꼬리' },
+  { p: 1350, name: '전설', c: '#ff7ad9', fx: '빛 구슬이 돈다' },
+  { p: 1540, name: '신화', c: '#ffd166', fx: '황금 고리' },
+];
+function powerOf(s) {   // 전투력: 화력(초당 피해)·체력·속도·드론·궁극기를 한 숫자로
+  return Math.round(s.dmg * s.rate * 4 + s.maxHp * 1.5 + s.speed * 100 + (s.gun + s.guard + s.seeker) * 40 + s.ult * 60 + s.regen * 30 + s.magnet * 0.3);
+}
+function tierOf(pw) { let k = 0; TIERS.forEach((t, i) => { if (pw >= t.p) k = i; }); return k; }
+let myTierV = 0, lastPow = -1;
+function liveShip(w, h, s, opt = {}) {   // 격납고: 둥실거리며 천천히 몸을 돌리는 기체
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
+  let t0 = 0, last = performance.now();
+  const anim = now => {
+    if (!c.isConnected) return;
+    t0 += Math.min(0.05, (now - last) / 1000); last = now;
+    g.clearRect(0, 0, w, h);
+    const L = myLook(), bank = Math.sin(t0 * (opt.spin || 0.7)) * (opt.tilt || 0.55);
+    drawShipAt(g, S.frame, w / 2, h / 2 - 6 + Math.sin(t0 * 1.6) * 4, s, bank, t0, false, L);
+    if (c.flash > 0) { c.flash -= 0.03; g.globalCompositeOperation = 'lighter'; g.globalAlpha = c.flash; g.drawImage(Art.glow(TIERS[myTierV].c, 60), w / 2 - h * 0.6, h / 2 - h * 0.6, h * 1.2, h * 1.2); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
+    requestAnimationFrame(anim);
+  };
+  requestAnimationFrame(anim); return c;
+}
+function powerLine(pw, tr) {   // 전투력 + 다음 단계까지 막대
+  const T0 = TIERS[tr], T1 = TIERS[tr + 1], k = T1 ? (pw - T0.p) / (T1.p - T0.p) : 1;
+  return `<div class="pwr" style="--tc:${T0.c}"><span>⚡ 전투력 <b>${pw.toLocaleString()}</b></span><em>${T0.name}</em></div>
+    <div class="tierBar" style="--tc:${T0.c}"><b style="width:${Math.round(clamp(k, 0, 1) * 100)}%"></b></div>
+    <small class="tierNext">${T1 ? `다음 「${T1.name}」까지 ${(T1.p - pw).toLocaleString()} · ${T1.fx}` : '최고 단계!'}</small>`;
+}
+function showGrowth() {   // 기체 크게 보기: 천천히 돌고, 단계 목록이 보인다
+  const pw = powerOf(buildStats()), tr = tierOf(pw);
+  const bx = document.createElement('div'); bx.id = 'growth';
+  bx.innerHTML = `<div class="gwIn"><b class="gwT">${frameOf(S.frame).name} · <span style="color:${TIERS[tr].c}">${TIERS[tr].name}</span></b><div class="gwShip"></div>${powerLine(pw, tr)}
+    <ol class="gwList">${TIERS.map((t, i) => `<li class="${i <= tr ? 'on' : ''}${i === tr ? ' now' : ''}" style="--tc:${t.c}"><i></i><b>${t.name}</b><span>${t.fx}</span><em>${t.p ? t.p.toLocaleString() : '-'}</em></li>`).join('')}</ol>
+    <small>무기·부품·연구를 강화하거나 조종사 레벨이 오르면 전투력이 올라요.</small><button class="gwX">닫기</button></div>`;
+  bx.querySelector('.gwShip').append(liveShip(360, 260, 3, { spin: 0.45, tilt: 0.8 }));
+  const close = () => { bx.remove(); A.sfx('click'); };
+  bx.addEventListener('click', e => { if (e.target === bx || e.target.classList.contains('gwX')) close(); });
+  document.body.append(bx); A.sfx('click');
+}
+function growthFx(box, pw) {   // 강화 순간: 전투력 +N, 단계가 오르면 크게 축하
+  const old = lastPow; lastPow = pw;
+  const tr = tierOf(pw); if (old < 0) { myTierV = tr; return; }
+  const up = tr > myTierV; myTierV = tr;
+  if (old < 0 || pw === old) return;
+  const d = pw - old, pop = document.createElement('div'); pop.className = 'pwPop' + (d < 0 ? ' down' : '');
+  pop.textContent = `⚡ ${d > 0 ? '+' : ''}${d.toLocaleString()}`; box.append(pop);
+  const cv = box.querySelector('canvas'); if (cv && d > 0) cv.flash = up ? 1 : 0.5;
+  if (up) { A.sfx('levelup'); const tp = document.createElement('div'); tp.className = 'tierUp'; tp.style.setProperty('--tc', TIERS[tr].c); tp.innerHTML = `<small>성장 단계</small><b>${TIERS[tr].name}</b><span>${TIERS[tr].fx}</span>`; box.append(tp); setTimeout(() => tp.remove(), 2600); }
+  setTimeout(() => pop.remove(), 1300);
+}
+function shipAura(g, tier, t, size, sx) {   // 성장 단계에 따른 빛(몸 뒤)
+  if (tier < 3) return;
+  const c = TIERS[tier].c, k = 0.32 + 0.1 * Math.sin(t * 3);
+  g.globalCompositeOperation = 'lighter'; g.globalAlpha = k;
+  g.drawImage(Art.glow(c, 50), -size * 0.8, -size * 0.8, size * 1.6, size * 1.6);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+}
+function shipTierFx(g, tier, t, size, sx) {   // 성장 단계에 따른 빛(몸 앞)
+  if (tier < 2) return;
+  const c = TIERS[tier].c;
+  g.globalCompositeOperation = 'lighter';
+  const p = 0.7 + 0.3 * Math.sin(t * 6);
+  for (const s of [-1, 1]) g.drawImage(Art.glow(c, 12), s * size * 0.42 * sx - 9 * p, 2 - 9 * p, 18 * p, 18 * p);   // 날개 끝 빛
+  if (tier >= 4) for (let i = 0; i < 3; i++) { const yy = size * 0.45 + ((t * 120 + i * 17) % 40), a = 1 - ((t * 120 + i * 17) % 40) / 40; g.globalAlpha = a; g.drawImage(Art.glow(c, 10), -6 + Math.sin(t * 9 + i) * 4, yy, 12, 12); }   // 불꽃 꼬리
+  g.globalAlpha = 1;
+  if (tier >= 5) for (let i = 0; i < 3; i++) { const a = t * 2.2 + i * TAU / 3, r = size * 0.62; g.drawImage(Art.glow(c, 14), Math.cos(a) * r - 7, Math.sin(a) * r * 0.75 - 7, 14, 14); }   // 도는 빛 구슬
+  if (tier >= 6) { g.strokeStyle = `rgba(255,209,102,${0.35 + 0.25 * Math.sin(t * 4)})`; g.lineWidth = 2.5; g.beginPath(); g.ellipse(0, 0, size * 0.7, size * 0.55, 0, 0, TAU); g.stroke(); }   // 황금 고리
+  g.globalCompositeOperation = 'source-over';
+}
 // 스테이지가 오를수록 적이 단단해지고 탄이 빨라진다
 const diffFor = s => ({
   hp: 1 + 0.32 * (s - 1),
@@ -1554,9 +1630,11 @@ function drawShipAt(g, id, x, y, s, bank, t, withShadow, look) {
   }
   g.save(); g.translate(x, y); g.scale(s, s);
   g.globalCompositeOperation = 'lighter';
-  const fl = 1 + Math.sin(t * 40) * 0.15;
+  const tier = (look && look.tier) || 0, fm = 1 + 0.12 * Math.min(tier, 5);   // 성장 단계: 불꽃이 커진다
+  shipAura(g, tier, t, size, sx); g.globalCompositeOperation = 'lighter';
+  const fl = (1 + Math.sin(t * 40) * 0.15) * fm;
   for (const ex of (id === 'turtle' ? [-27, 27] : id === 'hornet' ? [0] : [-6, 6])) {
-    g.drawImage(Art.glow(fc, 24), ex - 8, 18, 16, 34 * fl);
+    g.drawImage(Art.glow(fc, 24), ex - 8 * fm, 18, 16 * fm, 34 * fl);
     g.drawImage(Art.glow('#fff6c0', 10), ex - 5, 20, 10, 16 * fl);
   }
   g.globalCompositeOperation = 'source-over';
@@ -1573,6 +1651,7 @@ function drawShipAt(g, id, x, y, s, bank, t, withShadow, look) {
   const dc = look && lookOf('decal', look.decal)[2];
   if (dc) { g.font = '15px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(dc, 0, 6); g.textBaseline = 'alphabetic'; }   // 스티커
   g.restore();
+  shipTierFx(g, tier, t, size, sx);
   const tips ={ falcon: 31, turtle: 30, phoenix: 34 }[id];
   if (tips && Math.floor(t * 2.5) % 2 === 0) {
     g.globalCompositeOperation = 'lighter';
@@ -2204,12 +2283,13 @@ function renderHangar() {
   const s2 = buildStats();
   const pv = $('preview'); pv.innerHTML = '';
   const shipBox = document.createElement('div'); shipBox.className = 'pvShip';
-  shipBox.append(shipCanvas(S.frame, 260, 170, 2.2));
-  pv.append(shipBox);
+  shipBox.append(liveShip(260, 170, 2.2)); shipBox.title = '눌러서 크게 보기'; shipBox.addEventListener('click', showGrowth);
+  const pw = powerOf(s2);
+  pv.append(shipBox); growthFx(shipBox, pw);
   const eqIcons = Object.keys(D.SLOTS).map(k => { const p = D.PARTS.find(x => x.id === S.equip[k]); return p ? `<span title="${p.name}">${p.icon}<sup>${S.parts[p.id]}</sup></span>` : '<span class="empty">＋</span>'; }).join('');
   pv.insertAdjacentHTML('beforeend', `<div class="pvInfo"><b>${s2.F.name}</b><span>${s2.Wp.name} Lv ${S.weapons[s2.Wp.id] || 1}</span><div class="eq">${eqIcons}</div>
     ${statBar('체력', s2.maxHp / 230, s2.maxHp)}${statBar('속도', s2.speed / 1.8, Math.round(s2.speed * 100) + '%')}${statBar('화력', s2.dmg * s2.rate / 110, Math.round(s2.dmg * s2.rate))}
-    <div class="ultLine">🌟 ${s2.F.ult.name}</div></div>`);
+    ${powerLine(pw, myTierV)}<div class="ultLine">🌟 ${s2.F.ult.name}</div></div>`);
   const map = $('stageMap'); map.innerHTML = '';
   for (let s = 1; s <= S.maxStage + 2; s++) {
     const open = s <= S.maxStage, bd = D.BOSSES[(s - 1) % 5], stars = S.stars[s] || [], loop = (s - 1) / 5 | 0;
@@ -2629,7 +2709,7 @@ const LOOKS = {
   decal: { name: '🏷️ 스티커', list: [['none', '없음', null, 0], ['star', '별', '⭐', 30], ['bolt', '번개', '⚡', 30], ['heart', '하트', '❤️', 30], ['fire', '불꽃', '🔥', 40], ['flower', '꽃', '🌸', 40], ['cat', '고양이', '🐱', 60], ['crown', '왕관', '👑', 120, 15]] },
 };
 const lookOf = (cat, id) => LOOKS[cat].list.find(x => x[0] === id) || LOOKS[cat].list[0];
-function myLook() { S.look = S.look || {}; return { paint: S.look.paint || 'none', flame: S.look.flame || 'none', trail: S.look.trail || 'none', decal: S.look.decal || 'none' }; }
+function myLook() { S.look = S.look || {}; return { paint: S.look.paint || 'none', flame: S.look.flame || 'none', trail: S.look.trail || 'none', decal: S.look.decal || 'none', tier: myTierV }; }
 const paintCache = {};
 function paintedShip(id, paint) {   // 원래 그림의 밝고 어두운 결은 두고 색만 바꾼다
   const F = frameOf(id), base = IMG['ship-' + id] || Art.ship(id, F.color), hex = lookOf('paint', paint)[2];
@@ -3260,9 +3340,9 @@ function allyHurt(a, dmg) {
 }
 // --- 함께여서 생기는 것: 구출, 연결 빔, 합동 궁극기, 짧은 말 ---
 const DOWN_T = 10, LINK_R = 200, EMOTES = ['👍 좋아!', '🆘 살려줘!', '🙏 고마워!', '➡️ 이쪽으로!', '😂 ㅋㅋㅋ', '🔥 가즈아!'];
-function cleanLook(o) { o = o && typeof o === 'object' ? o : {}; const r = {}; for (const c of Object.keys(LOOKS)) r[c] = LOOKS[c].list.some(x => x[0] === o[c]) ? o[c] : 'none'; return r; }
-const lookStr = L => [L.paint, L.flame, L.trail, L.decal].join('|');
-const lookParse = s => { const [paint, flame, trail, decal] = String(s || '').split('|'); return cleanLook({ paint, flame, trail, decal }); };
+function cleanLook(o) { o = o && typeof o === 'object' ? o : {}; const r = {}; for (const c of Object.keys(LOOKS)) r[c] = LOOKS[c].list.some(x => x[0] === o[c]) ? o[c] : 'none'; r.tier = clamp(o.tier | 0, 0, TIERS.length - 1); return r; }
+const lookStr = L => [L.paint, L.flame, L.trail, L.decal, L.tier || 0].join('|');
+const lookParse = s => { const [paint, flame, trail, decal, tier] = String(s || '').split('|'); return cleanLook({ paint, flame, trail, decal, tier: +tier || 0 }); };
 const shipsAlive = () => [P, ...allies].filter(s => s && !(s.down > 0));
 const segDist = (px, py, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy || 1, k = clamp(((px - a.x) * dx + (py - a.y) * dy) / L, 0, 1); return Math.hypot(px - a.x - dx * k, py - a.y - dy * k); };
 function linkPairs() {   // 가까이 붙어 나는 두 기체 사이에 연결 빔이 생긴다
