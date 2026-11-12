@@ -15,16 +15,19 @@ const K = {
   flyRise: 1700, flySink: 1150, flyMax: 520,   // 비행기
   birdFlap: 400, birdG: 1250, birdEvery: 0.2,  // 새: 누르고 있으면 0.2초마다 날갯짓
   segPlane: 1900, segRope: 2600, segBird: 1900, // 구간 길이(px)
+  stars: [300, 900, 1800],                      // 별 ⭐ 거리(m)
+  trouble: 380,                                 // 비행기 구간이 끝나기 이만큼(px) 앞에서 엔진 고장
 };
 let cv, g, box, cb = {}, on = false, raf = 0, last = 0;
-let st, P, cam, items, hold = false, holdT = 0, msgs, parts, t;
+let st, P, cam, items, hold = false, holdT = 0, msgs, parts, t, wrecks = [];
 
 function start(callbacks) {
   cb = callbacks || {};
   if (!box) build();
   box.classList.remove('hidden'); box.querySelector('.esRes').classList.add('hidden');
   t = 0; cam = 0; items = []; msgs = []; parts = [];
-  st = { phase: 'plane', segEnd: K.segPlane, loop: 0, hearts: 3, inv: 1.5, coins: 0, dist: 0, genX: 600, over: false, hintT: 0, seen: {} };
+  st = { phase: 'plane', segEnd: K.segPlane, loop: 0, hearts: 3, inv: 1.5, coins: 0, dist: 0, genX: 600, over: false, hintT: 0, seen: {}, stars: 0, slow: 0, shake: 0, flash: 0, rides: [], best: cb.best ? cb.best() : 0, passBest: false };
+  wrecks = [];
   P = { x: 160, y: 420, vx: 300, vy: 0, rope: null, flapT: 0, tilt: 0 };
   banner('✈️ 비행 구간', '누르고 있으면 올라가요 · 떼면 내려가요');
   on = true; last = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
@@ -122,7 +125,8 @@ const isRide = ph => RIDES.includes(ph) && ph !== 'bird';
 function loop(now) {
   if (!on) return;
   const dt = Math.min(0.033, (now - last) / 1000); last = now;
-  if (!st.over) update(dt);
+  if (st.slow > 0) st.slow -= dt; if (st.shake > 0) st.shake -= dt; if (st.flash > 0) st.flash -= dt;
+  if (!st.over) update(st.slow > 0 ? dt * 0.35 : dt);   // 비상 탈출 순간은 느린 화면
   draw();
   raf = requestAnimationFrame(loop);
 }
@@ -135,6 +139,12 @@ function update(dt) {
   if (st.phase === 'plane') {
     P.vx = speed; P.vy += (hold ? -K.flyRise : K.flySink) * dt; P.vy = clamp(P.vy, -K.flyMax, K.flyMax);
     P.tilt = P.vy / 1400;
+    const seg = st.plan && st.plan.find(s => P.x >= s.from && P.x < s.to);   // 엔진 고장: 연기·흔들림·경고
+    if (seg && seg.ph === 'plane' && seg.to - P.x < K.trouble) {
+      if (!st.trouble) { st.trouble = true; say('⚠️ 엔진 이상!', '#ffb347'); sfx('alarm'); }
+      P.tilt += Math.sin(t * 40) * 0.08; P.vy += Math.sin(t * 23) * 400 * dt;
+      if (Math.random() < 0.6) parts.push({ x: P.x - 30, y: P.y + rnd(-5, 5), vx: rnd(-140, -60), vy: rnd(-80, -20), t: 0, life: 0.9, c: Math.random() < 0.3 ? '#ff8a3a' : '#555b66', s: rnd(8, 16), smoke: true });
+    } else st.trouble = false;
   } else if (st.phase === 'bird') {
     if (hold && (P.flapT -= dt) <= 0) flap();
     P.vy += K.birdG * dt; P.vx += (speed - 20 - P.vx) * dt * 1.5 + Math.sin(t * 3.1) * 30 * dt;   // 새는 제멋대로 조금씩 흔들린다
@@ -174,6 +184,19 @@ function update(dt) {
   if (P.y < 30) { P.y = 30; if (P.vy < 0) P.vy = 0; }
   cam += (P.x - W * 0.32 - cam) * Math.min(1, dt * 6);
   st.dist = Math.max(st.dist, Math.floor(P.x / 10));
+  if (st.stars < 3 && st.dist >= K.stars[st.stars]) {   // 별 ⭐
+    st.stars++; banner('⭐'.repeat(st.stars) + ` ${K.stars[st.stars - 1].toLocaleString()} m 돌파!`, st.stars < 3 ? `다음 별까지 ${K.stars[st.stars].toLocaleString()} m` : '별을 모두 모았어요!');
+    sfx('star'); spark(P.x, P.y, '#ffe066', 24);
+  }
+  if (st.best > 50 && !st.passBest && st.dist > st.best) { st.passBest = true; say('🏁 최고 기록 넘었다!', '#9dffcf'); sfx('star'); }
+  for (const w of wrecks) {   // 버린 탈것이 떨어져 용암에서 터진다
+    w.t += dt;
+    if (w.k === 'bird') { w.x += 240 * dt; w.y -= 180 * dt; w.rot = -0.3; if (w.t > 3) w.done = true; continue; }   // 새는 날아가 버린다
+    w.vy += 900 * dt; w.x += w.vx * dt; w.y += w.vy * dt; w.rot += w.vr * dt;
+    if (Math.random() < 0.5) parts.push({ x: w.x, y: w.y, vx: rnd(-60, 20), vy: rnd(-90, -30), t: 0, life: 0.8, c: '#4a4f58', s: rnd(8, 14), smoke: true });
+    if (w.y > GROUND && !w.done) { w.done = true; sfx('boom'); st.shake = 0.35; spark(w.x, GROUND - 10, '#ff8a3a', 26); spark(w.x, GROUND - 10, '#ffe066', 14); }
+  }
+  wrecks = wrecks.filter(w => !w.done);
   gen();
   // 부딪힘
   for (const it of items) {
@@ -194,12 +217,17 @@ function update(dt) {
     if (st.phase === 'rope') { hurt('용암에 빠졌다!'); respawn(); }
     else { P.y = GROUND - 14; P.vy = st.phase === 'core' ? 0 : -380; if (st.inv <= 0) hurt('용암에 닿았다!'); if (st.phase === 'core') { P.gdir = -1; P.vy = -300; } }
   }
-  for (const p of parts) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 600 * dt; }
+  for (const p of parts) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.smoke ? -40 : 600) * dt; if (p.smoke) p.s += 14 * dt; }
   parts = parts.filter(p => p.t < p.life);
   for (const m of msgs) m.t += dt; msgs = msgs.filter(m => m.t < m.life);
 }
 function changePhase(ph) {
   const was = st.phase; st.phase = ph; P.rope = null;
+  if (ph === 'rope' && was !== 'rope') {   // 타던 것을 버린다: 느린 화면 + 번쩍 + 떨어지는 잔해
+    wrecks.push({ k: was, x: P.x, y: P.y, vx: P.vx * 0.5, vy: -120, rot: P.tilt || 0, vr: rnd(1.5, 3) * (Math.random() < 0.5 ? -1 : 1), t: 0, side: P.side, gdir: P.gdir });
+    st.slow = was === 'plane' ? 0.7 : 0.45; st.flash = 0.25; st.shake = 0.2;
+  }
+  if (RIDES.includes(ph) && !st.rides.includes(ph)) st.rides.push(ph);
   if (ph === 'rope') {
     for (let i = 0; i < 14; i++) parts.push({ x: P.x, y: P.y, vx: rnd(-200, 100), vy: rnd(-300, 100), t: 0, life: 1.2, c: was === 'bird' ? '#d9c7a8' : '#9aa6b4', s: rnd(4, 9) });
     P.vx = 320; P.vy = -720;
@@ -230,10 +258,17 @@ function hurt(why) {
 function gameOver() {
   st.over = true; on = true;
   const scrap = Math.floor(st.dist / 60) + st.coins;
-  const best = cb.best ? cb.best(st.dist) : 0;
-  if (cb.gain) cb.gain(scrap, st.dist);
+  const best = st.best, starBonus = [0, 10, 25, 50][st.stars];
+  if (cb.gain) cb.gain(scrap + starBonus, st.dist, st.stars);
   const r = box.querySelector('.esRes'); r.classList.remove('hidden');
-  r.querySelector('.esStat').innerHTML = `<div class="big">${st.dist.toLocaleString()} m</div><div>🪙 ${st.coins} · 🔩 고철 +${scrap}</div>${best && st.dist >= best ? '<div class="rec">🏆 최고 기록!</div>' : best ? `<div>최고 ${best.toLocaleString()} m</div>` : ''}`;
+  const RI = { bird: '🐦', spider: '🕷️', whale: '🐋', knight: '⚔️', core: '💠' };
+  const next = K.stars.find(s => s > st.dist);
+  r.querySelector('.esStat').innerHTML = `<div class="esStars">${[0, 1, 2].map(i => `<span class="${i < st.stars ? 'on' : ''}" style="animation-delay:${0.2 + i * 0.25}s">⭐</span>`).join('')}</div>
+    <div class="big">${st.dist.toLocaleString()} m</div>
+    <div>🪙 ${st.coins} · 🔩 고철 +${scrap}${starBonus ? ` <b>+ 별 보너스 ${starBonus}</b>` : ''}</div>
+    ${st.rides.length ? `<div>타 본 탈것 ${st.rides.map(k => RI[k]).join(' ')}</div>` : ''}
+    ${st.dist > best && best > 0 ? `<div class="rec">🏆 최고 기록! (지난 최고 ${best.toLocaleString()} m)</div>` : !best ? '<div class="rec">🏁 첫 기록!</div>' : `<div>최고 ${best.toLocaleString()} m · ${(best - st.dist).toLocaleString()} m 모자라요</div>`}
+    ${next ? `<small>다음 별: ${next.toLocaleString()} m</small>` : ''}`;
 }
 function finish(quit) { if (!st || st.over) { close(); return; } if (quit) { st.hearts = 0; gameOver(); } }
 // ---------- 그리기 ----------
@@ -245,7 +280,7 @@ function draw() {
     for (let x = 0; x <= W; x += 20) { const wx = x + cam * k; g.lineTo(x, base - Math.abs(Math.sin(wx / 160)) * amp - Math.sin(wx / 53) * 12); }
     g.lineTo(W, H); g.fill();
   }
-  g.save(); g.translate(-cam, 0);
+  g.save(); g.translate(-cam + (st.shake > 0 ? rnd(-8, 8) : 0), st.shake > 0 ? rnd(-6, 6) : 0);
   // 용암 바닥
   const lg = g.createLinearGradient(0, GROUND, 0, H); lg.addColorStop(0, '#ff7a2a'); lg.addColorStop(1, '#8a1c08');
   g.fillStyle = lg; g.fillRect(cam - 10, GROUND, W + 20, H - GROUND);
@@ -270,12 +305,25 @@ function draw() {
       g.restore();
     }
   }
+  if (st.best > 50 && st.best * 10 > cam - 60 && st.best * 10 < cam + W + 60) {   // 🏁 내 최고 기록 자리
+    const bx = st.best * 10;
+    g.strokeStyle = '#e6eefa'; g.lineWidth = 4; g.beginPath(); g.moveTo(bx, GROUND); g.lineTo(bx, GROUND - 260); g.stroke();
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) { g.fillStyle = (i + j) % 2 ? '#111' : '#fff'; g.fillRect(bx + i * 14, GROUND - 260 + j * 14 + Math.sin(t * 5 + i) * 3, 14, 14); }
+    g.fillStyle = '#e6eefa'; g.font = '800 18px sans-serif'; g.textAlign = 'left'; g.fillText(`최고 ${st.best.toLocaleString()} m`, bx + 6, GROUND - 270);
+  }
+  for (const w of wrecks) drawWreck(w);
   if (P.rope) { g.strokeStyle = '#f4e3b5'; g.lineWidth = 3; g.beginPath(); g.moveTo(P.rope.a.x, P.rope.a.y); g.lineTo(P.x, P.y); g.stroke(); }
   if (P.miss > 0) { g.strokeStyle = `rgba(255,180,180,${P.miss * 3})`; g.lineWidth = 2; g.beginPath(); g.moveTo(P.x, P.y); g.lineTo(P.x + 160, P.y - 260); g.stroke(); }
   drawHero();
-  for (const p of parts) { g.globalAlpha = 1 - p.t / p.life; g.fillStyle = p.c; g.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s); }
+  for (const p of parts) {
+    g.globalAlpha = (1 - p.t / p.life) * (p.smoke ? 0.55 : 1); g.fillStyle = p.c;
+    if (p.smoke) { g.beginPath(); g.arc(p.x, p.y, p.s / 2, 0, TAU); g.fill(); } else g.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
+  }
   g.globalAlpha = 1;
   g.restore();
+  if (st.flash > 0) { g.fillStyle = `rgba(255,240,220,${st.flash * 2.4})`; g.fillRect(0, 0, W, H); }
+  if (st.slow > 0) { g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, 0, W, 50); g.fillRect(0, H - 50, W, 50); }   // 느린 화면 띠
+  g.fillStyle = '#ffe066'; g.font = '22px sans-serif'; g.textAlign = 'left'; g.fillText('⭐'.repeat(st.stars) + '☆'.repeat(3 - st.stars), 24, 120);
   // 화면 위 글자
   g.textAlign = 'left'; g.fillStyle = '#fff'; g.font = '800 30px sans-serif'; g.fillText(`${st.dist.toLocaleString()} m`, 24, 56);
   g.font = '600 20px sans-serif'; g.fillText(`🪙 ${st.coins}`, 24, 88);
@@ -354,6 +402,13 @@ function drawRide(ph, im) {
   const py = (ph === 'spider' && P.side < 0 ? 40 : -40) + bob;
   g.fillStyle = '#ff7a5e'; g.beginPath(); g.arc(-6, py, 10, 0, TAU); g.fill();
   g.fillStyle = '#ffe0c0'; g.beginPath(); g.arc(-6, py - (P.side < 0 && ph === 'spider' ? -12 : 12), 7, 0, TAU); g.fill();
+}
+function drawWreck(w) {   // 버린 탈것(빙글빙글 떨어진다, 그을려 어둡게)
+  const im = cb.img ? cb.img(w.k === 'plane' ? 'ship-' + (cb.frame || 'falcon') : 'boss-' + w.k) : null;
+  g.save(); g.translate(w.x, w.y); g.rotate(w.rot); g.filter = w.k === 'bird' ? 'none' : 'brightness(0.55)';
+  if (im && w.k !== 'bird') { g.rotate(w.k === 'plane' ? Math.PI / 2 : -Math.PI / 2); const s = w.k === 'plane' ? 72 : 120; g.drawImage(im, -s / 2, -s / 2, s, s); }
+  else { g.fillStyle = w.k === 'bird' ? '#e8d8b8' : w.k === 'plane' ? '#4cc9ff' : '#7a8696'; g.beginPath(); g.ellipse(0, 0, 32, 15, 0, 0, TAU); g.fill(); }
+  g.filter = 'none'; g.restore();
 }
 function banner(text, sub) { msgs = msgs.filter(m => !m.big); msgs.push({ text, sub, c: '#ffd166', t: 0, life: 3, big: true }); }
 function say(text, c) { msgs.push({ text, c, t: 0, life: 1.1 }); }

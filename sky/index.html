@@ -216,6 +216,10 @@
   #escape .esRes .big { font-size: calc(var(--u) * 12); font-weight: 900; color: #ffd166; }
   #escape .esRes .rec { color: #ffd166; font-weight: 800; }
   #escape .esRes small { opacity: .6; font-size: calc(var(--u) * 3); }
+  #escape .esStars { font-size: calc(var(--u) * 10); letter-spacing: calc(var(--u) * 1); }
+  #escape .esStars span { display: inline-block; filter: grayscale(1) brightness(.4); }
+  #escape .esStars span.on { filter: none; animation: esStar .5s both; }
+  @keyframes esStar { from { transform: scale(2.4) rotate(-40deg); opacity: 0; } to { transform: none; opacity: 1; } }
   /* 성장이 보이게: 전투력·성장 단계 */
   .pvShip { position: relative; cursor: pointer; }
   .pvShip::after { content: '🔍'; position: absolute; right: calc(var(--u) * 1.5); bottom: calc(var(--u) * 1); font-size: calc(var(--u) * 3); opacity: .6; }

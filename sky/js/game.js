@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.23';
+const VERSION = '0.24';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -2562,7 +2562,7 @@ function renderHangar() {
     mb.append(b);
   }
   const M = MODES.find(m => m.id === selMode);
-  const rec = { escape: `최고 ${(S.records.escape || 0).toLocaleString()} m`, stage: `최고 스테이지 ${S.cleared} · 별 ★${starCount()}`, endless: `최고 WAVE ${S.records.wave} · 최고 점수 ${S.records.endlessScore.toLocaleString()}`,
+  const rec = { escape: `최고 ${(S.records.escape || 0).toLocaleString()} m · ${'⭐'.repeat(S.records.escapeStars || 0)}${'☆'.repeat(3 - (S.records.escapeStars || 0))}`, stage: `최고 스테이지 ${S.cleared} · 별 ★${starCount()}`, endless: `최고 WAVE ${S.records.wave} · 최고 점수 ${S.records.endlessScore.toLocaleString()}`,
     rush: `최고 ${S.records.rush} / 5${S.records.rushTime ? ` · 최단 ${fmt(S.records.rushTime)}` : ''}`, auto: `구역 ${S.idle.zone} · 최고 ${S.idle.best} · 💰${Forge.fmt(S.forge.gold)} · 최고 표창 Lv ${S.forge.maxLv} · ✨ 별조각 ${S.forge.shards}` }[selMode];
   $('modeInfo').innerHTML = `<b>${M.icon} ${M.name}</b><br>${M.desc}<br><small>📊 ${rec || `열린 단계 ${S.dojo.open} / 8`}</small>`;
   { const nt = nextOpenTip(); if (nt) $('modeInfo').insertAdjacentHTML('beforeend', `<div class="nextOpen">${nt}</div>`); }
@@ -2882,12 +2882,12 @@ $('go').addEventListener('click', () => {
 });
 function startEscape() {   // 탈출 작전(js/escape.js)
   $('hangar').classList.add('hidden'); A.music('stage', 0);
-  const SND = { rope: 'tap', release: 'click', flap: 'tap', coin: 'scrap', hurt: 'hurt', phase: 'warning' };
+  const SND = { rope: 'tap', release: 'click', flap: 'tap', coin: 'scrap', hurt: 'hurt', phase: 'click', alarm: 'warning', boom: 'boomL', star: 'levelup' };
   Escape.start({
     sfx: k => A.sfx(SND[k] || 'click'),
     img: k => IMG[k] || null, frame: S.frame,
     best: () => S.records.escape || 0,
-    gain: (sc, dist) => { S.scrap += sc; S.records.escape = Math.max(S.records.escape || 0, dist); S.plays++; dcount('runs'); weekRoll(); S.week.pts += 1 + (dist >= 800 ? 1 : 0) + (dist >= 2000 ? 1 : 0); save(); },
+    gain: (sc, dist, stars) => { S.records.escapeStars = Math.max(S.records.escapeStars || 0, stars || 0); S.scrap += sc; S.records.escape = Math.max(S.records.escape || 0, dist); S.plays++; dcount('runs'); weekRoll(); S.week.pts += 1 + (stars || 0); save(); },
     home: () => showHangar(),
   });
 }
