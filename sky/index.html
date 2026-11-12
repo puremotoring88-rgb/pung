@@ -206,6 +206,16 @@
   .wkCell.ok { opacity: 1; background: rgba(255,209,102,.25); box-shadow: 0 0 0 2px #ffd166 inset; }
   .wkCell.got { opacity: 1; background: rgba(110,227,122,.15); } .wkCell.got span { color: #6ee37a; }
   .wkGain { margin-top: calc(var(--u) * 1.5); color: #ffd166; font-weight: 700; } .wkGain small { color: #cfe0f5; font-weight: 400; }
+  /* 탈출 작전(시험판) */
+  #escape { position: absolute; inset: 0; z-index: 40; }
+  #escape.hidden { display: none; }
+  #escape canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #escape .esQuit { position: absolute; top: calc(var(--u) * 2); right: calc(var(--u) * 2); width: calc(var(--u) * 9); height: calc(var(--u) * 9); border-radius: 50%; border: 0; background: rgba(0,0,0,.4); color: #fff; font-size: calc(var(--u) * 4); }
+  #escape .esRes { position: absolute; inset: 0; background: rgba(4,8,16,.82); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--u) * 3); text-align: center; font-size: calc(var(--u) * 4); }
+  #escape .esRes.hidden { display: none; }
+  #escape .esRes .big { font-size: calc(var(--u) * 12); font-weight: 900; color: #ffd166; }
+  #escape .esRes .rec { color: #ffd166; font-weight: 800; }
+  #escape .esRes small { opacity: .6; font-size: calc(var(--u) * 3); }
   /* 성장이 보이게: 전투력·성장 단계 */
   .pvShip { position: relative; cursor: pointer; }
   .pvShip::after { content: '🔍'; position: absolute; right: calc(var(--u) * 1.5); bottom: calc(var(--u) * 1); font-size: calc(var(--u) * 3); opacity: .6; }
@@ -535,6 +545,7 @@
 <script src="js/cloud.js"></script>
 <script src="js/notice.js"></script>
 <script src="js/lobby.js"></script>
+<script src="js/escape.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

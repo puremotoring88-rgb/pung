@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.20';
+const VERSION = '0.21';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -206,6 +206,7 @@ const MODES = [
   { id: 'auto', icon: '⭐', name: '표창 공방', go: '공방 열기 ▶', desc: '넓은 들판에서 로봇을 직접 몰아 싸웁니다. 로봇은 쏘지 않아요! 가장 좋은 표창들이 둘레를 돌며 닿는 적을 베니, 로봇을 몰아 적에게 들이대세요. 🌀 던지기(X키)로 표창을 쭉 퍼뜨렸다 거둘 수 있어요. 적을 쓰러뜨릴수록 표창이 생겨 쌓입니다. 40초를 버티면 대장 등장! 쓰러뜨리면 정비 시간에 쌓인 표창을 몰아서 합쳐요(같은 단계 둘 → 한 단계 위). 적을 많이 쓰러뜨리면 표창 폭풍. 꺼 두어도 비운 시간만큼 금화를 받아요(최대 8시간, 절반 속도). 구역 10을 넘기면 환생해서 영원히 강해집니다.' },
 ];
 MODES.push({ id: 'dojo', icon: '🎵', name: '리듬 도장', go: '리듬 결투 ▶', desc: '비행은 쉬고 리듬 게임만! 8가지 장르 곡 중에 골라, 4줄로 떨어지는 음표를 박자에 맞춰 누릅니다. B 랭크 이상이면 다음 단계가 열립니다.' });
+MODES.push({ id: 'escape', icon: '🪂', name: '탈출 작전', go: '탈출 시작 ▶', desc: '(시험판) 오른쪽으로 나아가요! 비행기 → 비상 탈출 → 로프로 흔들며 이동 → 새를 타고 … 누르기 하나로 합니다. 손맛을 시험하는 중이라 그림은 단순해요.' });
 MODES.push({ id: 'coop', icon: '🤝', name: '친구와 함께', go: '함께 출격 ▶', desc: '친구 1~2명과 같은 하늘에서 함께 싸웁니다. 한 명이 방을 만들고 코드나 초대 링크를 보내면 됩니다. 휴대폰과 PC가 섞여도 됩니다.' });
 let selMode = 'stage', dojoLv = 1;
 const STAR_RULES = ['클리어', '체력 절반 이상 남기고 클리어', '콤보 30 이상 만들기'];
@@ -427,6 +428,7 @@ const OPENS = [
   { k: 'mode:dojo', icon: '🎵', name: '리듬 도장', need: { cleared: 3 }, tip: '비행은 쉬고 리듬 게임만! 곡 8개.' },
   { k: 'tab:rank', icon: '🏆', name: '랭킹', need: { cleared: 3 }, tip: '다른 조종사들과 점수를 겨뤄요.' },
   { k: 'mode:auto', icon: '⭐', name: '표창 공방', need: { cleared: 4 }, tip: '로봇을 직접 몰아 표창으로 베는 넓은 들판.' },
+  { k: 'mode:escape', icon: '🪂', name: '탈출 작전(시험판)', need: { cleared: 3 }, tip: '누르기 하나로 로프를 걸어 흔들며 나아가는 새 모드!' },
   { k: 'mode:rush', icon: '👑', name: '보스 러시', need: { cleared: 5 }, tip: '보스 다섯을 쉬지 않고 연달아!' },
 ];
 const openCond = o => S.plays >= (o.need.plays || 0) && S.cleared >= (o.need.cleared || 0);
@@ -2522,7 +2524,7 @@ function renderHangar() {
     mb.append(b);
   }
   const M = MODES.find(m => m.id === selMode);
-  const rec = { stage: `최고 스테이지 ${S.cleared} · 별 ★${starCount()}`, endless: `최고 WAVE ${S.records.wave} · 최고 점수 ${S.records.endlessScore.toLocaleString()}`,
+  const rec = { escape: `최고 ${(S.records.escape || 0).toLocaleString()} m`, stage: `최고 스테이지 ${S.cleared} · 별 ★${starCount()}`, endless: `최고 WAVE ${S.records.wave} · 최고 점수 ${S.records.endlessScore.toLocaleString()}`,
     rush: `최고 ${S.records.rush} / 5${S.records.rushTime ? ` · 최단 ${fmt(S.records.rushTime)}` : ''}`, auto: `구역 ${S.idle.zone} · 최고 ${S.idle.best} · 💰${Forge.fmt(S.forge.gold)} · 최고 표창 Lv ${S.forge.maxLv} · ✨ 별조각 ${S.forge.shards}` }[selMode];
   $('modeInfo').innerHTML = `<b>${M.icon} ${M.name}</b><br>${M.desc}<br><small>📊 ${rec || `열린 단계 ${S.dojo.open} / 8`}</small>`;
   { const nt = nextOpenTip(); if (nt) $('modeInfo').insertAdjacentHTML('beforeend', `<div class="nextOpen">${nt}</div>`); }
@@ -2837,9 +2839,19 @@ $('quit').addEventListener('click', () => { save(); $('pause').classList.add('hi
 $('assistBtn').addEventListener('click', () => { assistOn = !assistOn; A.sfx('click'); renderHangar(); });
 $('go').addEventListener('click', () => {
   A.init(); A.sfx('click');
-  const go = () => startRun(hangarStage, selMode);
+  const go = () => selMode === 'escape' ? startEscape() : startRun(hangarStage, selMode);
   if (!S.seenHelp) { afterHelp = go; $('howto').classList.remove('hidden'); } else go();
 });
+function startEscape() {   // 탈출 작전(js/escape.js)
+  $('hangar').classList.add('hidden'); A.music('stage', 0);
+  const SND = { rope: 'tap', release: 'click', flap: 'tap', coin: 'scrap', hurt: 'hurt', phase: 'warning' };
+  Escape.start({
+    sfx: k => A.sfx(SND[k] || 'click'),
+    best: () => S.records.escape || 0,
+    gain: (sc, dist) => { S.scrap += sc; S.records.escape = Math.max(S.records.escape || 0, dist); S.plays++; dcount('runs'); weekRoll(); S.week.pts += 1 + (dist >= 800 ? 1 : 0) + (dist >= 2000 ? 1 : 0); save(); },
+    home: () => showHangar(),
+  });
+}
 $('awayOk').addEventListener('click', () => { A.sfx('part'); if (showPopup()) return; if ($('away').dataset.resume) { $('away').dataset.resume = ''; state = 'play'; } renderHangar(); });
 // 처음 출격할 때는 하는 법부터
 let afterHelp = null;
