@@ -13,6 +13,14 @@ const SKIES = ['linear-gradient(#2f7fd6, #8fc8f5 40%, #d8efff)', 'linear-gradien
 // 맵 9가지: 0 바다 섬, 1 사막, 2 밤 도시, 3 우주, 4 공장, 5 설원, 6 화산, 7 정글, 8 구름 위 성. 스테이지마다 이 순서로 돈다(보스 5종과 엇갈려 회차마다 다른 조합)
 const THEME_ORDER = [0, 1, 2, 5, 4, 7, 6, 8, 3];
 const themeFor = stage => THEME_ORDER[((stage - 1) % THEME_ORDER.length + THEME_ORDER.length) % THEME_ORDER.length];
+// 0.38 챕터(로드맵 10-1): 맵 하나 = 스테이지 5개(1-1 ~ 1-5). 스테이지 번호는 안에서 1, 2, 3…으로 이어지고 화면에는 「챕터-번호」로 보인다
+const CH = 5, chOf = s => Math.ceil(s / CH), subOf = s => (s - 1) % CH + 1, stLabel = s => `${chOf(s)}-${subOf(s)}`;
+const stageTheme = s => themeFor(chOf(s));   // 스테이지 모드의 맵은 챕터마다
+const lvOf = s => 1 + (s - 1) / 3;            // 난이도 수준(예전 스테이지 번호쯤): 스테이지 3개마다 1씩
+// 스테이지의 끝: 5번째 = 챕터 보스, 3번째 = 보스 선발대(다음 챕터 보스, 체력 절반), 1·2·4번째 = 정예 편대(대장 장갑기 + 호위)
+const stageEnd = s => (subOf(s) === 5 ? 'boss' : subOf(s) === 3 ? 'scout' : 'leader');
+const stageBossIdx = s => (subOf(s) === 5 ? (chOf(s) - 1) % 5 : chOf(s) % 5);
+const END_NM = { boss: '👑 챕터 보스', scout: '⚔️ 보스 선발대', leader: '🛡️ 정예 편대' };
 let skyTheme = -1;
 const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -26,7 +34,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.37';
+const VERSION = '0.38';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -53,7 +61,7 @@ const GOALS = [
   { id: 'kill100', name: '첫 사냥꾼', desc: '적 100대 부수기', val: () => S.stats.kills, need: 100, reward: 40 },
   { id: 'kill1000', name: '하늘의 사냥꾼', desc: '적 1000대 부수기', val: () => S.stats.kills, need: 1000, reward: 160 },
   { id: 'boss5', name: '다섯 보스', desc: '서로 다른 보스 5종 잡기', val: () => S.stats.bossSeen.length, need: 5, reward: 120 },
-  { id: 'stage10', name: '먼 하늘', desc: '스테이지 10 클리어', val: () => S.cleared, need: 10, reward: 200 },
+  { id: 'stage10', name: '먼 하늘', desc: '스테이지 2-5 클리어', val: () => S.cleared, need: 10, reward: 200 },
   { id: 'combo50', name: '연쇄 폭발', desc: '콤보 50 만들기', val: () => S.stats.bestCombo, need: 50, reward: 80 },
   { id: 'escape10', name: '그물 탈출 장인', desc: '그물에서 10번 빠져나오기', val: () => S.stats.escapes, need: 10, reward: 60 },
   { id: 'perfect50', name: '박자 감각', desc: '비트 러시 PERFECT 50번', val: () => S.stats.perfects, need: 50, reward: 80 },
@@ -275,7 +283,7 @@ const MEDALS = [['kill', '⚔️', '처치'], ['five', '🔥', '5번 처치'], [
 function bk() {
   if (!S.book) {   // 도감이 생기기 전 기록에서 채워 넣는다(깬 스테이지의 맵, 만난 보스, 나올 수 있었던 적)
     S.book = { maps: {}, foes: {}, boss: {}, hz: {} };
-    for (let s = 1; s <= Math.min(S.maxStage, 9); s++) if (S.plays) S.book.maps[themeFor(s)] = 1;
+    for (let s = 1; s <= Math.min(S.maxStage, 9); s++) if (S.plays) S.book.maps[stageTheme(s)] = 1;
     (S.stats.bossSeen || []).forEach(i => { const b = D.BOSSES[i % D.BOSSES.length]; if (b) S.book.boss[b.id] = { k: 1, nohit: 0, fast: 0, best: 0 }; });
     if (S.stats.kills > 0) for (const [k, e] of Object.entries(D.ENEMIES)) if ((e.from || 1) <= S.cleared + 1 && k !== 'treasure') S.book.foes[k] = 1;
   }
@@ -386,7 +394,7 @@ function lookSetsBox() {
 // 결과 사진 카드: 맵 그림 위에 내 기체·칭호·점수를 한 장으로
 function photoCard() {
   const c = document.createElement('canvas'); c.width = 720; c.height = 960; const g = c.getContext('2d');
-  const th = run ? run.theme : themeFor(hangarStage), far = Art.far(th);
+  const th = run ? run.theme : stageTheme(hangarStage), far = Art.far(th);
   g.drawImage(far, 0, 0, far.width, Math.min(far.height, far.width * 960 / 720), 0, 0, 720, 960);
   const sh = g.createLinearGradient(0, 0, 0, 960); sh.addColorStop(0, 'rgba(4,8,18,.75)'); sh.addColorStop(0.35, 'rgba(4,8,18,.2)'); sh.addColorStop(0.62, 'rgba(4,8,18,.35)'); sh.addColorStop(1, 'rgba(4,8,18,.92)');
   g.fillStyle = sh; g.fillRect(0, 0, 720, 960);
@@ -446,7 +454,7 @@ const isOpen = k => { if (S.openAll || k === 'tab:sortie' || k === 'tab:settings
 function nextOpenTip() {   // 다음에 열릴 것 한 줄
   const n = OPENS.find(o => !isOpen(o.k)); if (!n) return '';
   const grp = OPENS.filter(o => !isOpen(o.k) && JSON.stringify(o.need) === JSON.stringify(n.need)).map(o => o.icon + ' ' + o.name).join(' · ');
-  return `🔒 ${n.need.cleared ? `스테이지 ${n.need.cleared}를 깨면` : '한 판 해 보면'} 열려요: ${grp}`;
+  return `🔒 ${n.need.cleared ? `스테이지 ${stLabel(n.need.cleared)}를 깨면` : '한 판 해 보면'} 열려요: ${grp}`;
 }
 function unlockCheck() {   // 새로 열린 것이 있으면 축하 창
   S.seenOpen = S.seenOpen || {}; S.newDot = S.newDot || {};
@@ -549,6 +557,7 @@ function shipTierFx(g, tier, t, size, sx) {   // 성장 단계에 따른 빛(몸
   g.globalCompositeOperation = 'source-over';
 }
 // 스테이지가 오를수록 적이 단단해지고 탄이 빨라진다
+const L = () => (run && run.mode === 'stage' ? Math.floor(lvOf(run.stage)) : run ? run.stage : 1);   // 지금 판의 난이도 수준(스테이지 모드는 챕터 번호 대신 lvOf)
 const diffFor = s => ({
   hp: 1 + 0.32 * (s - 1),
   bs: Math.min(1.6, 1 + 0.05 * (s - 1)),
@@ -568,16 +577,17 @@ function startRun(stage, md = 'stage') {
   st = buildStats();
   const assist = md === 'stage' && assistOn && (S.fails || {})[stage] >= 2;
   if (assist) { st.maxHp = Math.round(st.maxHp * 1.25); st.dmg *= 1.25; }
+  const isSt = md === 'stage', th0 = isSt ? stageTheme(stage) : themeFor(stage);   // 스테이지 모드: 챕터 맵·완만한 난이도
   shots = []; foes = []; ebul = []; drops = []; fx = []; texts = []; lasers = []; boss = null; shake = 0; flash = 0;
   run = { stage, t: 0, phase: 'waves', waveDur: 110, spawnT: 1.2, warnT: 0, endT: 0, chain: 0, score: 0, kills: 0, scrapGot: 0, partsGot: [],
-    level: 1, xp: 0, xpNeed: 12, taken: {}, d: diffFor(stage), theme: themeFor(stage), loop: (stage - 1) / 5 | 0,
+    level: 1, xp: 0, xpNeed: 12, taken: {}, d: diffFor(isSt ? lvOf(stage) : stage), theme: th0, loop: isSt ? (chOf(stage) - 1) / 5 | 0 : (stage - 1) / 5 | 0,
     combo: 0, comboT: 0, maxCombo: 0, hits: 0, hurtT: 0, ults: 0,
     rushAt: rnd(42, 58), rush: null, rushDone: false, rushSum: null,
-    banner: { kind: 'stage', title: `STAGE ${stage}`, sub: D.THEMES[themeFor(stage)].name, t: 0, life: 2.6 },
+    banner: { kind: 'stage', title: `STAGE ${isSt ? stLabel(stage) : stage}`, sub: D.THEMES[th0].name + (isSt ? ' · 끝에 ' + END_NM[stageEnd(stage)] : ''), t: 0, life: 2.6 },
     m: { dmg: 1, rate: 1, multi: 0, pierce: 0, drones: 0, magnet: 1, ult: 1, speed: 1, barrier: 0 },
     mode: md, wave: 1, bossCount: 0, nextBoss: 90, bossIdx: 0, startedAt: Date.now(), zone0: stage, assist };
   if (md === 'endless') { run.waveDur = Infinity; run.banner = { kind: 'stage', title: 'WAVE 1', sub: '무한 생존 · 얼마나 버틸까?', t: 0, life: 2.6 }; }
-  if (md === 'rush') { run.d = diffFor(Math.max(3, S.cleared)); run.phase = 'warning'; run.warnT = 2.5; run.rushDone = true; run.banner = { kind: 'boss', title: 'BOSS RUSH', sub: '보스 다섯 연속!', t: 0, life: 2.4 }; }
+  if (md === 'rush') { run.d = diffFor(Math.max(3, lvOf(S.cleared))); run.phase = 'warning'; run.warnT = 2.5; run.rushDone = true; run.banner = { kind: 'boss', title: 'BOSS RUSH', sub: '보스 다섯 연속!', t: 0, life: 2.4 }; }
   run.gateAt = md === 'stage' || md === 'endless' ? 32 : 0; run.treasureAt = md === 'stage' || md === 'endless' ? 80 : 0;
   Forge.show(false); $('forge').classList.remove('rest'); $('fRest').classList.add('hidden'); $('ultBtn').classList.remove('hidden'); cam.x = cam.y = 0;
   if (md === 'auto') { run.d.hp = Math.pow(1.22, stage - 1); run.goldStart = S.forge.earned; run.rushDone = true; run.waveDur = 45; run.rushAt = rnd(15, 30); run.banner = { kind: 'stage', title: `ZONE ${stage}`, sub: '사방에서 온다! 피하면서 싸우자', t: 0, life: 2.6 }; S.idle.on = true; S.idle.lastSeen = Date.now(); keepAwake(true); }
@@ -622,7 +632,7 @@ function say(text, x, y, color, size = 22, life = 1.2) { if (run && run.arena &&
 function addFoe(type, x, y, o) {
   const E = D.ENEMIES[type] || { hp: 1, r: 22, xp: 0, score: 30 }, hp = E.hp * run.d.hp * (run.teamK || 1);   // 함께 하면 적이 튼튼해진다
   const e = Object.assign({ nid: ++foeSeq, type, x, y, vx: 0, vy: 0, r: E.r, hp, maxHp: hp, t: 0, fireT: rnd(0.6, 1.6), flash: 0, xp: E.xp, score: E.score, elite: !!E.elite }, o);
-  const ec = run.dangerT > 0 ? 0.45 : run.stage >= 3 ? Math.min(0.3, 0.04 + 0.025 * run.stage) : 0;
+  const ec = run.dangerT > 0 ? 0.45 : L() >= 3 ? Math.min(0.3, 0.04 + 0.025 * L()) : 0;
   if (type !== 'treasure' && !e.harmless && Math.random() < ec) {   // 정예: 방패(먼저 깎아야 함), 쾌속(빠름), 폭발(부서지면 탄을 뿌림)
     e.mod = pick(['shield', 'swift', 'volatile']); e.xp = Math.ceil(e.xp * 1.5) + 1; e.score *= 2;
     if (e.mod === 'shield') e.sh = e.maxHp * 0.7;
@@ -639,7 +649,7 @@ function fan(x, y, a, n, spread, sp, o) { for (let i = 0; i < n; i++) eShot(x, y
 function ring(x, y, n, off, sp, o) { for (let i = 0; i < n; i++) eShot(x, y, off + TAU * i / n, sp, o); }
 
 function spawnWave() {
-  const s = run.stage, extra = Math.min(3, (s - 1) / 2 | 0);
+  const s = L(), extra = Math.min(3, (s - 1) / 2 | 0);
   const opts = [['line', 3], ['weave', 3], ['column', 2]];
   if (s >= 2) opts.push(['dive', 2], ['turret', 2], ['net', 1.2]);
   if (s >= 3) opts.push(['split', 2]);
@@ -667,6 +677,7 @@ function spawnWave() {
 }
 
 function foeAI(e, dt) {
+  if (e.leader) { leaderAI(e, dt); return; }   // 정예 편대 대장
   if (e.arena) { arenaAI(e, dt); return; }
   if (e.civ) { civAI(e, dt); return; }
   if (e.harmless) { critterAI(e, dt); return; }
@@ -682,11 +693,11 @@ function foeAI(e, dt) {
   switch (e.type) {
     case 'scout':
       e.y += e.vy * dt; e.x += e.vx * dt;
-      if (run.stage >= 2 && !e.shot && e.y > 230) { e.shot = true; if (Math.random() < 0.4) eShot(e.x, e.y, angTo(e), 230); }
+      if (L() >= 2 && !e.shot && e.y > 230) { e.shot = true; if (Math.random() < 0.4) eShot(e.x, e.y, angTo(e), 230); }
       break;
     case 'weaver':
       e.y += 105 * dt; e.x = e.bx + Math.sin(e.t * 2.4 + e.ph) * 95;
-      if (run.stage >= 3 && (e.fireT -= dt) <= 0) { e.fireT = 2.6 / fr; eShot(e.x, e.y, angTo(e), 210, { color: '#c58bff' }); }
+      if (L() >= 3 && (e.fireT -= dt) <= 0) { e.fireT = 2.6 / fr; eShot(e.x, e.y, angTo(e), 210, { color: '#c58bff' }); }
       break;
     case 'diver':
       if (e.mode === 'in') { e.y += 300 * dt; if (e.y >= e.ty) { e.mode = 'wait'; e.w = 0.65; } }
@@ -745,8 +756,9 @@ function foeAI(e, dt) {
 
 // ---------- 보스 ----------
 function spawnBoss() {
-  const idx = run.mode === 'rush' ? run.bossIdx : run.mode === 'endless' ? run.bossCount % 5 : (run.stage - 1) % 5, def = D.BOSSES[idx];
-  const hp = def.hp * run.d.hp * (1 + 0.15 * run.loop) * (run.mode === 'auto' ? 0.35 : 1) * (run.teamK || 1);
+  const idx = run.mode === 'rush' ? run.bossIdx : run.mode === 'endless' ? run.bossCount % 5 : run.mode === 'stage' ? stageBossIdx(run.stage) : (run.stage - 1) % 5, def = D.BOSSES[idx];
+  const scout = run.mode === 'stage' && stageEnd(run.stage) === 'scout';   // 보스 선발대: 다음 챕터 보스를 미리 만난다(체력 절반)
+  const hp = def.hp * run.d.hp * (1 + 0.15 * run.loop) * (run.mode === 'auto' ? 0.35 : 1) * (run.teamK || 1) * (scout ? 0.5 : 1);
   boss = { def, idx, t: 0, x: W / 2, y: -170, entering: true, tm: {}, parts: [], spin: 0, inhale: 0, mirror: 0, stream: 0, tx: W / 2, slash: 0 };
   const lay = { spider: [[0, 70]], whale: [[0, 90]], twins: [[-135, 56], [135, 56]], knight: [[0, 60]], core: [[0, 82]] }[def.id];
   for (const [dx, r] of lay) {
@@ -755,7 +767,7 @@ function spawnBoss() {
   }
   run.hitsAtBoss = run.hits; run.bossStart = run.t;
   A.music('boss', run.theme);
-  run.banner = { kind: 'boss', title: def.name, sub: def.tip, t: 0, life: 3.4 };
+  run.banner = { kind: 'boss', title: (scout ? '선발대 · ' : '') + def.name, sub: scout ? '다음 챕터의 보스가 먼저 왔다! (체력 절반)' : def.tip, t: 0, life: 3.4 };
 }
 
 function addLaser(src, a, warn, dur) { lasers.push({ src, x: src.x, y: src.y, a, warn, dur, w: 26, hit: false }); A.sfx('charge'); }
@@ -919,6 +931,36 @@ function bossAI(dt) {
   }
 }
 
+// 정예 편대(챕터의 1·2·4번째 스테이지 끝): 커다란 대장 장갑기가 버티며 원형 탄·조준 탄을 쏘고 호위기를 부른다. 대장을 쓰러뜨리면 클리어
+const LEADER = { hp: 11, r: 46, scale: 1.75, ring: 2.6, aim: 3.4, call: 9 };   // 체력 배수(장갑기의), 크기, 원형 탄·조준 탄·호위 부르기 간격(초)
+function spawnLeader() {
+  const e = addFoe('tank', W / 2, -80, { ty: 210 });
+  e.leader = true; e.mod = undefined; e.sh = 0; e.r = LEADER.r; e.hp = e.maxHp = e.maxHp * LEADER.hp; e.xp = 10; e.score = 2500 * L();
+  e.ringT = 1.8; e.aimT = 2.6; e.callT = 1;
+  run.leaderE = e; run.hitsAtBoss = run.hits; run.bossStart = run.t;
+  A.music('boss', run.theme);
+  run.banner = { kind: 'boss', title: '정예 편대 출현!', sub: '커다란 대장 장갑기를 쓰러뜨리면 클리어', t: 0, life: 3 };
+}
+function leaderAI(e, dt) {
+  const fr = run.d.fr;
+  e.t += dt;
+  if (e.y < e.ty) e.y += 70 * dt; else e.x = W / 2 + Math.sin(e.t * 0.55) * (W * 0.3);
+  if ((e.ringT -= dt) <= 0) { e.ringT = LEADER.ring / fr; ring(e.x, e.y, 10 + Math.min(6, L()), e.t, 140, { color: '#ff8a5e' }); }
+  if ((e.aimT -= dt) <= 0) { e.aimT = LEADER.aim / fr; fan(e.x, e.y + 20, angTo(e), 3, 0.35, 220, { color: '#ff5d8f' }); }
+  if ((e.callT -= dt) <= 0) { e.callT = LEADER.call; for (const dx of [-150, 150]) addFoe(L() >= 3 ? 'turret' : 'weaver', clamp(e.x + dx, 40, W - 40), -30, { ty: rnd(120, 260), bx: clamp(e.x + dx, 40, W - 40) }); }
+}
+function leaderDown(e) {
+  run.phase = 'clear'; run.endT = 3.2; run.chain = 10; run.leaderE = null; run.clearAt = { x: e.x, y: e.y };
+  if (!net) { hitStop = FEEL.stopBoss; slowT = FEEL.slowBoss; flash = Math.max(flash, 0.5); shake = Math.max(shake, 1); buzz([60, 40, 120]); }
+  for (let i = 0; i < 5; i++) explode(e.x + rnd(-60, 60), e.y + rnd(-40, 40), rnd(30, 60), pick(['#ffd166', '#ffb06b', '#ff7a5e']));
+  ebul.forEach(b => spark(b.x, b.y, 3, b.color, 80, 0.3, 2)); ebul = []; lasers = [];
+  for (const f of foes) if (!f.dead && !f.civ) { f.dead = true; explode(f.x, f.y, 18, '#ffb06b'); }
+  if (P.trap) freeTrap(true);
+  if (Math.random() < 0.5) drops.push({ kind: 'part', x: e.x, y: e.y, vy: 40, v: 1 });
+  for (let i = 0; i < 8 + L(); i++) drops.push({ kind: 'scrap', x: e.x + rnd(-70, 70), y: e.y + rnd(-40, 40), vy: rnd(20, 90), v: 3 });
+  run.score += 2500 * L();
+  say('🛡️ 정예 편대 격파!', W / 2, H * 0.36, '#ffd166', 32, 2.4); A.sfx('boomL');
+}
 function bossDown() {
   run.phase = 'clear'; run.endT = run.mode === 'stage' ? 3.6 : 2.6; run.chain = 14;
   if (!net) { hitStop = FEEL.stopBoss; slowT = FEEL.slowBoss; flash = Math.max(flash, 0.6); shake = Math.max(shake, 1.2); buzz([60, 40, 120]); }   // 보스 처치: 잠깐 멈췄다가 느린 화면
@@ -927,14 +969,14 @@ function bossDown() {
   if (P.trap) freeTrap(true);
   const x = boss.x, y = boss.y;
   if (run.mode !== 'auto' || Math.random() < 0.25) drops.push({ kind: 'part', x, y, vy: 40, v: 1 });
-  for (let i = 0; i < 10 + run.stage; i++) drops.push({ kind: 'scrap', x: x + rnd(-80, 80), y: y + rnd(-40, 40), vy: rnd(20, 90), v: run.mode === 'auto' ? 2 : 3 });
-  run.score += 5000 * run.stage;
+  for (let i = 0; i < 10 + L(); i++) drops.push({ kind: 'scrap', x: x + rnd(-80, 80), y: y + rnd(-40, 40), vy: rnd(20, 90), v: run.mode === 'auto' ? 2 : 3 });
+  run.score += 5000 * L();
   if (run.mode === 'auto') say('💰 ' + Forge.fmt(Forge.addGold(30 * Math.pow(1.17, run.stage - 1))), W / 2, H * 0.36, '#ffd166', 26, 1.8);
   if (!S.stats.bossSeen.includes(boss.idx)) S.stats.bossSeen.push(boss.idx);
   dcount('boss');
   if (run.hits === run.hitsAtBoss) { S.stats.nohit = 1; say('노피격 격파!', W / 2, H * 0.32, '#7fffd4', 30, 2.4); }
   // 보스 랭크: 정해진 시간(par) 안에 적게 맞고 잡을수록 높다. S·A면 고철 덤
-  const bt = run.t - run.bossStart, hits = run.hits - run.hitsAtBoss, par = (boss.def.par || 45) + 3 * Math.min(run.stage, 10);
+  const bt = run.t - run.bossStart, hits = run.hits - run.hitsAtBoss, par = (boss.def.par || 45) + 3 * Math.min(L(), 10);
   const rank = run.assist ? 'C' : hits === 0 && bt <= par ? 'S' : hits <= 1 && bt <= par * 1.3 ? 'A' : hits <= 3 && bt <= par * 1.8 ? 'B' : 'C';
   run.bossRank = rank; run.bossTime = bt;
   if (run.mode !== 'auto') bossRecord(boss.def.id, hits === 0 && !run.assist, bt <= par && !run.assist, bt);   // 보스 무훈
@@ -978,7 +1020,7 @@ function startRush() {
   const notes = [];
   for (let i = 0; i < RUSH_NOTES; i++) {
     notes.push({ t: first + i * beat, j: null });
-    if (run.stage >= 3 && i < RUSH_NOTES - 1 && i % 4 === 2 && Math.random() < 0.6) notes.push({ t: first + (i + 0.5) * beat, j: null, half: true });   // 엇박
+    if (L() >= 3 && i < RUSH_NOTES - 1 && i % 4 === 2 && Math.random() < 0.6) notes.push({ t: first + (i + 0.5) * beat, j: null, half: true });   // 엇박
   }
   run.rush = { notes, beat, perfect: 0, good: 0, miss: 0, chain: 0, end: notes[notes.length - 1].t + 0.4, judge: null, judgeT: 0 };
   run.rushDone = true;
@@ -1026,7 +1068,7 @@ function startDuelEvent() {
   state = 'duel'; drag = null;
   $('hud').classList.add('hidden');
   ebul = []; lasers = [];
-  Duel.start({ level: Math.min(8, run.stage + run.loop * 2 + (run.mode === 'endless' ? run.wave >> 1 : 0)), title: '중간 보스', sync: S.dojo.sync, speed: S.dojo.spd, onEnd: duelEnd });
+  Duel.start({ level: Math.min(8, L() + run.loop * 2 + (run.mode === 'endless' ? run.wave >> 1 : 0)), title: '중간 보스', sync: S.dojo.sync, speed: S.dojo.spd, onEnd: duelEnd });
 }
 function duelEnd(r) {
   state = 'play'; $('hud').classList.remove('hidden');
@@ -1086,7 +1128,7 @@ const ROUTES = {
 const TIER = [{ name: '일반', c: '#dfe6ee', w: 5 }, { name: '희귀', c: '#5fb8ff', w: 2.6 }, { name: '전설', c: '#ffd166', w: 1 }];
 function spawnGates() {
   run.gateLast = run.t;
-  const lv = run.stage + (run.loop || 0) * 5 + (run.mode === 'endless' ? run.wave >> 1 : 0);
+  const lv = L() + (run.loop || 0) * 5 + (run.mode === 'endless' ? run.wave >> 1 : 0);
   const pool = Object.keys(ROUTES).filter(k => ROUTES[k].lv <= lv && k !== run.lastRoute && !(k === 'storm' && run.theme === 3));   // 바로 전에 고른 항로는 쉬게 한다
   const n = lv >= 4 && Math.random() < 0.5 ? 3 : 2, offer = [];
   while (offer.length < n && pool.length) {
@@ -1130,7 +1172,7 @@ function chooseGate(kind, g) {
   } else if (kind === 'overdrive') { useItem('rapid'); run.it_rapid = 10; P.twinT = 10; banner('10초 동안 연사 2배 + 분신'); }
   else if (kind === 'shortcut') {
     if (run.mode === 'endless') run.nextBoss = Math.max(run.t + 5, run.nextBoss - 20); else run.t = Math.min(run.waveDur - 4, run.t + 20);
-    run.score += 1500 * run.stage; banner(`보스가 20초 빨리 온다 · 점수 +${1500 * run.stage}`); A.sfx('charge');
+    run.score += 1500 * L(); banner(`보스가 20초 빨리 온다 · 점수 +${1500 * L()}`); A.sfx('charge');
   } else if (kind === 'card') { banner('강화 카드를 고르세요'); setTimeout(() => { if (run && state === 'play') openCards(); }, 700); }
   else if (kind === 'gamble') {
     if (Math.random() < 0.55) {
@@ -1338,6 +1380,7 @@ function killFoe(e) {
   e.dead = true;
   if (!e.isBoss && !e.civ && !e.harmless && D.ENEMIES[e.type]) bookMark('foes', e.type);   // 도감: 만난 적
   run.kills++; S.stats.kills++; dcount('kills');
+  if (e.leader && run.phase === 'boss') leaderDown(e);
   run.combo++; run.comboT = 2.5; run.maxCombo = Math.max(run.maxCombo, run.combo);
   if (run.mode !== 'auto') { if (A.chain) A.chain(run.combo); if (!net && !e.isBoss) { if (e.r > 25) hitStop = Math.max(hitStop, FEEL.stopBig); else if (e.elite || e.mod) hitStop = Math.max(hitStop, FEEL.stopElite); } }
   if (run.combo % 10 === 0) say(`${run.combo} 콤보!`, e.x, e.y - 30, '#ffd166', 26, 1);
@@ -1655,7 +1698,7 @@ function update(dt) {
     if ((run.spawnT -= dt * (run.dangerT > 0 ? 1.6 : 1)) <= 0) { spawnWave(); run.spawnT = run.d.iv * (run.mode === 'endless' ? 0.85 : 1 - 0.35 * Math.min(1, run.t / run.waveDur)) * rnd(0.8, 1.2); }
     if (run.t >= run.waveDur && !run.rush) { run.phase = 'warning'; run.warnT = 3; A.sfx('warning'); buzz([200, 100, 200]); }
   } else if (run.phase === 'warning') {
-    if ((run.warnT -= dt) <= 0) { run.phase = 'boss'; spawnBoss(); }
+    if ((run.warnT -= dt) <= 0) { run.phase = 'boss'; if (run.mode === 'stage' && stageEnd(run.stage) === 'leader') spawnLeader(); else spawnBoss(); }
   }
   if (boss && run.phase === 'boss') { if (boss.sneezeT > 0) boss.sneezeT -= dt; else bossAI(dt); }
   if (run.theme !== run.bookTh) { run.bookTh = run.theme; bookMark('maps', run.theme); }   // 도감: 날아 본 맵
@@ -1758,7 +1801,7 @@ function update(dt) {
 
   tickFx(dt);
   if (run.phase === 'clear') {
-    if (run.chain > 0 && Math.random() < dt * 8) { run.chain--; explode(boss.x + rnd(-90, 90), boss.y + rnd(-60, 60), rnd(40, 70), pick(['#ffd166', '#ff8a5e', '#fff'])); A.sfx('boomS'); }
+    if (run.chain > 0 && Math.random() < dt * 8) { run.chain--; const c = boss || run.clearAt || { x: W / 2, y: H * 0.25 }; explode(c.x + rnd(-90, 90), c.y + rnd(-60, 60), rnd(40, 70), pick(['#ffd166', '#ff8a5e', '#fff'])); A.sfx('boomS'); }
     if ((run.endT -= dt) <= 0) afterBoss();
   } else if (run.phase === 'dead') {
     if ((run.endT -= dt) <= 0) { if (run.mode === 'auto') respawn(); else endRun(false); }
@@ -1901,7 +1944,7 @@ function endRun(win) {
   A.sfx(win ? 'clear' : 'fail');
   A.music('hangar', 0);
   const opened = [...D.FRAMES, ...D.WEAPONS].filter(o => o.unlock && o.unlock > before && o.unlock <= S.cleared).map(o => o.name);
-  $('rTitle').innerHTML = win ? `<small>STAGE ${run.stage}</small>클리어!` : `<small>STAGE ${run.stage}</small>격추당했다`;
+  $('rTitle').innerHTML = win ? `<small>STAGE ${stLabel(run.stage)}</small>클리어!` : `<small>STAGE ${stLabel(run.stage)}</small>격추당했다`;
   $('rTitle').className = win ? 'win' : 'lose';
   $('rStars').innerHTML = now.map((v, i) => `<span class="${v ? 'on' : ''} ${v && !old[i] ? 'new' : ''}" title="${STAR_RULES[i]}">★</span>`).join('');
   $('rStats').innerHTML = [
@@ -1915,7 +1958,7 @@ function endRun(win) {
     opened.length ? `<div class="gold">🔓 새로 열림: ${opened.join(', ')}</div>` : '',
     `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}</div>`,
     `<div class="rules">${STAR_RULES.map((r, i) => `${now[i] ? '★' : '☆'} ${r}`).join('<br>')}</div>`,
-    win ? `<div>다음: 스테이지 ${run.stage + 1} · ${D.BOSSES[run.stage % 5].name}</div>` : '<div>격납고에서 부품과 무기를 강화하고 다시 도전해 보세요.</div>',
+    win ? `<div>다음: 스테이지 ${stLabel(run.stage + 1)} · ${stageEnd(run.stage + 1) === 'leader' ? END_NM.leader : END_NM[stageEnd(run.stage + 1)] + ' ' + D.BOSSES[stageBossIdx(run.stage + 1)].name}${subOf(run.stage) === 5 ? ' · 🗺️ 새 맵 「' + D.THEMES[stageTheme(run.stage + 1)].name + '」' : ''}</div>` : '<div>격납고에서 부품과 무기를 강화하고 다시 도전해 보세요.</div>',
   ].filter(Boolean).join('');
   const btns = $('rBtns');
   btns.innerHTML = '';
@@ -1924,8 +1967,8 @@ function endRun(win) {
   if (win) mk('다음 스테이지 ▶', 'big', () => startRun(stg + 1));
   else mk('다시 도전', 'big', () => startRun(stg));
   mk('격납고', 'sub', showHangar);
-  Rank.after('stage', run.score, `STAGE ${run.stage}${win ? ' 클리어' : ''} · ${st.F.name}`, !run.coop && !run.assist);
-  $('copy').dataset.text = `⚡ 볼트윙 스테이지 ${run.stage} ${win ? '클리어' : '도전'} ${now.map(v => (v ? '★' : '☆')).join('')} 점수 ${run.score.toLocaleString()} · 콤보 ${run.maxCombo} · ${st.F.name}+${st.Wp.name}`;
+  Rank.after('stage', run.score, `STAGE ${stLabel(run.stage)}${win ? ' 클리어' : ''} · ${st.F.name}`, !run.coop && !run.assist);
+  $('copy').dataset.text = `⚡ 볼트윙 스테이지 ${stLabel(run.stage)} ${win ? '클리어' : '도전'} ${now.map(v => (v ? '★' : '☆')).join('')} 점수 ${run.score.toLocaleString()} · 콤보 ${run.maxCombo} · ${st.F.name}+${st.Wp.name}`;
   $('result').classList.remove('hidden'); resultFx();
 }
 
@@ -2004,7 +2047,7 @@ function drawFoe(e) {
   if (e.tell && Math.floor(T * 14) % 2) { ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(Art.glow('#ff5d5d', 40), e.x - e.r * 2, e.y - e.r * 2, e.r * 4, e.r * 4); ctx.globalCompositeOperation = 'source-over'; }   // 표창 공방: 곧 쏜다
   if (e.harmless || CRITTER[e.type]) { drawEmojiFoe(e); return; }
   if (e.balloonT > 0) { drawBalloon(e); return; }
-  ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(rot);
+  ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(rot); if (e.leader) ctx.scale(LEADER.scale, LEADER.scale);
   if (run.danceT > 0) ctx.rotate(Math.sin(T * 14 + (e.nid || 0)) * 0.5);   // 춤
   if (e.type === 'treasure') ctx.scale(1.6, 1.6); else if (e.keeper) ctx.scale(2.2, 2.2);
   const eim = IMG['enemy-' + e.type];
@@ -2395,7 +2438,7 @@ function drawTrap() {   // 그물: 가운데 연타 안내와 게이지
 function drawHud() {
   segBar(0, 0, W, 6, run.xp / run.xpNeed, '#2be38a', '#9dffcf');
   panel(10, 14, 118, 52, 12);
-  const badge = { stage: ['STAGE', String(run.stage)], endless: ['WAVE', String(run.wave)], rush: ['BOSS', `${run.bossIdx + 1}/5`], auto: ['ZONE', String(run.stage)] }[run.mode] || ['LEVEL', String(run.stage)];
+  const badge = { stage: ['STAGE', stLabel(run.stage)], endless: ['WAVE', String(run.wave)], rush: ['BOSS', `${run.bossIdx + 1}/5`], auto: ['ZONE', String(run.stage)] }[run.mode] || ['LEVEL', String(run.stage)];
   txt(badge[0], 22, 32, 11, '#ffd166', 'left', 800);
   txt(badge[1], 22, 58, 26, '#ffffff', 'left', 900);
   if (run.mode === 'auto') {
@@ -2419,8 +2462,9 @@ function drawHud() {
       if (!run.rushDone) mark(run.rushAt, '♪', '#ff7ad9');
       mark(run.gateAt, '⑂', '#9dffcf'); mark(run.treasureAt, '★', '#ffd166');
     }
-    txt(run.arena ? '대장까지' : '보스까지', W / 2, 54, 12, '#cfe0f5', 'center', 700);
+    txt(run.arena ? '대장까지' : run.mode === 'stage' ? { boss: '챕터 보스까지', scout: '보스 선발대까지', leader: '정예 편대까지' }[stageEnd(run.stage)] : '보스까지', W / 2, 54, 12, '#cfe0f5', 'center', 700);
   } else if (run.phase === 'warning') txt('⚠ WARNING ⚠', W / 2, 46, 24, Math.floor(T * 6) % 2 ? '#ff4d4d' : '#ffd166', 'center', 900);
+  else if (run.leaderE && !run.leaderE.dead) { const e = run.leaderE; segBar(cx - 4, 24, cw + 8, 12, e.hp / e.maxHp, '#ff3d5a', '#ff9a6b', 10); txt('정예 편대 대장', W / 2, 56, 13, '#ffd0d0', 'center', 800); }
   else if (boss) {
     const hp = boss.parts.reduce((s, p) => s + Math.max(0, p.hp), 0), mx = boss.parts.reduce((s, p) => s + p.maxHp, 0);
     segBar(cx - 4, 24, cw + 8, 12, hp / mx, '#ff3d5a', '#ff9a6b', 10);
@@ -2498,7 +2542,7 @@ function draw() {
   ctx.save();
   if (shake > 0) ctx.translate(rnd(-8, 8) * shake, rnd(-8, 8) * shake);
   if (state === 'hangar' || !run) {
-    drawBg(themeFor(hangarStage));
+    drawBg(stageTheme(hangarStage));
     ctx.fillStyle = 'rgba(4,8,18,.25)'; ctx.fillRect(0, 0, W, H);
     ctx.restore();
     return;
@@ -2632,23 +2676,24 @@ function renderHangar() {
     ${powerLine(pw, myTierV)}<div class="ultLine">🌟 ${s2.F.ult.name}</div></div>`);
   const map = $('stageMap'); map.innerHTML = '';
   for (let s = 1; s <= S.maxStage + 2; s++) {
-    const open = s <= S.maxStage, bd = D.BOSSES[(s - 1) % 5], stars = S.stars[s] || [], loop = (s - 1) / 5 | 0;
+    const open = s <= S.maxStage, en = stageEnd(s), bd = D.BOSSES[stageBossIdx(s)], stars = S.stars[s] || [], loop = (chOf(s) - 1) / 9 | 0;
+    if (subOf(s) === 1) map.insertAdjacentHTML('beforeend', `<div class="chHead">챕터 ${chOf(s)} · ${D.THEMES[stageTheme(s)].name}${loop ? ` · ${loop + 1}회차` : ''}</div>`);
     const n = document.createElement('button');
     n.className = 'node' + (s === hangarStage ? ' on' : '') + (open ? '' : ' locked') + (S.cleared >= s ? ' done' : '');
     const rk = (S.ranks || {})[s];
-    n.innerHTML = `<span class="num">${s}</span><span class="nm"><b>${bd.name}${loop ? ` <i>${loop + 1}회차</i>` : ''}</b><small>${D.THEMES[themeFor(s)].name}</small></span>${rk ? `<span class="rank r${rk}">${rk}</span>` : ''}<span class="st">${[0, 1, 2].map(i => `<em class="${stars[i] ? 'on' : ''}">★</em>`).join('')}</span>${open ? '' : '<span class="lock">🔒</span>'}`;
+    n.innerHTML = `<span class="num ch">${stLabel(s)}</span><span class="nm"><b>${en === 'leader' ? END_NM.leader : END_NM[en] + ' ' + bd.name}</b><small>${en === 'boss' ? '챕터 마지막 · 진짜 보스' : en === 'scout' ? '다음 챕터 보스의 선발대(체력 절반)' : '커다란 대장 전차와 호위'}</small></span>${rk ? `<span class="rank r${rk}">${rk}</span>` : ''}<span class="st">${[0, 1, 2].map(i => `<em class="${stars[i] ? 'on' : ''}">★</em>`).join('')}</span>${open ? '' : '<span class="lock">🔒</span>'}`;
     if (open) n.addEventListener('click', () => { hangarStage = s; A.sfx('click'); renderHangar(); });
     map.append(n);
   }
-  const bd = D.BOSSES[(hangarStage - 1) % 5];
-  $('stTip').innerHTML = `<b>스테이지 ${hangarStage}</b> · 보스 <b>${bd.name}</b><br><small>${bd.tip}</small><br><small class="rules">${STAR_RULES.map((r, i) => `${(S.stars[hangarStage] || [])[i] ? '★' : '☆'} ${r}`).join(' · ')}</small>`;
+  const hEn = stageEnd(hangarStage), bd = D.BOSSES[stageBossIdx(hangarStage)];
+  $('stTip').innerHTML = `<b>스테이지 ${stLabel(hangarStage)}</b> · ${D.THEMES[stageTheme(hangarStage)].name} · 끝에 <b>${hEn === 'leader' ? END_NM.leader : END_NM[hEn] + ' ' + bd.name}</b><br><small>${hEn === 'leader' ? '대장 전차가 둥근 탄과 조준 탄을 쏘고 호위를 부릅니다. 대장을 부수면 클리어!' : bd.tip}</small><br><small class="rules">${STAR_RULES.map((r, i) => `${(S.stars[hangarStage] || [])[i] ? '★' : '☆'} ${r}`).join(' · ')}</small>`;
   if (tab === 'sortie') requestAnimationFrame(() => { const on = map.querySelector('.node.on'); if (on) map.scrollTop = on.offsetTop - map.clientHeight / 2; });
   const fr = $('frames'); fr.innerHTML = '';
   for (const f of D.FRAMES) {
     const open = unlocked(f), d = document.createElement('button');
     d.className = 'card' + (S.frame === f.id ? ' on' : '') + (open ? '' : ' locked');
     d.append(shipCanvas(f.id));
-    d.insertAdjacentHTML('beforeend', `<b>${f.name}</b><small>${f.desc}</small>${statBar('체력', f.hp / 160, f.hp)}${statBar('속도', f.speed / 1.4, Math.round(f.speed * 100) + '%')}<small class="ult">🌟 ${f.ult.name}<br>${f.ult.desc}</small>` + (open ? '' : `<small class="lockTxt">🔒 스테이지 ${f.unlock} 클리어 시 열림</small>`));
+    d.insertAdjacentHTML('beforeend', `<b>${f.name}</b><small>${f.desc}</small>${statBar('체력', f.hp / 160, f.hp)}${statBar('속도', f.speed / 1.4, Math.round(f.speed * 100) + '%')}<small class="ult">🌟 ${f.ult.name}<br>${f.ult.desc}</small>` + (open ? '' : `<small class="lockTxt">🔒 스테이지 ${stLabel(f.unlock)} 클리어 시 열림</small>`));
     d.addEventListener('click', () => { if (!open) return; S.frame = f.id; save(); A.sfx('click'); renderHangar(); });
     fr.append(d);
   }
@@ -2656,7 +2701,7 @@ function renderHangar() {
   for (const w of D.WEAPONS) {
     const open = unlocked(w), lv = S.weapons[w.id] || 1, d = document.createElement('div');
     d.className = 'card' + (S.weapon === w.id ? ' on' : '') + (open ? '' : ' locked');
-    d.innerHTML = `<b><span class="wIcon" style="background:${w.color};color:${w.color}"></span>${w.name} <small>Lv ${lv}</small></b><small>${w.desc}</small>${statBar('피해', w.dmg * (w.pellets || 1) / 30, Math.round(w.dmg * (1 + 0.1 * (lv - 1))))}${statBar('연사', w.rate / 10, w.rate + '/초')}<div class="lvDots">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= lv ? 'on' : ''}"></i>`).join('')}</div>` + (open ? '' : `<small class="lockTxt">🔒 스테이지 ${w.unlock} 클리어 시 열림</small>`);
+    d.innerHTML = `<b><span class="wIcon" style="background:${w.color};color:${w.color}"></span>${w.name} <small>Lv ${lv}</small></b><small>${w.desc}</small>${statBar('피해', w.dmg * (w.pellets || 1) / 30, Math.round(w.dmg * (1 + 0.1 * (lv - 1))))}${statBar('연사', w.rate / 10, w.rate + '/초')}<div class="lvDots">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= lv ? 'on' : ''}"></i>`).join('')}</div>` + (open ? '' : `<small class="lockTxt">🔒 스테이지 ${stLabel(w.unlock)} 클리어 시 열림</small>`);
     if (open && lv < D.MAX_LV) {
       const cost = D.WEAPON_COST(lv), u = document.createElement('button');
       u.className = 'up'; u.textContent = `강화 🔩${cost}`; u.disabled = S.scrap < cost;
@@ -3328,7 +3373,7 @@ function groundObstSpawn() {   // 스테이지·무한: 지나가는 섬(사막�
   const prev = run.obTy === undefined ? now : run.obTy, moved = md(prev - now);
   run.obTy = now;
   if (run.phase !== 'waves' || boss || moved > 200) return;
-  const lv = run.stage + (run.loop || 0) * 5, kinds = OB_BY_MAP[run.theme] || OB_KINDS;
+  const lv = L() + (run.loop || 0) * 5, kinds = OB_BY_MAP[run.theme] || OB_KINDS;
   const put = (tx, ty) => {   // tx, ty: 땅 그림 안의 자리
     if (tx < 110 || tx > 430 || run.obCd > 0) return;   // 하나 세우면 잠깐 쉰다(OB_GAP)
     if (run.obst.filter(q => q.ground && q.y < H * 0.95).length >= OB_GAP.max) return;   // 한 화면에 너무 많이 서지 않게
@@ -3471,7 +3516,7 @@ function obstShape(o, x, y) {
 }
 // ---------- 하늘의 사건: 돌풍·토네이도(맵과 단계에 따라), 쏘면 안 되는 배달 드론·민간 여객기 ----------
 // 스테이지·무한에서만(협동·보스 러시·표창 공방 제외). 단계가 오를수록 종류가 늘고 자주 온다.
-const hzLv = () => run.stage + (run.loop || 0) * 5 + (run.mode === 'endless' ? run.wave >> 1 : 0);
+const hzLv = () => L() + (run.loop || 0) * 5 + (run.mode === 'endless' ? run.wave >> 1 : 0);
 // ---------- 새 맵의 하늘 사건: 🔥 굴뚝 불기둥(공장) ❄️ 눈보라(설원) 🌋 용암 분출(화산) 🌿 덩굴 씨앗(정글) ⚡ 번개(구름 위 성) ----------
 const HZ_NM = { gust: '💨 돌풍', tornado: '🌪️ 토네이도', drone: '🚁 배달 드론', liner: '✈️ 민간 여객기', fire: '🔥 굴뚝 불기둥', snow: '❄️ 눈보라', erupt: '🌋 용암 분출', vine: '🌿 덩굴 씨앗', bolt: '⚡ 번개' };
 function hzStart2(kind, first) {
@@ -3670,7 +3715,7 @@ function civAI(e, dt) {
     e.gone = true;
     if (e.type === 'ddrone' && !e.broke) { say('📦 배달 완료! 고철 +2', clamp(e.x, 90, W - 90), H - 120, '#9dffcf', 18, 1.4); gainScrap(2); }
     if (e.type === 'liner') {
-      if (e.hits <= 3) { say('✈️ 승객 모두 무사! 고철 +5', W / 2, H * 0.4, '#9dffcf', 22, 1.8); gainScrap(5); run.score += 500 * run.stage; }
+      if (e.hits <= 3) { say('✈️ 승객 모두 무사! 고철 +5', W / 2, H * 0.4, '#9dffcf', 22, 1.8); gainScrap(5); run.score += 500 * L(); }
       else say('✈️ 여객기가 겨우 빠져나갔다…', W / 2, H * 0.4, '#c9d2dc', 20, 1.6);
     }
   }
@@ -3678,12 +3723,12 @@ function civAI(e, dt) {
 function civHit(e, dmg) {   // 쏘면 벌점(점수 깎이고 콤보가 끊긴다)
   run.combo = 0; e.flash = 0.08; e.hits++;
   if (e.type === 'ddrone') {
-    e.broke = true; e.dead = true; run.score = Math.max(0, run.score - 300 * run.stage);
+    e.broke = true; e.dead = true; run.score = Math.max(0, run.score - 300 * L());
     spark(e.x, e.y, 12, '#ffd166', 180, 0.4, 3); A.sfx('boomS');
     fx.push({ k: 'debris', x: e.x, y: e.y + 10, vx: rnd(-30, 30), vy: 160, t: 0, life: 0.9, size: 6, rot: 0, vr: 6 });
-    say('📦 배달 실패… 점수 -' + 300 * run.stage, e.x, e.y - 24, '#ff9a9a', 18, 1.4);
+    say('📦 배달 실패… 점수 -' + 300 * L(), e.x, e.y - 24, '#ff9a9a', 18, 1.4);
   } else {
-    run.score = Math.max(0, run.score - 40 * run.stage); A.sfx('hit');
+    run.score = Math.max(0, run.score - 40 * L()); A.sfx('hit');
     if (!(e.warnT > 0)) { e.warnT = 0.8; say('⚠️ 민간 여객기! 쏘지 마세요', clamp(e.x, 130, W - 130), e.y + 70, '#ff8080', 20, 0.9); }
   }
 }
@@ -4170,7 +4215,7 @@ function guestEnd(m) {
   S.scrap += m.scrap; S.coop = (S.coop || 0) + 1;
   const pxp = Math.round(m.score / 60 + m.kills + (m.win ? 40 : 0)), up = gainPilotXp(pxp);
   save(); rawSfx(m.win ? 'clear' : 'fail'); rawMusic('hangar', 0);
-  $('rTitle').innerHTML = m.mode === 'endless' ? `<small>함께 · 무한 생존</small>WAVE ${m.wave}` : `<small>함께 · STAGE ${m.stage}</small>${m.win ? '클리어!' : '모두 격추'}`;
+  $('rTitle').innerHTML = m.mode === 'endless' ? `<small>함께 · 무한 생존</small>WAVE ${m.wave}` : `<small>함께 · STAGE ${stLabel(m.stage)}</small>${m.win ? '클리어!' : '모두 격추'}`;
   $('rTitle').className = m.win ? 'win' : 'lose';
   $('rStars').innerHTML = '';
   $('rStats').innerHTML = [`<div class="big">${m.score.toLocaleString()}<small>점(팀)</small></div>`, `<div>팀 처치 <b>${m.kills}</b></div>`,
@@ -4235,7 +4280,7 @@ function coopPanel() {
     const mr = add('', 'div', 'cRow');
     mr.append(btn(coopMd === 'stage' ? '✅ 스테이지' : '스테이지', () => { coopMd = 'stage'; renderHangar(); }), btn(coopMd === 'endless' ? '✅ 무한 생존' : '무한 생존', () => { coopMd = 'endless'; renderHangar(); }), btn(coopMd === 'escape' ? '✅ 🏃 탈출 경주' : '🏃 탈출 경주', () => { coopMd = 'escape'; renderHangar(); }));
     add(`👥 ${roster().map(p => esc(p.name) + (p.host ? '(방장)' : '')).join(' · ')}`, 'div', 'cList');
-    add(`${esc(net.status)}${allies.length ? ` — 준비되면 <b>함께 출격</b>을 누르세요. ${coopMd === 'stage' ? `스테이지 ${hangarStage}로 갑니다(아래 지도에서 바꾸기).` : coopMd === 'escape' ? '모두 같은 맵에서 탈출 작전을 달려요(각자 하트 3개, 멀리 간 순서로 고철 보너스).' : ''}` : ''}`, 'div', 'cNote');
+    add(`${esc(net.status)}${allies.length ? ` — 준비되면 <b>함께 출격</b>을 누르세요. ${coopMd === 'stage' ? `스테이지 ${stLabel(hangarStage)}로 갑니다(아래 지도에서 바꾸기).` : coopMd === 'escape' ? '모두 같은 맵에서 탈출 작전을 달려요(각자 하트 3개, 멀리 간 순서로 고철 보너스).' : ''}` : ''}`, 'div', 'cNote');
   } else {
     add(`<small>들어간 방</small><b>${net.code}</b>`, 'div', 'cCode');
     add(`👥 ${(net.roster || []).map(p => esc(p.name) + (p.host ? '(방장)' : '')).join(' · ') || '…'}`, 'div', 'cList');
