@@ -77,9 +77,40 @@ function shoot() {
     const s = d - (it.x - P.x) * 0.6;   // 앞쪽 고리를 더 좋아한다
     if (s < bs) { bs = s; best = it; }
   }
+  for (const o of others) {   // 친구도 걸이점이 된다(풍선이 된 친구를 걸면 구출)
+    if (o.over || o.x < P.x - 40 || o.y > P.y - 20) continue;
+    const d = Math.hypot(o.x - P.x, o.y - P.y); if (d > K.ropeReach) continue;
+    const s = d - (o.x - P.x) * 0.6 - (o.bl ? 200 : 0);
+    if (s < bs) { bs = s; best = { k: 'friend', fid: o.id, x: o.x, y: o.y }; }
+  }
   if (!best) { say('닿는 고리가 없어요!', '#ffb3b3'); P.miss = 0.25; return; }
   P.rope = { a: best, L: Math.max(K.ropeMin, Math.hypot(best.x - P.x, best.y - P.y)) };
   best.used = true; sfx('rope');
+  if (best.fid) {
+    const o = others.find(q => q.id === best.fid);
+    if (o && o.bl) rescue(o); else { say(`🤝 ${o ? o.name : '친구'}에게 로프!`, '#9dffcf'); netEv(best.fid, 'tug'); }
+  }
+}
+// ---------- 친구와 주고받기(같이 달리기) ----------
+const rescT = {};
+function netEv(to, k) { if (opt.race && opt.race.event) opt.race.event(to, { k }); }
+function rescue(o) {   // 풍선이 된 친구를 구한다(같은 친구는 2초에 한 번)
+  if ((rescT[o.id] || 0) > t) return;
+  rescT[o.id] = t + 2; netEv(o.id, 'rescue'); st.coins += 3; st.saved = (st.saved || 0) + 1;
+  say(`🎈 ${o.name} 구출! 🪙+3`, '#9dffcf'); sfx('star'); spark(o.x, o.y, '#9dffcf', 20);
+}
+function netEvent(from, e) {   // 친구가 보낸 일
+  if (!st || !e || !opt.race) return;
+  const o = others.find(q => q.id === from), nm = o ? o.name : '친구';
+  if (e.k === 'tug' && !st.over && !st.balloon) { P.vx += 90; say(`💪 ${nm}이(가) 매달려 밀어 줬어요!`, '#9dffcf'); }
+  if (e.k === 'rescue' && st.balloon > 0) {
+    st.balloon = 0; st.hearts = 1; st.inv = 2.2; st.rescued = (st.rescued || 0) + 1; P.vy = -420; P.vx = 320; P.rope = null;
+    banner(`🎈 ${nm}이(가) 구해 줬어요!`, '하트 1개로 다시 달려요'); sfx('star'); spark(P.x, P.y, '#9dffcf', 24);
+  }
+}
+function enterBalloon() {   // 같이 달리기에서 하트를 다 잃으면 바로 끝나지 않고 풍선이 되어 구조를 기다린다
+  st.balloon = 12; P.rope = null; P.vy = 0; st.inv = 0;
+  banner('🎈 풍선이 되었어요!', '친구가 닿거나 로프를 걸면 살아나요 · 12초');
 }
 function letGo() {
   if (!P.rope) return;
@@ -142,7 +173,7 @@ function loop(now) {
   if (opt.race) {   // 친구와 같이 달리기: 내 자리를 보내고 친구 자리를 받는다
     const got = opt.race.others() || [];
     others = got.map(o => { const p = others.find(q => q.id === o.id); return Object.assign({}, o, { ph: typeof o.ph === 'number' ? PH_ID[o.ph] || 'rope' : o.ph, x: p ? p.x + (o.x - p.x) * Math.min(1, dt * 10) : o.x, y: p ? p.y + (o.y - p.y) * Math.min(1, dt * 10) : o.y }); });
-    if ((netT -= dt) <= 0) { netT = 0.1; opt.race.send({ x: Math.round(P.x), y: Math.round(P.y), ph: PH_ID.indexOf(st.phase), h: st.hearts, d: st.dist, over: st.over ? 1 : 0, frame: cb.frame || 'falcon' }); }
+    if ((netT -= dt) <= 0) { netT = 0.1; opt.race.send({ x: Math.round(P.x), y: Math.round(P.y), ph: PH_ID.indexOf(st.phase), h: st.hearts, d: st.dist, over: st.over ? 1 : 0, bl: st.balloon > 0 ? 1 : 0, frame: cb.frame || 'falcon' }); }
     if (st.over && (rankT -= dt) <= 0) { rankT = 0.5; raceRank(); }
   }
   draw();
@@ -151,9 +182,22 @@ function loop(now) {
 function update(dt) {
   t += dt; holdT += dt; if (st.inv > 0) st.inv -= dt; if (P.miss > 0) P.miss -= dt;
   if ((pathT -= dt) <= 0 && st.path.length < 9000) { pathT += 0.1; st.path.push([Math.round(P.x), Math.round(P.y), PH_ID.indexOf(st.phase)]); }   // 유령용 길 기록(0.1초마다)
+  if (st.balloon > 0) {   // 풍선: 천천히 앞으로 떠가며 친구를 기다린다(친구가 따라잡을 수 있게 느리게)
+    st.balloon -= dt; P.vx = 190; P.x += P.vx * dt; P.y += (280 + Math.sin(t * 2) * 40 - P.y) * Math.min(1, dt * 2);
+    cam += (P.x - W * 0.32 - cam) * Math.min(1, dt * 6); gen();
+    if (st.balloon <= 0 || !others.some(o => !o.over && !o.bl)) { st.balloon = 0; gameOver(); }
+    for (const p of parts) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; } parts = parts.filter(p => p.t < p.life);
+    for (const m of msgs) m.t += dt; msgs = msgs.filter(m => m.t < m.life);
+    return;
+  }
+  if (P.rope && P.rope.a.fid) {   // 친구에게 건 로프: 친구를 따라 움직인다
+    const o = others.find(q => q.id === P.rope.a.fid);
+    if (!o || o.over) letGo(); else { P.rope.a.x = o.x; P.rope.a.y = o.y; }
+  }
+  for (const o of others) if (o.bl && Math.hypot(o.x - P.x, o.y - P.y) < 60) rescue(o);   // 풍선에 닿아도 구출
   const ph = phaseAt(P.x);
   if (ph !== st.phase) changePhase(ph);
-  st.loop = Math.floor(P.x / (K.segPlane + K.segRope * 2 + K.segBird));
+  st.loop =Math.floor(P.x / (K.segPlane + K.segRope * 2 + K.segBird));
   const speed = 300 + st.loop * 30;
   if (st.phase === 'plane') {
     P.vx = speed; P.vy += (hold ? -K.flyRise : K.flySink) * dt; P.vy = clamp(P.vy, -K.flyMax, K.flyMax);
@@ -263,15 +307,16 @@ function changePhase(ph) {
   st.seen[ph] = true; st.inv = Math.max(st.inv, 1); sfx('phase');
 }
 function respawn() {
+  if (st.balloon > 0) return;
   const a = items.filter(it => it.k === 'anchor' && it.x > P.x - 60).sort((p, q) => p.x - q.x)[0];
   if (a) { P.x = a.x - 20; P.y = a.y + 140; P.vx = 200; P.vy = 0; P.rope = { a, L: 150 }; }
   else { P.y = 300; P.vy = -300; }
   st.inv = 1.6;
 }
 function hurt(why) {
-  if (st.inv > 0) return;
+  if (st.inv > 0 || st.balloon > 0) return;
   st.hearts--; st.inv = 1.3; say(why, '#ff8a8a'); sfx('hurt'); spark(P.x, P.y, '#ff6b5e', 14);
-  if (st.hearts <= 0) gameOver();
+  if (st.hearts <= 0) { if (opt.race && (st.rescued || 0) < 2 && others.some(o => !o.over && !o.bl)) enterBalloon(); else gameOver(); }
 }
 function gameOver() {
   st.over = true; on = true;
@@ -285,6 +330,7 @@ function gameOver() {
     <div class="big">${st.dist.toLocaleString()} m</div>
     <div>🪙 ${st.coins} · 🔩 고철 +${scrap}${starBonus ? ` <b>+ 별 보너스 ${starBonus}</b>` : ''}</div>
     ${st.rides.length ? `<div>타 본 탈것 ${st.rides.map(k => RI[k]).join(' ')}</div>` : ''}
+    ${st.saved || st.rescued ? `<div>🎈 구한 친구 ${st.saved || 0}번 · 구조받음 ${st.rescued || 0}번</div>` : ''}
     ${st.dist > best && best > 0 ? `<div class="rec">🏆 최고 기록! (지난 최고 ${best.toLocaleString()} m)</div>` : !best ? '<div class="rec">🏁 첫 기록!</div>' : `<div>최고 ${best.toLocaleString()} m · ${(best - st.dist).toLocaleString()} m 모자라요</div>`}
     ${next ? `<small>다음 별: ${next.toLocaleString()} m</small>` : ''}`;
   if (!opt.race && st.dist > best && cb.saveGhost) cb.saveGhost({ seed: st.seed, path: st.path, dist: st.dist });   // 최고 기록이면 유령으로 남긴다
@@ -365,7 +411,7 @@ function draw() {
     g.globalAlpha = 0.85; g.fillStyle = o.color; g.beginPath();
     if (left) { g.moveTo(6, y); g.lineTo(22, y - 12); g.lineTo(22, y + 12); } else { g.moveTo(W - 6, y); g.lineTo(W - 22, y - 12); g.lineTo(W - 22, y + 12); }
     g.fill(); g.font = '700 14px sans-serif'; g.textAlign = left ? 'left' : 'right';
-    g.fillText(`${o.name} ${diff > 0 ? '+' : ''}${diff}m`, left ? 26 : W - 26, y + 5); g.globalAlpha = 1;
+    g.fillText(`${o.bl ? "🎈 " : ""}${o.name} ${diff > 0 ? '+' : ''}${diff}m`, left ? 26 : W - 26, y + 5); g.globalAlpha = 1;
   }
   if (opt.race && others.length) {   // 지금 순위
     const rank = 1 + others.filter(o => (o.d || 0) > st.dist).length;
@@ -390,6 +436,10 @@ function drawHero() {
   if (st.inv > 0 && Math.floor(st.inv * 12) % 2 === 0 && !st.over) return;
   g.save(); g.translate(P.x, P.y);
   const img = k => cb.img ? cb.img(k) : null;
+  if (st.balloon > 0) {   // 풍선이 된 나
+    drawBalloon('#ff7a5e', st.balloon < 4 && Math.floor(t * 6) % 2);
+    g.restore(); g.fillStyle = '#fff'; g.font = '800 18px sans-serif'; g.textAlign = 'center'; g.fillText(`🎈 구조를 기다리는 중 ${Math.ceil(st.balloon)}`, P.x, P.y + 50); return;
+  }
   if (isRide(st.phase)) { drawRide(st.phase, img('boss-' + st.phase)); g.restore(); return; }
   const shipIm = st.phase === 'plane' && img('ship-' + (cb.frame || 'falcon'));
   if (shipIm) {   // 볼트윙 기체 그림(위를 보는 그림을 오른쪽으로 돌림)
@@ -456,7 +506,23 @@ function ghostAt() {   // 유령: 기록한 길을 같은 시간에 따라간다
   if (!(i >= 0)) return null;
   return { x: pa[i][0] + (pa[j][0] - pa[i][0]) * k, y: pa[i][1] + (pa[j][1] - pa[i][1]) * k, ph: PH_ID[pa[i][2]] || 'rope', name: '👻 최고 기록', color: '#c8d8ff', over: i >= pa.length - 1, frame: cb.frame };
 }
+function drawBalloon(col, blink) {   // (0,0)에 매달린 조종사 + 위의 풍선
+  const sw = Math.sin(t * 2.4) * 0.12;
+  g.save(); g.rotate(sw);
+  g.strokeStyle = '#e6eefa'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -10); g.lineTo(0, -52); g.stroke();
+  g.fillStyle = blink ? '#ffffff' : col; g.beginPath(); g.ellipse(0, -80, 26, 32, 0, 0, TAU); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.45)'; g.beginPath(); g.ellipse(-9, -90, 6, 10, -0.4, 0, TAU); g.fill();
+  g.fillStyle = col; g.beginPath(); g.moveTo(-5, -47); g.lineTo(5, -47); g.lineTo(0, -53); g.fill();
+  g.fillStyle = '#ff7a5e'; g.beginPath(); g.ellipse(0, 4, 11, 14, 0, 0, TAU); g.fill();
+  g.fillStyle = '#ffe0c0'; g.beginPath(); g.arc(0, -12, 9, 0, TAU); g.fill();
+  g.restore();
+}
 function drawOther(o) {   // 친구·유령은 반투명하게(부딪히지 않는다)
+  if (o.bl) {   // 풍선이 된 친구: 진하게, 구해 달라고
+    g.save(); g.translate(o.x, o.y); g.globalAlpha = 0.9; drawBalloon(o.color, Math.floor(t * 4) % 2); g.restore();
+    g.globalAlpha = 1; g.fillStyle = o.color; g.font = '800 16px sans-serif'; g.textAlign = 'center'; g.fillText(`🎈 ${o.name} 구해 줘!`, o.x, o.y + 46);
+    g.strokeStyle = 'rgba(157,255,207,.6)'; g.lineWidth = 3; g.beginPath(); g.arc(o.x, o.y - 40, 60 + Math.sin(t * 6) * 6, 0, TAU); g.stroke(); return;
+  }
   const im = cb.img ? (o.ph === 'plane' ? cb.img('ship-' + (o.frame || 'falcon')) : isRide(o.ph) ? cb.img('boss-' + o.ph) : null) : null;
   g.save(); g.globalAlpha = o.over ? 0.22 : 0.5; g.translate(o.x, o.y);
   if (im) { g.rotate(o.ph === 'plane' ? Math.PI / 2 : -Math.PI / 2); const s = o.ph === 'plane' ? 62 : 100; g.drawImage(im, -s / 2, -s / 2, s, s); }
@@ -477,5 +543,5 @@ function banner(text, sub) { msgs = msgs.filter(m => !m.big); msgs.push({ text, 
 function say(text, c) { msgs.push({ text, c, t: 0, life: 1.1 }); }
 function spark(x, y, c, n = 8) { for (let i = 0; i < n; i++) parts.push({ x, y, vx: rnd(-180, 180), vy: rnd(-260, 60), t: 0, life: 0.5, c, s: rnd(3, 6) }); }
 function sfx(k) { if (cb.sfx) cb.sfx(k); }
-return { start, get on() { return on; }, K, get st() { return st; }, get P() { return P; }, press, get items() { return items; } };   // st·P·press·items는 점검용
+return { start, netEvent, get others() { return others; }, get on() { return on; }, K, get st() { return st; }, get P() { return P; }, press, get items() { return items; } };   // st·P·press·items는 점검용
 })();

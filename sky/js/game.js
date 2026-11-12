@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.25';
+const VERSION = '0.26';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -2897,8 +2897,9 @@ function saveGhost(gh) { try { localStorage.setItem(ghostKey(), JSON.stringify(g
 function loadGhost() { try { const gh = JSON.parse(localStorage.getItem(ghostKey()) || 'null'); return gh && Array.isArray(gh.path) && gh.path.length > 5 ? gh : null; } catch (e) { return null; } }
 // 탈출 작전 「같이 달리기」(로드맵 9-5): 방장이 맵 씨앗을 보내면 모두 같은 맵을 각자 기기에서 달리고, 0.1초마다 자리만 주고받는다
 const ESC_BONUS = [0, 30, 15, 8];   // 순위 보너스 고철(2명 이상일 때)
+const ESC_EV = ['tug', 'rescue'];   // 친구끼리 주고받는 일
 const escNum = (v, a, b) => (typeof v === 'number' && isFinite(v) ? clamp(v, a, b) : 0);
-const escClean = m => ({ x: escNum(m.x, -1e3, 1e7), y: escNum(m.y, -500, 1500), ph: escNum(m.ph, 0, 6) | 0, h: escNum(m.h, 0, 3) | 0, d: escNum(m.d, 0, 1e6) | 0, over: m.over ? 1 : 0, frame: frameOf(m.frame) ? m.frame : 'falcon' });
+const escClean = m => ({ x: escNum(m.x, -1e3, 1e7), y: escNum(m.y, -500, 1500), ph: escNum(m.ph, 0, 6) | 0, h: escNum(m.h, 0, 3) | 0, d: escNum(m.d, 0, 1e6) | 0, over: m.over ? 1 : 0, bl: m.bl ? 1 : 0, frame: frameOf(m.frame) ? m.frame : 'falcon' });
 function escRace() {
   return {
     host: !!(net && net.mode === 'host'),
@@ -2914,6 +2915,11 @@ function escRace() {
       netBroadcast({ t: 'eps', l: [['host', myNick(), '#ffd166', o], ...allies.filter(a => a.esc).map(a => [a.id, a.name, a.color, a.esc])] });
     },
     again: () => { if (net && net.mode === 'host') escRaceHost(); },
+    event: (to, e) => {   // 친구 한 명에게 보내는 일(로프·구출). 친구끼리는 방장을 거쳐 간다
+      if (!net) return;
+      if (net.mode === 'guest') { if (net.conn && net.conn.open) net.conn.send({ t: 'eev', to: String(to), e }); return; }
+      const a = allies.find(x => x.id === to); if (a && a.conn.open) a.conn.send({ t: 'eev', from: 'host', e });
+    },
     done: (rank, n) => { if (n < 2) return 0; const b = ESC_BONUS[rank] || 0; if (b) { S.scrap += b; save(); } if (rank === 1) A.sfx('levelup'); return b; },
   };
 }
@@ -3840,6 +3846,7 @@ function hostData(c, m) {
   if (m.t === 'in' && typeof m.x === 'number' && typeof m.y === 'number') { a.tx = clamp(m.x, 22, W - 22); a.ty = clamp(m.y, 90, H - 70); }
   else if (m.t === 'ult') allyUlt(a);
   else if (m.t === 'ep') a.esc = escClean(m);   // 탈출 작전 같이 달리기: 친구 자리
+  else if (m.t === 'eev' && m.e && ESC_EV.includes(m.e.k)) { if (m.to === 'host') Escape.netEvent(a.id, { k: m.e.k }); else { const b = allies.find(x => x.id === m.to); if (b && b.conn.open) b.conn.send({ t: 'eev', from: a.id, e: { k: m.e.k } }); } }
   else if (m.t === 'emo') emote(a, m.i);
   else if (m.t === 'bye') dropAlly(c);
 }
@@ -4052,6 +4059,7 @@ function guestData(m) {
   else if (m.t === 's') applySnap(m);
   else if (m.t === 'end') guestEnd(m);
   else if (m.t === 'esc') escRaceGuest(m);
+  else if (m.t === 'eev' && m.e && ESC_EV.includes(m.e.k)) Escape.netEvent(String(m.from), { k: m.e.k });
   else if (m.t === 'eps' && Array.isArray(m.l)) net.eps = m.l.slice(0, 3).map(p => [String(p[0]), cleanName(p[1]), ALLY_COL.concat('#ffd166').includes(p[2]) ? p[2] : '#9dffcf', escClean(p[3] || {})]);
 }
 function guestStart(m) {
