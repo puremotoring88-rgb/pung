@@ -15,6 +15,7 @@ const K = {
   flyRise: 1700, flySink: 1150, flyMax: 520,   // 비행기
   birdFlap: 400, birdG: 1250, birdEvery: 0.2,  // 새: 누르고 있으면 0.2초마다 날갯짓
   segPlane: 1900, segRope: 2600, segBird: 1900, // 구간 길이(px)
+  flyX: 300, flyY: 420,                         // 비행기 앞뒤·위아래 빠르기
   stars: [300, 900, 1800],                      // 별 ⭐ 거리(m)
   trouble: 380,                                 // 비행기 구간이 끝나기 이만큼(px) 앞에서 엔진 고장
 };
@@ -25,20 +26,20 @@ let st, P, cam, items, hold = false, holdT = 0, msgs, parts, t, wrecks = [];
 let seedRng = Math.random;
 const mulberry = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let q = Math.imul(a ^ a >>> 15, 1 | a); q = q + Math.imul(q ^ q >>> 7, 61 | q) ^ q; return ((q ^ q >>> 14) >>> 0) / 4294967296; };
 const srnd = (a, b) => a + seedRng() * (b - a);
-const PH_ID = ['plane', 'rope', 'bird', 'spider', 'whale', 'knight', 'core'];
-let opt = {}, others = [], netT = 0, pathT = 0, rankT = 0;
+const PH_ID = ['plane', 'rope', 'bird', 'spider', 'whale', 'knight', 'core', 'twins'];
+let opt = {}, others = [], netT = 0, pathT = 0, rankT = 0, ptr = null, keys = {};   // ptr: 화면을 누른 손가락(비행기 끌기), keys: 방향키
 // opt.seed: 맵 씨앗 · opt.ghost: {seed, path, dist} 내 최고 기록 유령 · opt.race: {others(), send(o), host, again(), done(rank, n)} 친구와 같이 달리기
 function start(callbacks, o) {
   cb = callbacks || {}; opt = o || {};
   if (!box) build();
   box.classList.remove('hidden'); box.querySelector('.esRes').classList.add('hidden');
-  t = 0; cam = 0; items = []; msgs = []; parts = []; others = []; netT = 0; pathT = 0;
+  t = 0; cam = 0; items = []; msgs = []; parts = []; others = []; netT = 0; pathT = 0; keys = {}; ptr = null;
   const seed = opt.seed != null ? opt.seed >>> 0 : (Math.random() * 4294967296) >>> 0;
   seedRng = mulberry(seed);
   st = { phase: 'plane', segEnd: K.segPlane, loop: 0, hearts: 3, inv: 1.5, coins: 0, dist: 0, genX: 600, over: false, hintT: 0, seen: {}, stars: 0, slow: 0, shake: 0, flash: 0, rides: [], best: cb.best ? cb.best() : 0, passBest: false, seed, path: [], raceDone: false };
   wrecks = [];
   P = { x: 160, y: 420, vx: 300, vy: 0, rope: null, flapT: 0, tilt: 0 };
-  banner(opt.race ? '🏃 친구와 같이 달리기!' : opt.ghost ? '👻 유령과 달리기' : '✈️ 비행 구간', opt.race ? '모두 같은 맵이에요 · 가장 멀리 간 사람이 1등' : opt.ghost ? `최고 기록(${opt.ghost.dist.toLocaleString()} m) 때와 같은 맵이에요` : '누르고 있으면 올라가요 · 떼면 내려가요');
+  banner(opt.race ? '🏃 친구와 같이 달리기!' : opt.ghost ? '👻 유령과 달리기' : '✈️ 비행 구간', opt.race ? '모두 같은 맵이에요 · 가장 멀리 간 사람이 1등' : opt.ghost ? `최고 기록(${opt.ghost.dist.toLocaleString()} m) 때와 같은 맵이에요` : (matchMedia('(pointer: coarse)').matches ? '화면을 누른 채 끌면 비행기가 따라와요(위아래·앞뒤)' : '방향키·WASD로 위아래·앞뒤 · 스페이스는 위로'));
   const R = box.querySelector('.esRes'); R.querySelector('.esAgain').classList.toggle('hidden', !!(opt.race && !opt.race.host));
   R.querySelector('.esAgain').textContent = opt.race ? '다 같이 다시 ▶' : '다시 ▶';
   on = true; last = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
@@ -49,11 +50,14 @@ function build() {
     <div class="esRes hidden"><h2>탈출 작전</h2><div class="esStat"></div><div class="esRank"></div><div class="row"><button class="btn big esAgain">다시 ▶</button><button class="btn sub esGhost hidden">👻 유령과 달리기</button><button class="btn sub esHome">격납고로</button></div><small class="esTip"></small></div>`;
   document.getElementById('stage').append(box);
   cv = box.querySelector('canvas'); g = cv.getContext('2d');
-  const down = e => { if (!on || st.over) return; e.preventDefault(); press(true); };
-  const up = e => { if (!on) return; e.preventDefault(); press(false); };
-  cv.addEventListener('pointerdown', down); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
-  window.addEventListener('keydown', e => { if (!on) return; if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat && !st.over) press(true); } if (e.code === 'Escape') { e.stopImmediatePropagation(); finish(true); } }, true);
-  window.addEventListener('keyup', e => { if (!on) return; if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp') { e.stopImmediatePropagation(); press(false); } }, true);
+  const at = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
+  const down = e => { if (!on || st.over) return; e.preventDefault(); const [x, y] = at(e); ptr = { sx: x, sy: y, x, y, ox: P.x - cam, oy: P.y }; press(true); };
+  const move = e => { if (!on || !ptr) return; const [x, y] = at(e); ptr.x = x; ptr.y = y; };
+  const up = e => { if (!on) return; e.preventDefault(); ptr = null; press(false); };
+  cv.addEventListener('pointerdown', down); cv.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  const KEYMAP = { ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', ArrowDown: 'd', KeyS: 'd', KeyW: 'u' };
+  window.addEventListener('keydown', e => { if (!on) return; if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); e.stopImmediatePropagation(); } if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat && !st.over) press(true); } if (e.code === 'Escape') { e.stopImmediatePropagation(); finish(true); } }, true);
+  window.addEventListener('keyup', e => { if (!on) return; if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = false; e.stopImmediatePropagation(); } if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp') { e.stopImmediatePropagation(); press(false); } }, true);
   box.querySelector('.esQuit').addEventListener('click', () => finish(true));
   box.querySelector('.esAgain').addEventListener('click', () => { if (opt.race) opt.race.again(); else start(cb); });
   box.querySelector('.esGhost').addEventListener('click', () => { const gh = cb.loadGhost && cb.loadGhost(); if (gh) start(cb, { seed: gh.seed, ghost: gh }); });
@@ -68,6 +72,7 @@ function press(v) {
   if (v && st.phase === 'spider') { P.side = -P.side; P.vy = P.side * -200; sfx('flap'); }
   if (v && st.phase === 'knight' && !(P.dashT > 0) && !(P.dashCd > 0)) { P.dashT = 0.32; P.dashCd = 0.55; P.vy = -430; sfx('release'); }
   if (v && st.phase === 'core') { P.gdir = -P.gdir; sfx('flap'); }
+  if (v && st.phase === 'twins') { if (st.ammo > 0) { st.muzzle = 0.18; sfx('boom'); if (breakAhead(true)) st.ammo--; } else { say('장전 중…', '#ffb3b3'); } }
 }
 // ---------- 로프 ----------
 function shoot() {
@@ -131,10 +136,10 @@ function helpPress() {
 function breakAhead(mine) {   // 앞 450px 안의 기둥 중 가장 가까운 것을 부순다(씨앗이 같아서 양쪽 맵에 같은 기둥이 있다)
   let best = null;
   for (const it of items) if (it.k === 'wall' && !it.gone && it.x > P.x - 10 && it.x < P.x + 450 && (!best || Math.abs(it.x - P.x) + Math.abs(clamp(P.y, it.top, it.bot) - P.y) * 0.5 < Math.abs(best.x - P.x) + Math.abs(clamp(P.y, best.top, best.bot) - P.y) * 0.5)) best = it;
-  if (!best) { if (mine) say('부술 기둥이 없어요', '#ffb3b3'); return; }
+  if (!best) { if (mine) say('부술 기둥이 없어요', '#ffb3b3'); return false; }
   best.gone = true; sfx('coin');
   for (let i = 0; i < 14; i++) parts.push({ x: best.x + 35, y: clamp(P.y, best.top, best.bot) + rnd(-60, 60), vx: rnd(-100, 300), vy: rnd(-300, 100), t: 0, life: 0.9, c: '#9dffcf', s: rnd(5, 11) });
-  say(mine ? '🔫 기둥 부숨!' : '🔫 친구가 기둥을 부쉈다!', '#9dffcf');
+  say(mine ? '🔫 기둥 부숨!' : '🔫 친구가 기둥을 부쉈다!', '#9dffcf'); return true;
 }
 function syncFlap() { P.vy = -K.birdFlap * 1.5; st.coins++; st.pFlapT = -9; st.dFlapT = -9; say('🎵 박자 맞춤! 🪙+1', '#ffe066'); spark(P.x, P.y, '#ffe066', 12); }
 function unboard(why) {
@@ -174,7 +179,7 @@ function gen() {
       for (let i = 0; i < 3; i++) items.push({ k: 'coin', x: x + 35, y: fromTop ? GROUND - 40 - i * 40 : 70 + i * 40 });
       st.genX += srnd(380, 470) - Math.min(60, lv * 15);
     } else {   // 비행기·새·보스 탈것: 위아래 기둥 사이 틈
-      const gap = ({ bird: 330, whale: 360, knight: 300, core: 320 }[ph] || 300) - Math.min(70, lv * 15), gy = srnd(220, GROUND - 120 - gap);
+      const gap = ({ bird: 330, whale: 360, knight: 300, core: 320, twins: 340 }[ph] || 300) - Math.min(70, lv * 15), gy = srnd(220, GROUND - 120 - gap);
       items.push({ k: 'wall', x, top: 0, bot: gy, w: 70 }, { k: 'wall', x, top: gy + gap, bot: GROUND, w: 70 });
       for (let i = 0; i < 3; i++) items.push({ k: 'coin', x: x + 35, y: gy + gap * (0.3 + i * 0.2) });
       st.genX += srnd(360, 440) - Math.min(60, lv * 15);
@@ -183,13 +188,14 @@ function gen() {
   items = items.filter(it => it.x > cam - 200 && !it.gone);
 }
 // 탈것: 새와 보스 기계 4종. 판마다 순서가 섞인다(비행기 → 로프 → 탈것 → 로프 → …)
-const RIDES = ['bird', 'spider', 'whale', 'knight', 'core'];
+const RIDES = ['bird', 'spider', 'whale', 'knight', 'core', 'twins'];
 const RIDE_NM = {
   bird: ['🐦 새에 올라탔다!', '누르고 있으면 날갯짓(오름) · 떼면 떨어져요 · 말을 잘 안 들어요!'],
   spider: ['🕷️ 강철 거미에 올라탔다!', '누를 때마다 천장 ↔ 바닥으로 옮겨 붙어요 · 거미는 용암도 견뎌요'],
   whale: ['🐋 폭풍 고래에 올라탔다!', '누르면 천천히 오르고 떼면 천천히 내려가요 · 기둥은 몸으로 부숴요 · 동전을 빨아들여요'],
   knight: ['⚔️ 거울 기사에 올라탔다!', '누를 때마다 앞으로 돌진하며 살짝 떠올라요 · 돌진 중엔 기둥을 베어요'],
   core: ['💠 코어 요새에 올라탔다!', '누를 때마다 중력이 위아래로 뒤집혀요'],
+  twins: ['🚀 쌍둥이 포대선에 올라탔다!', '누르고 있으면 오르고 떼면 내려가요 · 누를 때마다 대포로 앞 기둥을 부숴요(3발, 천천히 다시 참)'],
 };
 function phaseAt(x) {   // 이 자리가 어느 구간인가(구간 경계는 판을 시작할 때 정한다)
   if (!st.plan) {
@@ -254,7 +260,13 @@ function update(dt) {
   st.loop =Math.floor(P.x / (K.segPlane + K.segRope * 2 + K.segBird));
   const speed = 300 + st.loop * 30;
   if (st.phase === 'plane') {
-    P.vx = speed; P.vy += (hold ? -K.flyRise : K.flySink) * dt; P.vy = clamp(P.vy, -K.flyMax, K.flyMax);
+    // 비행기는 위아래·앞뒤로 자유롭게(떨어지지 않음): 방향키·WASD, 스페이스=위, 화면은 손가락을 끈 만큼 따라감
+    let vxr = ((keys.r ? 1 : 0) - (keys.l ? 1 : 0)) * K.flyX, vyt = ((keys.d ? 1 : 0) - (keys.u || (hold && !ptr) ? 1 : 0)) * K.flyY;
+    if (ptr) {   // 끌기: 누른 순간의 비행기 자리 + 손가락이 움직인 만큼(1.4배)
+      const tx = clamp(ptr.ox + (ptr.x - ptr.sx) * 1.4, 50, W * 0.72), ty = clamp(ptr.oy + (ptr.y - ptr.sy) * 1.4, 60, GROUND - 40);
+      vxr = clamp((tx - (P.x - cam)) * 8, -K.flyX * 1.6, K.flyX * 1.6); vyt = clamp((ty - P.y) * 8, -K.flyY * 1.6, K.flyY * 1.6);
+    }
+    P.vy += (vyt - P.vy) * Math.min(1, dt * 9); P.vx = speed + vxr;
     P.tilt = P.vy / 1400;
     const seg = st.plan && st.plan.find(s => P.x >= s.from && P.x < s.to);   // 엔진 고장: 연기·흔들림·경고
     if (seg && seg.ph === 'plane' && seg.to - P.x < K.trouble) {
@@ -277,6 +289,12 @@ function update(dt) {
   } else if (st.phase === 'knight') {   // 기사: 누를 때마다 돌진
     if (P.dashT > 0) P.dashT -= dt; if (P.dashCd > 0) P.dashCd -= dt;
     P.vx = speed * (P.dashT > 0 ? 2.3 : 0.9); P.vy += 1150 * dt; P.vy = clamp(P.vy, -600, 600); P.tilt = P.dashT > 0 ? -0.1 : P.vy / 1500;
+  } else if (st.phase === 'twins') {   // 쌍둥이 포대선: 누르고 있으면 오르고, 누를 때마다 대포(3발, 1.6초마다 1발 다시 참)
+    P.vx = speed * 0.95; P.vy += (hold ? -1150 : 900) * dt; P.vy = clamp(P.vy, -380, 380); P.tilt = P.vy / 1600;
+    if (st.ammo < 3 && (st.reload -= dt) <= 0) { st.ammo++; st.reload = 1.6; }
+    if (st.muzzle > 0) st.muzzle -= dt;
+    if (P.y < 60) { P.y = 60; if (P.vy < 0) P.vy = 0; }
+    if (P.y > GROUND - 50) { P.y = GROUND - 50; P.vy = -380; hurt('용암에 닿았다!'); }
   } else if (st.phase === 'core') {   // 코어: 중력 뒤집기
     P.vx = speed; P.vy += P.gdir * 1700 * dt; P.vy = clamp(P.vy, -620, 620); P.tilt = 0;
   } else {   // 로프
@@ -299,7 +317,9 @@ function update(dt) {
     if (P.x > a.x + 40 && P.y < a.y + 20) letGo();   // 고리 위로 넘어가면 저절로 놓는다
   }
   if (P.y < 30) { P.y = 30; if (P.vy < 0) P.vy = 0; }
-  cam += (P.x - W * 0.32 - cam) * Math.min(1, dt * 6);
+  if (st.phase === 'plane') {   // 비행기: 화면은 일정하게 흐르고, 비행기는 화면 안에서 앞뒤로 움직인다
+    cam = Math.max(cam + speed * dt, P.x - W * 0.72); P.x = clamp(P.x, cam + 50, cam + W * 0.72);
+  } else cam += (P.x - W * 0.32 - cam) * Math.min(1, dt * 6);
   st.dist = Math.max(st.dist, Math.floor(P.x / 10));
   if (st.stars < 3 && st.dist >= K.stars[st.stars]) {   // 별 ⭐
     st.stars++; banner('⭐'.repeat(st.stars) + ` ${K.stars[st.stars - 1].toLocaleString()} m 돌파!`, st.stars < 3 ? `다음 별까지 ${K.stars[st.stars].toLocaleString()} m` : '별을 모두 모았어요!');
@@ -318,8 +338,8 @@ function update(dt) {
   // 부딪힘
   for (const it of items) {
     if (it.k === 'coin' && !it.gone && Math.hypot(it.x - P.x, it.y - P.y) < 30) { it.gone = true; st.coins++; sfx('coin'); spark(it.x, it.y, '#ffd166'); }
-    const hr = isRide(st.phase) ? 26 : 18;
-    if (it.k === 'wall' && !it.gone && P.x + hr > it.x && P.x - hr < it.x + it.w && P.y + hr > it.top && P.y - hr < it.bot) {
+    const hr = isRide(st.phase) ? 26 : 18, hy = st.phase === 'twins' ? 46 : hr;   // 쌍둥이는 위아래로 길다
+    if (it.k === 'wall' && !it.gone && P.x + hr > it.x && P.x - hr < it.x + it.w && P.y + hy > it.top && P.y - hy < it.bot) {
       if (st.phase === 'whale' || (st.phase === 'knight' && P.dashT > 0)) {   // 몸으로 부수기 · 베기
         it.gone = true; sfx('coin'); for (let i = 0; i < 12; i++) parts.push({ x: it.x + 35, y: clamp(P.y, it.top, it.bot) + rnd(-40, 40), vx: rnd(50, 350), vy: rnd(-300, 100), t: 0, life: 0.9, c: '#6b7484', s: rnd(5, 11) });
         st.coins++; say(st.phase === 'whale' ? '쾅! 부쉈다' : '싹둑!', '#ffd166'); continue;
@@ -353,11 +373,11 @@ function changePhase(ph) {
     // 탈출하자마자 잡을 고리를 하나 둔다
     items.push({ k: 'anchor', x: P.x + 260, y: 170 });
   } else if (RIDE_NM[ph]) {
-    const nm = RIDE_NM[ph]; P.vy = -150; P.side = 1; P.gdir = 1; P.dashT = 0; P.dashCd = 0;
+    const nm = RIDE_NM[ph]; P.vy = -150; P.side = 1; P.gdir = 1; P.dashT = 0; P.dashCd = 0; st.ammo = 3; st.reload = 1.6; st.muzzle = 0;
     banner(nm[0], st.seen[ph] ? nm[1].split(' · ')[0] : nm[1]);
     // 탈것으로 바뀌는 자리 바로 앞은 비워 둔다(갑자기 기둥에 부딪히지 않게)
     items = items.filter(it => !(it.k === 'wall' && it.x > P.x - 40 && it.x < P.x + 320));
-  } else { P.vy = -100; banner('✈️ 새 비행기를 잡아탔다!', '누르면 올라가요'); }
+  } else { P.vy = -100; banner('✈️ 새 비행기를 잡아탔다!', matchMedia('(pointer: coarse)').matches ? '누른 채 끌어서 조종' : '방향키로 조종'); }
   st.seen[ph] = true; st.inv = Math.max(st.inv, 1); sfx('phase');
 }
 function respawn() {
@@ -506,6 +526,7 @@ function draw() {
   g.textAlign = 'left'; g.fillStyle = '#fff'; g.font = '800 30px sans-serif'; g.fillText(`${st.dist.toLocaleString()} m`, 24, 56);
   g.font = '600 20px sans-serif'; g.fillText(`🪙 ${st.coins}`, 24, 88);
   g.textAlign = 'right'; g.font = '26px sans-serif'; g.fillText('❤️'.repeat(Math.max(0, st.hearts)) + '🤍'.repeat(Math.max(0, 3 - st.hearts)), W - 70, 56);
+  if (st.phase === 'twins' && !st.riding) { g.font = '800 20px sans-serif'; g.fillStyle = '#ffd6ff'; g.fillText('🔫 ' + '●'.repeat(st.ammo) + '○'.repeat(3 - st.ammo), W - 70, 86); }
   g.textAlign = 'center';
   for (const m of msgs) {
     const a = Math.min(1, (m.life - m.t) / 0.4), y = m.big ? H * 0.3 : H * 0.42 - m.t * 30;
@@ -572,9 +593,27 @@ function drawHero() {
   }
   g.restore();
 }
-// 보스 기계 탈것: 보스 그림(아래를 보는 그림)을 오른쪽으로 돌려 그리고 등에 조종사를 태운다
+// 보스 기계 옆모습 그림(side-<id>): 크기, 좌석 자리(그림 안 0~1), 좌우 뒤집기. 없으면 위에서 본 보스 그림을 돌려 쓴다
+const SIDE = { spider: { s: 150, seat: [0.43, 0.2] }, whale: { s: 170, seat: [0.6, 0.4] }, knight: { s: 160, seat: [0.47, 0.17], flip: true }, twins: { s: 150, seat: null, flip: true } };   // 쌍둥이 그림엔 조종사가 이미 타 있다
+function sideImg(ph) { const d = SIDE[ph], im = d && cb.img && cb.img('side-' + ph); return im ? Object.assign({ im }, d) : null; }
+function drawSide(sd, alpha) {   // (0,0) 가운데에 옆모습 그림 + 좌석의 조종사
+  g.save(); if (sd.flip) g.scale(-1, 1); g.drawImage(sd.im, -sd.s / 2, -sd.s / 2, sd.s, sd.s); g.restore();
+  const sit = cb.img && cb.img('esc-p-sit'), ps = sd.s * 0.35;
+  if (sit && alpha !== 0 && sd.seat) g.drawImage(sit, (sd.seat[0] - 0.5) * sd.s - ps / 2, (sd.seat[1] - 0.5) * sd.s - ps / 2, ps, ps);
+}
+// 보스 기계 탈것: 옆모습 그림이 있으면 그것으로, 없으면 보스 그림(아래를 보는 그림)을 오른쪽으로 돌려 그리고 등에 조종사를 태운다
 function drawRide(ph, im) {
-  const bob = Math.sin(t * 5) * 3, S0 = 120;
+  const bob = Math.sin(t * 5) * 3, S0 = 120, sd = sideImg(ph);
+  if (sd) {
+    g.save();
+    if (ph === 'spider' && P.side < 0) g.scale(1, -1);
+    g.translate(0, bob + (ph === 'spider' ? Math.abs(Math.sin(t * 12)) * -4 : 0));
+    if (ph !== 'spider') g.rotate(P.tilt * (ph === 'twins' ? 0.6 : 1));
+    if (ph === 'knight' && P.dashT > 0) { g.fillStyle = 'rgba(200,230,255,.35)'; g.beginPath(); g.moveTo(40, -40); g.lineTo(-160, -16); g.lineTo(-160, 16); g.lineTo(40, 40); g.fill(); }
+    if (ph === 'twins' && st.muzzle > 0) { g.fillStyle = `rgba(255,200,255,${st.muzzle * 4})`; g.beginPath(); g.arc(sd.s * 0.47, -sd.s * 0.19, 16, 0, TAU); g.arc(sd.s * 0.47, sd.s * 0.13, 16, 0, TAU); g.fill(); }
+    drawSide(sd);
+    g.restore(); return;
+  }
   g.save();
   if (ph === 'spider' && P.side < 0) g.scale(1, -1);   // 천장에 붙으면 뒤집힌다
   g.translate(0, bob);
@@ -631,7 +670,9 @@ function drawOther(o) {   // 친구·유령은 반투명하게(부딪히지 않�
   const im = cb.img ? (o.ph === 'plane' ? cb.img('ship-' + (o.frame || 'falcon')) : isRide(o.ph) ? cb.img('boss-' + o.ph) : o.ph === 'bird' ? cb.img('esc-bird1') : o.ph === 'rope' ? cb.img('esc-p-fly') : null) : null;
   if (o.ps) return;   // 같이 탄 사람은 앞사람 탈것 위에 그린다(앞사람 쪽에서)
   g.save(); g.globalAlpha = o.over ? 0.22 : o.id === st.riding ? 1 : 0.5; g.translate(o.x, o.y);
-  if (im && (o.ph === 'bird' || o.ph === 'rope')) { const s = o.ph === 'bird' ? 100 : 70; g.drawImage(im, -s / 2, -s / 2, s, s); }
+  const so = isRide(o.ph) && sideImg(o.ph);
+  if (so) drawSide(so, 0);
+  else if (im && (o.ph === 'bird' || o.ph === 'rope')) { const s = o.ph === 'bird' ? 100 : 70; g.drawImage(im, -s / 2, -s / 2, s, s); }
   else if (im) { g.rotate(o.ph === 'plane' ? Math.PI / 2 : -Math.PI / 2); const s = o.ph === 'plane' ? 62 : 100; g.drawImage(im, -s / 2, -s / 2, s, s); }
   else if (o.ph === 'rope') { g.fillStyle = o.color; g.beginPath(); g.ellipse(0, 4, 12, 16, 0, 0, TAU); g.fill(); g.beginPath(); g.arc(0, -14, 9, 0, TAU); g.fill(); }
   else { g.fillStyle = o.color; g.beginPath(); g.ellipse(0, 0, 30, 14, 0, 0, TAU); g.fill(); }
@@ -642,7 +683,9 @@ function drawOther(o) {   // 친구·유령은 반투명하게(부딪히지 않�
 function drawWreck(w) {   // 버린 탈것(빙글빙글 떨어진다, 그을려 어둡게)
   const im = cb.img ? cb.img(w.k === 'plane' ? 'ship-' + (cb.frame || 'falcon') : w.k === 'bird' ? (Math.floor(t * 8) % 2 ? 'esc-bird1' : 'esc-bird2') : 'boss-' + w.k) : null;
   g.save(); g.translate(w.x, w.y); g.rotate(w.rot); g.filter = w.k === 'bird' ? 'none' : 'brightness(0.55)';
-  if (im && w.k === 'bird') g.drawImage(im, -55, -55, 110, 110);
+  const sw = sideImg(w.k);
+  if (sw) { if (sw.flip) g.scale(-1, 1); g.drawImage(sw.im, -sw.s / 2, -sw.s / 2, sw.s, sw.s); }
+  else if (im && w.k === 'bird') g.drawImage(im, -55, -55, 110, 110);
   else if (im) { g.rotate(w.k === 'plane' ? Math.PI / 2 : -Math.PI / 2); const s = w.k === 'plane' ? 72 : 120; g.drawImage(im, -s / 2, -s / 2, s, s); }
   else { g.fillStyle = w.k === 'bird' ? '#e8d8b8' : w.k === 'plane' ? '#4cc9ff' : '#7a8696'; g.beginPath(); g.ellipse(0, 0, 32, 15, 0, 0, TAU); g.fill(); }
   g.filter = 'none'; g.restore();

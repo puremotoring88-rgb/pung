@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.28';
+const VERSION = '0.29';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -222,7 +222,7 @@ function loadImg(key) {
   const next = i => { if (i >= exts.length) return; const im = new Image(); im.onload = () => { IMG[key] = im; }; im.onerror = () => next(i + 1); im.src = `assets/${key}.${exts[i]}`; };
   next(0);
 }
-const ASSET_KEYS = ['falcon', 'turtle', 'hornet', 'phoenix'].map(k => 'ship-' + k).concat(['spider', 'whale', 'twins', 'knight', 'core'].map(k => 'boss-' + k), ['scout', 'weaver', 'diver', 'turret', 'splitter', 'tank', 'netter', 'treasure', 'm4', 'm5', 'm6', 'm7', 'm8'].map(k => 'enemy-' + k), ['civ-ddrone', 'civ-liner', 'obst-tower', 'obst-spire', 'obst-bldg'], ['esc-bird1', 'esc-bird2', 'esc-p-rope', 'esc-p-fly', 'esc-p-fall', 'esc-p-sit', 'esc-pilot']);
+const ASSET_KEYS = ['falcon', 'turtle', 'hornet', 'phoenix'].map(k => 'ship-' + k).concat(['spider', 'whale', 'twins', 'knight', 'core'].map(k => 'boss-' + k), ['scout', 'weaver', 'diver', 'turret', 'splitter', 'tank', 'netter', 'treasure', 'm4', 'm5', 'm6', 'm7', 'm8'].map(k => 'enemy-' + k), ['civ-ddrone', 'civ-liner', 'obst-tower', 'obst-spire', 'obst-bldg'], ['esc-bird1', 'esc-bird2', 'esc-p-rope', 'esc-p-fly', 'esc-p-fall', 'esc-p-sit', 'esc-pilot', 'side-spider', 'side-whale', 'side-knight', 'side-twins']);
 loadImg('esc-bg');   // 탈출 작전 배경(jpg)   // 그림 파일을 넣으면 여기에 이름을 적는다(예: 'ship-falcon', 'boss-spider'). 비어 있으면 찾지 않는다
 ASSET_KEYS.forEach(loadImg);
 // 맵 배경 그림(540×1600, 위아래 거울로 이어 붙인 것). 섬 자리에 높은 구조물이 선다
@@ -2900,7 +2900,7 @@ function loadGhost() { try { const gh = JSON.parse(localStorage.getItem(ghostKey
 const ESC_BONUS = [0, 30, 15, 8];   // 순위 보너스 고철(2명 이상일 때)
 const ESC_EV = ['tug', 'rescue', 'board', 'boardOk', 'unboard', 'help', 'flap'];   // 친구끼리 주고받는 일
 const escNum = (v, a, b) => (typeof v === 'number' && isFinite(v) ? clamp(v, a, b) : 0);
-const escClean = m => ({ x: escNum(m.x, -1e3, 1e7), y: escNum(m.y, -500, 1500), ph: escNum(m.ph, 0, 6) | 0, h: escNum(m.h, 0, 3) | 0, d: escNum(m.d, 0, 1e6) | 0, over: m.over ? 1 : 0, bl: m.bl ? 1 : 0, ps: typeof m.ps === 'string' ? m.ps.slice(0, 64) : '', pp: m.pp ? 1 : 0, frame: frameOf(m.frame) ? m.frame : 'falcon' });
+const escClean = m => ({ x: escNum(m.x, -1e3, 1e7), y: escNum(m.y, -500, 1500), ph: escNum(m.ph, 0, 7) | 0, h: escNum(m.h, 0, 3) | 0, d: escNum(m.d, 0, 1e6) | 0, over: m.over ? 1 : 0, bl: m.bl ? 1 : 0, ps: typeof m.ps === 'string' ? m.ps.slice(0, 64) : '', pp: m.pp ? 1 : 0, frame: frameOf(m.frame) ? m.frame : 'falcon' });
 function escRace() {
   return {
     host: !!(net && net.mode === 'host'),
