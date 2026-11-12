@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.27';
+const VERSION = '0.28';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -2898,9 +2898,9 @@ function saveGhost(gh) { try { localStorage.setItem(ghostKey(), JSON.stringify(g
 function loadGhost() { try { const gh = JSON.parse(localStorage.getItem(ghostKey()) || 'null'); return gh && Array.isArray(gh.path) && gh.path.length > 5 ? gh : null; } catch (e) { return null; } }
 // 탈출 작전 「같이 달리기」(로드맵 9-5): 방장이 맵 씨앗을 보내면 모두 같은 맵을 각자 기기에서 달리고, 0.1초마다 자리만 주고받는다
 const ESC_BONUS = [0, 30, 15, 8];   // 순위 보너스 고철(2명 이상일 때)
-const ESC_EV = ['tug', 'rescue'];   // 친구끼리 주고받는 일
+const ESC_EV = ['tug', 'rescue', 'board', 'boardOk', 'unboard', 'help', 'flap'];   // 친구끼리 주고받는 일
 const escNum = (v, a, b) => (typeof v === 'number' && isFinite(v) ? clamp(v, a, b) : 0);
-const escClean = m => ({ x: escNum(m.x, -1e3, 1e7), y: escNum(m.y, -500, 1500), ph: escNum(m.ph, 0, 6) | 0, h: escNum(m.h, 0, 3) | 0, d: escNum(m.d, 0, 1e6) | 0, over: m.over ? 1 : 0, bl: m.bl ? 1 : 0, frame: frameOf(m.frame) ? m.frame : 'falcon' });
+const escClean = m => ({ x: escNum(m.x, -1e3, 1e7), y: escNum(m.y, -500, 1500), ph: escNum(m.ph, 0, 6) | 0, h: escNum(m.h, 0, 3) | 0, d: escNum(m.d, 0, 1e6) | 0, over: m.over ? 1 : 0, bl: m.bl ? 1 : 0, ps: typeof m.ps === 'string' ? m.ps.slice(0, 64) : '', pp: m.pp ? 1 : 0, frame: frameOf(m.frame) ? m.frame : 'falcon' });
 function escRace() {
   return {
     host: !!(net && net.mode === 'host'),

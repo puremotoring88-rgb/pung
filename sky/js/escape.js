@@ -62,8 +62,9 @@ function build() {
 function close() { on = false; cancelAnimationFrame(raf); box.classList.add('hidden'); if (opt.race && opt.race.leave) opt.race.leave(); opt = {}; if (cb.home) cb.home(); }
 function press(v) {
   if (v === hold) return; hold = v; holdT = 0;
+  if (st.riding) { if (v) helpPress(); return; }   // 같이 탄 사람: 누르면 돕기
   if (st.phase === 'rope') { if (v) shoot(); else letGo(); }
-  if (st.phase === 'bird' && v) flap();
+  if (st.phase === 'bird' && v) { flap(); st.dFlapT = t; if (st.pass && t - (st.pFlapT || -9) < 0.15) syncFlap(); }
   if (v && st.phase === 'spider') { P.side = -P.side; P.vy = P.side * -200; sfx('flap'); }
   if (v && st.phase === 'knight' && !(P.dashT > 0) && !(P.dashCd > 0)) { P.dashT = 0.32; P.dashCd = 0.55; P.vy = -430; sfx('release'); }
   if (v && st.phase === 'core') { P.gdir = -P.gdir; sfx('flap'); }
@@ -107,6 +108,45 @@ function netEvent(from, e) {   // 친구가 보낸 일
     st.balloon = 0; st.hearts = 1; st.inv = 2.2; st.rescued = (st.rescued || 0) + 1; P.vy = -420; P.vx = 320; P.rope = null;
     banner(`🎈 ${nm}이(가) 구해 줬어요!`, '하트 1개로 다시 달려요'); sfx('star'); spark(P.x, P.y, '#9dffcf', 24);
   }
+  // 둘이 타기
+  if (e.k === 'board' && !st.over && !st.balloon && !st.riding && !st.pass && RIDE2(st.phase)) { st.pass = from; st.passT = t; netEv(from, 'boardOk'); say(`👥 ${nm} 탑승!`, '#9dffcf'); sfx('star'); }
+  if (e.k === 'boardOk' && st.boardAsk === from && !st.riding && RIDE2(st.phase) && !st.over && !st.balloon) {
+    st.riding = from; st.boardAsk = null; P.rope = null;
+    banner(`👥 ${nm}의 탈것에 같이 탔어요!`, st.phase === 'bird' ? '누르면 같이 날갯짓 · 앞사람과 동시에 누르면 훨씬 높이!' : '누르면 앞 기둥 부수기(2초마다) · 몰기는 앞사람이 해요'); sfx('star');
+  }
+  if (e.k === 'unboard' && st.pass === from) { st.pass = null; say(`👥 ${nm}이(가) 내렸어요`, '#e6eefa'); }
+  if (e.k === 'help' && st.pass === from && !st.over) breakAhead(false);
+  if (e.k === 'flap' && st.pass === from && st.phase === 'bird' && !st.over) {
+    st.pFlapT = t;
+    if (t - (st.dFlapT || -9) < 0.15) syncFlap(); else { P.vy = Math.min(P.vy, 0) - 160; }   // 박자가 안 맞아도 조금은 띄워 준다
+  }
+}
+// 둘이 타기(9-5c): 같은 종류의 탈것을 탄 친구에게 뒤에서 닿으면 그 탈것에 같이 탄다. 앞사람이 몰고, 뒷사람은 돕는다
+const RIDE2 = ph => RIDES.includes(ph);   // 새도 함께
+function helpPress() {
+  if (!st.riding || t < (st.helpT || 0)) return;
+  if (st.phase === 'bird') { st.helpT = t + 0.18; netEv(st.riding, 'flap'); sfx('flap'); say('🎵', '#ffe066'); return; }
+  st.helpT = t + 2; netEv(st.riding, 'help'); breakAhead(true);
+}
+function breakAhead(mine) {   // 앞 450px 안의 기둥 중 가장 가까운 것을 부순다(씨앗이 같아서 양쪽 맵에 같은 기둥이 있다)
+  let best = null;
+  for (const it of items) if (it.k === 'wall' && !it.gone && it.x > P.x - 10 && it.x < P.x + 450 && (!best || Math.abs(it.x - P.x) + Math.abs(clamp(P.y, it.top, it.bot) - P.y) * 0.5 < Math.abs(best.x - P.x) + Math.abs(clamp(P.y, best.top, best.bot) - P.y) * 0.5)) best = it;
+  if (!best) { if (mine) say('부술 기둥이 없어요', '#ffb3b3'); return; }
+  best.gone = true; sfx('coin');
+  for (let i = 0; i < 14; i++) parts.push({ x: best.x + 35, y: clamp(P.y, best.top, best.bot) + rnd(-60, 60), vx: rnd(-100, 300), vy: rnd(-300, 100), t: 0, life: 0.9, c: '#9dffcf', s: rnd(5, 11) });
+  say(mine ? '🔫 기둥 부숨!' : '🔫 친구가 기둥을 부쉈다!', '#9dffcf');
+}
+function syncFlap() { P.vy = -K.birdFlap * 1.5; st.coins++; st.pFlapT = -9; st.dFlapT = -9; say('🎵 박자 맞춤! 🪙+1', '#ffe066'); spark(P.x, P.y, '#ffe066', 12); }
+function unboard(why) {
+  if (!st.riding) return;
+  netEv(st.riding, 'unboard'); st.riding = null; P.vy = -380; P.vx = 300; st.inv = Math.max(st.inv, 1);
+  if (why) say(why, '#e6eefa');
+}
+function rideTick() {   // 같이 탄 사람: 앞사람 탈것에 붙어 간다(다치지 않는다)
+  const d = others.find(o => o.id === st.riding);
+  if (!d || d.over || d.bl || !RIDE2(d.ph)) { unboard('👥 내렸어요'); return false; }
+  P.x = d.x - 14; P.y = d.y - 30; P.vx = 300; P.vy = 0; P.tilt = 0;
+  return true;
 }
 function enterBalloon() {   // 같이 달리기에서 하트를 다 잃으면 바로 끝나지 않고 풍선이 되어 구조를 기다린다
   st.balloon = 12; P.rope = null; P.vy = 0; st.inv = 0;
@@ -173,7 +213,7 @@ function loop(now) {
   if (opt.race) {   // 친구와 같이 달리기: 내 자리를 보내고 친구 자리를 받는다
     const got = opt.race.others() || [];
     others = got.map(o => { const p = others.find(q => q.id === o.id); return Object.assign({}, o, { ph: typeof o.ph === 'number' ? PH_ID[o.ph] || 'rope' : o.ph, x: p ? p.x + (o.x - p.x) * Math.min(1, dt * 10) : o.x, y: p ? p.y + (o.y - p.y) * Math.min(1, dt * 10) : o.y }); });
-    if ((netT -= dt) <= 0) { netT = 0.1; opt.race.send({ x: Math.round(P.x), y: Math.round(P.y), ph: PH_ID.indexOf(st.phase), h: st.hearts, d: st.dist, over: st.over ? 1 : 0, bl: st.balloon > 0 ? 1 : 0, frame: cb.frame || 'falcon' }); }
+    if ((netT -= dt) <= 0) { netT = 0.1; opt.race.send({ x: Math.round(P.x), y: Math.round(P.y), ph: PH_ID.indexOf(st.phase), h: st.hearts, d: st.dist, over: st.over ? 1 : 0, bl: st.balloon > 0 ? 1 : 0, ps: st.riding || '', pp: st.pass ? 1 : 0, frame: cb.frame || 'falcon' }); }
     if (st.over && (rankT -= dt) <= 0) { rankT = 0.5; raceRank(); }
   }
   draw();
@@ -190,6 +230,20 @@ function update(dt) {
     for (const m of msgs) m.t += dt; msgs = msgs.filter(m => m.t < m.life);
     return;
   }
+  if (st.riding && phaseAt(P.x) !== st.phase) unboard();
+  if (st.riding && rideTick()) {   // 같이 탄 사람: 몸은 앞사람 탈것에(물리·부딪힘 없음)
+    cam += (P.x - W * 0.32 - cam) * Math.min(1, dt * 6); st.dist = Math.max(st.dist, Math.floor(P.x / 10)); gen();
+    for (const it of items) if (it.k === 'coin' && !it.gone && Math.hypot(it.x - P.x, it.y - P.y) < 40) { it.gone = true; st.coins++; sfx('coin'); }
+    for (const p of parts) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; } parts = parts.filter(p => p.t < p.life);
+    for (const m of msgs) m.t += dt; msgs = msgs.filter(m => m.t < m.life);
+    return;
+  }
+  if (opt.race && RIDE2(st.phase)) {
+    if (st.pass) { const q = others.find(o => o.id === st.pass); if (!q || q.over || (t - st.passT > 1.5 && !q.ps)) st.pass = null; }   // 같이 탄 친구가 사라지면
+    else if (!st.riding && !(st.boardT > t)) for (const o of others) {   // 같은 탈것의 친구에게 뒤에서 닿으면 같이 타자고 한다
+      if (o.ph === st.phase && !o.ps && !o.pp && !o.over && !o.bl && o.x > P.x - 30 && Math.hypot(o.x - P.x, o.y - P.y) < 80) { st.boardAsk = o.id; st.boardT = t + 1.5; netEv(o.id, 'board'); break; }
+    }
+  } else if (st.pass) st.pass = null;
   if (P.rope && P.rope.a.fid) {   // 친구에게 건 로프: 친구를 따라 움직인다
     const o = others.find(q => q.id === P.rope.a.fid);
     if (!o || o.over) letGo(); else { P.rope.a.x = o.x; P.rope.a.y = o.y; }
@@ -414,6 +468,14 @@ function draw() {
   }
   if (P.miss > 0) { g.strokeStyle = `rgba(255,180,180,${P.miss * 3})`; g.lineWidth = 2; g.beginPath(); g.moveTo(P.x, P.y); g.lineTo(P.x + 160, P.y - 260); g.stroke(); }
   drawHero();
+  if (st.pass) {   // 내 탈것에 같이 탄 친구(뒤쪽에 앉음)
+    const q = others.find(o => o.id === st.pass), sit = cb.img && cb.img('esc-p-sit');
+    if (q) {
+      const bx = P.x - 36, by = P.y - (st.phase === 'bird' ? 44 : 38) + Math.sin(t * 5) * 3;
+      if (sit) g.drawImage(sit, bx - 24, by - 30, 48, 48); else { g.fillStyle = q.color; g.beginPath(); g.arc(bx, by, 10, 0, TAU); g.fill(); }
+      g.fillStyle = q.color; g.font = '800 14px sans-serif'; g.textAlign = 'center'; g.fillText(`👥 ${q.name}`, bx, by - 34);
+    }
+  }
   for (const p of parts) {
     g.globalAlpha = (1 - p.t / p.life) * (p.smoke ? 0.55 : 1); g.fillStyle = p.c;
     if (p.smoke) { g.beginPath(); g.arc(p.x, p.y, p.s / 2, 0, TAU); g.fill(); } else g.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
@@ -436,6 +498,10 @@ function draw() {
     const rank = 1 + others.filter(o => (o.d || 0) > st.dist).length;
     g.fillStyle = '#9dffcf'; g.font = '800 22px sans-serif'; g.textAlign = 'left'; g.fillText(`🏃 ${rank}위 / ${others.length + 1}명`, 24, 152);
   }
+  if (st.riding || st.pass) {   // 둘이 타기 안내(아래)
+    const ready = !(st.helpT > t), txt = st.riding ? (st.phase === 'bird' ? '👥 같이 탐 · 누르면 날갯짓(앞사람과 동시에!)' : `👥 같이 탐 · 누르면 기둥 부수기 ${ready ? '✅' : `(${Math.ceil(st.helpT - t)}초)`}`) : (st.phase === 'bird' ? '👥 친구가 탔어요 · 같이 눌러 박자 맞추기!' : '👥 친구가 탔어요 · 친구가 기둥을 부숴 줘요');
+    g.fillStyle = 'rgba(6,12,24,.55)'; g.fillRect(0, H - 120, W, 40); g.fillStyle = '#9dffcf'; g.font = '800 18px sans-serif'; g.textAlign = 'center'; g.fillText(txt, W / 2, H - 93);
+  }
   // 화면 위 글자
   g.textAlign = 'left'; g.fillStyle = '#fff'; g.font = '800 30px sans-serif'; g.fillText(`${st.dist.toLocaleString()} m`, 24, 56);
   g.font = '600 20px sans-serif'; g.fillText(`🪙 ${st.coins}`, 24, 88);
@@ -455,6 +521,11 @@ function drawHero() {
   if (st.inv > 0 && Math.floor(st.inv * 12) % 2 === 0 && !st.over) return;
   g.save(); g.translate(P.x, P.y);
   const img = k => cb.img ? cb.img(k) : null;
+  if (st.riding) {   // 친구 탈것에 같이 탄 나(탈것은 친구 쪽 그림으로 그려진다)
+    const sit = img('esc-p-sit'), b = Math.sin(t * 5) * 3;
+    if (sit) g.drawImage(sit, -24, -26 + b, 48, 48); else { g.fillStyle = '#ff7a5e'; g.beginPath(); g.arc(0, b, 10, 0, TAU); g.fill(); }
+    g.restore(); return;
+  }
   if (st.balloon > 0) {   // 풍선이 된 나
     drawBalloon('#ff7a5e', st.balloon < 4 && Math.floor(t * 6) % 2);
     g.restore(); g.fillStyle = '#fff'; g.font = '800 18px sans-serif'; g.textAlign = 'center'; g.fillText(`🎈 구조를 기다리는 중 ${Math.ceil(st.balloon)}`, P.x, P.y + 50); return;
@@ -558,7 +629,8 @@ function drawOther(o) {   // 친구·유령은 반투명하게(부딪히지 않�
     g.strokeStyle = 'rgba(157,255,207,.6)'; g.lineWidth = 3; g.beginPath(); g.arc(o.x, o.y - 40, 60 + Math.sin(t * 6) * 6, 0, TAU); g.stroke(); return;
   }
   const im = cb.img ? (o.ph === 'plane' ? cb.img('ship-' + (o.frame || 'falcon')) : isRide(o.ph) ? cb.img('boss-' + o.ph) : o.ph === 'bird' ? cb.img('esc-bird1') : o.ph === 'rope' ? cb.img('esc-p-fly') : null) : null;
-  g.save(); g.globalAlpha = o.over ? 0.22 : 0.5; g.translate(o.x, o.y);
+  if (o.ps) return;   // 같이 탄 사람은 앞사람 탈것 위에 그린다(앞사람 쪽에서)
+  g.save(); g.globalAlpha = o.over ? 0.22 : o.id === st.riding ? 1 : 0.5; g.translate(o.x, o.y);
   if (im && (o.ph === 'bird' || o.ph === 'rope')) { const s = o.ph === 'bird' ? 100 : 70; g.drawImage(im, -s / 2, -s / 2, s, s); }
   else if (im) { g.rotate(o.ph === 'plane' ? Math.PI / 2 : -Math.PI / 2); const s = o.ph === 'plane' ? 62 : 100; g.drawImage(im, -s / 2, -s / 2, s, s); }
   else if (o.ph === 'rope') { g.fillStyle = o.color; g.beginPath(); g.ellipse(0, 4, 12, 16, 0, 0, TAU); g.fill(); g.beginPath(); g.arc(0, -14, 9, 0, TAU); g.fill(); }
@@ -579,5 +651,5 @@ function banner(text, sub) { msgs = msgs.filter(m => !m.big); msgs.push({ text, 
 function say(text, c) { msgs.push({ text, c, t: 0, life: 1.1 }); }
 function spark(x, y, c, n = 8) { for (let i = 0; i < n; i++) parts.push({ x, y, vx: rnd(-180, 180), vy: rnd(-260, 60), t: 0, life: 0.5, c, s: rnd(3, 6) }); }
 function sfx(k) { if (cb.sfx) cb.sfx(k); }
-return { start, netEvent, get others() { return others; }, get on() { return on; }, K, get st() { return st; }, get P() { return P; }, press, get items() { return items; } };   // st·P·press·items는 점검용
+return { start, netEvent, get others() { return others; }, get cam() { return cam; }, get on() { return on; }, K, get st() { return st; }, get P() { return P; }, press, get items() { return items; } };   // st·P·press·items는 점검용
 })();
