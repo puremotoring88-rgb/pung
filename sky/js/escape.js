@@ -11,6 +11,8 @@ const K = {
   ropeMin: 90,          // 로프 가장 짧은 길이
   ropeReach: 460,       // 로프가 닿는 거리
   pump: 300,            // 매달려 흔들 때 더해지는 힘(흔들리는 방향으로)
+  hookSp: 2300,         // 로프(갈고리)가 날아가는 빠르기(px/초)
+  cutGuard: 0.2,        // 걸린 뒤 이 시간 안에 또 누르면 무시(실수로 두 번 눌러 바로 끊기지 않게)
   swing: 560,           // 이 빠르기까지만 밀어 준다(그네가 한없이 커지지 않게)
   reel: 70,             // 누르고 있으면 로프가 감기는 빠르기(짧을수록 빨리 돈다)
   flyRise: 1700, flySink: 1150, flyMax: 520,   // 비행기
@@ -76,7 +78,7 @@ function close() { on = false; cancelAnimationFrame(raf); box.classList.add('hid
 function press(v) {
   if (v === hold) return; hold = v; holdT = 0;
   if (st.riding) { if (v) helpPress(); return; }   // 같이 탄 사람: 누르면 돕기
-  if (st.phase === 'rope' && v) { if (P.rope) letGo(); else shoot(); }   // 0.36: 한 번 누르면 로프 발사, 매달린 채 또 누르면 끊고 날아감
+  if (st.phase === 'rope' && v) { if (P.rope) { if (t - (P.rope.t0 || 0) > K.cutGuard) letGo(); } else fireHook(); }   // 한 번 누르면 로프 발사(0.37: 날아가서 걸림), 매달린 채 또 누르면 끊고 날아감(걸린 직후 잠깐은 안 끊김)
   if (st.phase === 'bird' && v) { flap(); st.dFlapT = t; if (st.pass && t - (st.pFlapT || -9) < 0.15) syncFlap(); }
   if (v && st.phase === 'spider') { P.side = -P.side; P.vy = P.side * -200; sfx('flap'); }
   if (v && st.phase === 'knight' && !(P.dashT > 0) && !(P.dashCd > 0)) { P.dashT = 0.32; P.dashCd = 0.55; P.vy = -430; sfx('release'); }
@@ -85,11 +87,6 @@ function press(v) {
 }
 // ---------- 로프 ----------
 const reach = () => (st.easy ? K.easy.reach : K.ropeReach);
-function shoot() {
-  const best = aimAnchor();
-  if (!best) { say('닿는 고리가 없어요!', '#ffb3b3'); P.miss = 0.25; return; }
-  grab(best);
-}
 function aimAnchor() {   // 지금 누르면 걸릴 고리(화면에 노랗게 표시)
   let best = null, bs = 1e9;
   for (const it of items) {
@@ -106,8 +103,28 @@ function aimAnchor() {   // 지금 누르면 걸릴 고리(화면에 노랗게 �
   }
   return best;
 }
+// 0.37: 로프가 갈고리처럼 날아가서 고리에 닿으면 걸린다(닿는 고리가 없으면 앞 위로 날아갔다 돌아옴)
+function fireHook() {
+  if (P.hook) { P.hook.back = true; return; }   // 날아가는 중에 또 누르면 거둔다
+  const best = aimAnchor();
+  if (best) P.hook = { x: P.x, y: P.y, a: best };
+  else { const ang = -0.95; P.hook = { x: P.x, y: P.y, a: null, mx: P.x + Math.cos(ang) * reach() * 0.8, my: P.y + Math.sin(ang) * reach() * 0.8 }; }
+  sfx('release');
+}
+function hookTick(dt) {
+  const h = P.hook; if (!h) return;
+  if (h.a && h.a.fid) { const o = others.find(q => q.id === h.a.fid); if (!o || o.over) h.back = true; else { h.a.x = o.x; h.a.y = o.y; } }
+  const tx = h.back ? P.x : h.a ? h.a.x : h.mx, ty = h.back ? P.y : h.a ? h.a.y : h.my;
+  const dx = tx - h.x, dy = ty - h.y, d = Math.hypot(dx, dy), step = K.hookSp * (h.back ? 1.4 : 1) * dt;
+  if (d <= step) {
+    if (h.back) { P.hook = null; return; }
+    if (h.a) { P.hook = null; grab(h.a); return; }
+    h.back = true; say('닿는 고리가 없어요!', '#ffb3b3'); return;
+  }
+  h.x += dx / d * step; h.y += dy / d * step;
+}
 function grab(best) {
-  P.rope = { a: best, L: Math.max(K.ropeMin, Math.hypot(best.x - P.x, best.y - P.y)) }; P.rope.L0 = P.rope.L;
+  P.rope = { a: best, L: Math.max(K.ropeMin, Math.hypot(best.x - P.x, best.y - P.y)), t0: t }; P.rope.L0 = P.rope.L;
   best.used = true; sfx('rope');
   if (best.fid) {
     const o = others.find(q => q.id === best.fid);
@@ -127,7 +144,7 @@ function netEvent(from, e) {   // 친구가 보낸 일
   const o = others.find(q => q.id === from), nm = o ? o.name : '친구';
   if (e.k === 'tug' && !st.over && !st.balloon) { P.vx += 90; say(`💪 ${nm}이(가) 매달려 밀어 줬어요!`, '#9dffcf'); }
   if (e.k === 'rescue' && st.balloon > 0) {
-    st.balloon = 0; st.hearts = 1; st.inv = 2.2; st.rescued = (st.rescued || 0) + 1; P.vy = -420; P.vx = 320; P.rope = null;
+    st.balloon = 0; st.hearts = 1; st.inv = 2.2; st.rescued = (st.rescued || 0) + 1; P.vy = -420; P.vx = 320; P.rope = null; P.hook = null;
     banner(`🎈 ${nm}이(가) 구해 줬어요!`, '하트 1개로 다시 달려요'); sfx('star'); spark(P.x, P.y, '#9dffcf', 24);
   }
   // 둘이 타기
@@ -171,7 +188,7 @@ function rideTick() {   // 같이 탄 사람: 앞사람 탈것에 붙어 간다(
   return true;
 }
 function enterBalloon() {   // 같이 달리기에서 하트를 다 잃으면 바로 끝나지 않고 풍선이 되어 구조를 기다린다
-  st.balloon = 12; P.rope = null; P.vy = 0; st.inv = 0;
+  st.balloon = 12; P.rope = null; P.hook = null; P.vy = 0; st.inv = 0;
   banner('🎈 풍선이 되었어요!', '친구가 닿거나 로프를 걸면 살아나요 · 12초');
 }
 function letGo() {
@@ -315,6 +332,7 @@ function update(dt) {
   } else if (st.phase === 'core') {   // 코어: 중력 뒤집기
     P.vx = speed; P.vy += P.gdir * K.coreG * dt; P.vy = clamp(P.vy, -K.coreMax, K.coreMax); P.tilt = 0;
   } else {   // 로프
+    hookTick(dt);
     P.vy += K.g * dt;
     if (P.rope) {
       const a = P.rope.a, dx = P.x - a.x, dy = P.y - a.y, d = Math.hypot(dx, dy) || 1;
@@ -377,7 +395,7 @@ function update(dt) {
   for (const m of msgs) m.t += dt; msgs = msgs.filter(m => m.t < m.life);
 }
 function changePhase(ph) {
-  const was = st.phase; st.phase = ph; P.rope = null;
+  const was = st.phase; st.phase = ph; P.rope = null; P.hook = null;
   if (ph === 'rope' && was !== 'rope') {   // 타던 것을 버린다: 느린 화면 + 번쩍 + 떨어지는 잔해
     wrecks.push({ k: was, x: P.x, y: P.y, vx: P.vx * 0.5, vy: -120, rot: P.tilt || 0, vr: rnd(1.5, 3) * (Math.random() < 0.5 ? -1 : 1), t: 0, side: P.side, gdir: P.gdir });
     st.slow = was === 'plane' ? 0.7 : 0.45; st.flash = 0.25; st.shake = 0.2;
@@ -401,7 +419,7 @@ function changePhase(ph) {
 function respawn() {
   if (st.balloon > 0) return;
   const a = items.filter(it => it.k === 'anchor' && it.x > P.x - 60).sort((p, q) => p.x - q.x)[0];
-  if (a) { P.x = a.x - 20; P.y = a.y + 140; P.vx = 200; P.vy = 0; P.rope = { a, L: 150, L0: 150 }; }
+  if (a) { P.x = a.x - 20; P.y = a.y + 140; P.vx = 200; P.vy = 0; P.hook = null; P.rope = { a, L: 150, L0: 150, t0: t }; }
   else { P.y = 300; P.vy = -300; }
   st.inv = 1.6;
 }
@@ -471,7 +489,7 @@ function draw() {
   const lg = g.createLinearGradient(0, GROUND, 0, H); lg.addColorStop(0, '#ff7a2a'); lg.addColorStop(1, '#8a1c08');
   g.fillStyle = lg; g.fillRect(cam - 10, GROUND, W + 20, H - GROUND);
   g.fillStyle = 'rgba(255,220,120,.6)'; for (let x = Math.floor(cam / 40) * 40; x < cam + W + 40; x += 40) g.fillRect(x + Math.sin(t * 3 + x) * 8, GROUND + 6 + Math.sin(t * 2 + x / 30) * 3, 16, 3);
-  const aimed = st.phase === 'rope' && !P.rope && !st.riding && !(st.balloon > 0) ? aimAnchor() : null;
+  const aimed = st.phase === 'rope' && !P.rope && !st.riding && !(st.balloon > 0) ? (P.hook ? P.hook.a : aimAnchor()) : null;
   for (const it of items) {
     if (it.gone) continue;
     if (it.k === 'anchor') {
@@ -505,6 +523,12 @@ function draw() {
   if (P.rope) {   // 로프는 조종사 손까지(그림이 있으면 몸 중심에서 줄 쪽으로 36px)
     const dx = P.rope.a.x - P.x, dy = P.rope.a.y - P.y, d = Math.hypot(dx, dy) || 1, hk = cb.img && cb.img('esc-p-rope') ? Math.min(36, d) : 0;
     g.strokeStyle = '#f4e3b5'; g.lineWidth = 3; g.beginPath(); g.moveTo(P.rope.a.x, P.rope.a.y); g.lineTo(P.x + dx / d * hk, P.y + dy / d * hk); g.stroke();
+  }
+  if (P.hook) {   // 날아가는 로프: 손에서 갈고리까지 줄 + 갈고리 머리
+    const h = P.hook, a = Math.atan2(h.y - P.y, h.x - P.x);
+    g.strokeStyle = h.a ? '#f4e3b5' : 'rgba(255,190,190,.85)'; g.lineWidth = 3; g.beginPath(); g.moveTo(P.x, P.y); g.lineTo(h.x, h.y); g.stroke();
+    g.save(); g.translate(h.x, h.y); g.rotate(a); g.strokeStyle = '#d6dde6'; g.lineWidth = 4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-6, 0); g.lineTo(8, 0); g.moveTo(8, 0); g.lineTo(0, -9); g.moveTo(8, 0); g.lineTo(0, 9); g.stroke(); g.restore();
   }
   if (P.miss > 0) { g.strokeStyle = `rgba(255,180,180,${P.miss * 3})`; g.lineWidth = 2; g.beginPath(); g.moveTo(P.x, P.y); g.lineTo(P.x + 160, P.y - 260); g.stroke(); }
   drawHero();
@@ -544,7 +568,7 @@ function draw() {
   }
   if (st.easy && !st.riding && !st.pass && !st.over) {   // 🐢 연습 모드: 지금 할 일을 아래에 늘 보여 준다
     const ph = st.phase, tip = ph === 'plane' ? (matchMedia('(pointer: coarse)').matches ? '✈️ 화면을 누른 채 끌어서 움직여요' : '✈️ 방향키·WASD로 움직여요')
-      : ph === 'rope' ? (P.rope ? (P.vx > 120 && P.vy < -60 ? '🪢 지금! 누르면 끊고 앞으로 날아가요' : '🪢 그네 타는 중 · 앞쪽 위로 올라갈 때 누르기') : '🪢 노란 고리가 보이면 한 번 누르기')
+      : ph === 'rope' ? (P.rope ? (P.vx > 120 && P.vy < -60 ? '🪢 지금! 누르면 끊고 앞으로 날아가요' : '🪢 그네 타는 중 · 앞쪽 위로 올라갈 때 누르기') : P.hook ? '🪢 로프가 날아가는 중…' : '🪢 노란 고리가 보이면 한 번 누르기')
       : ph === 'core' ? `💠 누르면 중력이 ${P.gdir > 0 ? '위' : '아래'}로 바뀌어요 · 기둥 틈에 맞춰서` : '' + ((RIDE_NM[ph] || [])[1] || '').split(' · ')[0];
     g.fillStyle = 'rgba(6,12,24,.6)'; g.fillRect(0, H - 120, W, 40); g.fillStyle = '#ffe066'; g.font = '800 18px sans-serif'; g.textAlign = 'center'; g.fillText(tip, W / 2, H - 93);
     g.textAlign = 'left'; g.font = '700 16px sans-serif'; g.fillStyle = '#9dffcf'; g.fillText('🐢 연습 모드', 24, 116);

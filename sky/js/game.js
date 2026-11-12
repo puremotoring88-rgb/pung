@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.36';
+const VERSION = '0.37';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -221,7 +221,7 @@ let selMode = 'stage', dojoLv = 1;
 const STAR_RULES = ['클리어', '체력 절반 이상 남기고 클리어', '콤보 30 이상 만들기'];
 const STAR_REWARD = 15;
 // 손맛 숫자(해 보고 조정): 큰 적·정예를 부술 때 잠깐 멈춤(초), 보스 처치 느린 화면(초·빠르기), 피해 숫자 간격(초)
-const FEEL = { stopBig: 0.065, stopElite: 0.045, stopBoss: 0.14, slowBoss: 1.5, slowK: 0.3, numGap: 0.16 };
+const FEEL = { ultInv: 2, stopBig: 0.065, stopElite: 0.045, stopBoss: 0.14, slowBoss: 1.5, slowK: 0.3, numGap: 0.16 };
 let hitStop = 0, slowT = 0, dnums = [];
 
 // ---------- 그림 파일(있으면 쓰고 없으면 코드로 그린 그림) ----------
@@ -1227,6 +1227,7 @@ function useUlt() {
   A.sfx('ult_' + u.id); buzz(60);
   run.banner = { kind: 'ult', title: u.name, sub: '', t: 0, life: 1.3 };
   shake = Math.max(shake, 0.6);
+  P.inv = Math.max(P.inv, FEEL.ultInv);   // 0.37: 궁극기를 쓰는 순간 잠깐 무적(반짝임)
   if (u.id === 'laser') { P.ultKind = 'laser'; P.ultT = 3; }
   else if (u.id === 'bulwark') { P.ultKind = 'bulwark'; P.ultT = 5; }
   else if (u.id === 'swarm') { P.swarmQ = 30; P.swarmT = 0; }
