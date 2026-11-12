@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.31';
+const VERSION = '0.32';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -3292,6 +3292,8 @@ function leaveRest() {
 // 표창 공방: 구역마다 들판 곳곳에 서 있고 적도 막는다. 스테이지·무한: 가끔 땅과 함께 내려온다(보스전·협동에는 없음).
 const OB_KINDS = ['tower', 'spire', 'mill'];
 const OB_BY_MAP = { 1: ['spire', 'spire', 'tower'], 2: ['bldg', 'bldg', 'tower'], 4: ['stack', 'stack', 'tower'], 5: ['ice', 'ice', 'spire'], 6: ['crag', 'crag', 'stack'], 7: ['ruin', 'ruin', 'spire'] };   // 맵마다 서 있는 구조물
+// 스테이지·무한의 땅 구조물이 얼마나 자주 서는지(사용자: 너무 잦다 → 0.32에서 줄임): 하나 세운 뒤 쉬는 초, 한 화면 최대 개수, 섬마다 세울 확률
+const OB_GAP = { cd: [7, 11], max: 2, island: 0.45 };
 const OB_SIZE = { stack: [20, 150], ice: [26, 115], crag: [32, 105], ruin: [24, 110] };   // 반지름, 높이
 function makeObst(x, y, kind) {
   kind = kind || OB_KINDS[(Math.random() * 3) | 0];
@@ -3322,29 +3324,31 @@ function groundObstSpawn() {   // 스테이지·무한: 지나가는 섬(사막�
   if (run.phase !== 'waves' || boss || moved > 200) return;
   const lv = run.stage + (run.loop || 0) * 5, kinds = OB_BY_MAP[run.theme] || OB_KINDS;
   const put = (tx, ty) => {   // tx, ty: 땅 그림 안의 자리
-    if (tx < 110 || tx > 430) return;
+    if (tx < 110 || tx > 430 || run.obCd > 0) return;   // 하나 세우면 잠깐 쉰다(OB_GAP)
+    if (run.obst.filter(q => q.ground && q.y < H * 0.95).length >= OB_GAP.max) return;   // 한 화면에 너무 많이 서지 않게
     const o = makeObst(0, 0, pick(kinds)); o.ground = true; o.gx = (BGW - W) / 2 + tx; o.k = GR_ROW + md(ty - now + TH / 2) - TH / 2 - bgY;
-    if (run.obst.some(q => q.ground && Math.abs(q.gx - o.gx) < 70 && Math.abs(q.k - o.k) < 90)) return;
+    if (run.obst.some(q => q.ground && Math.abs(q.gx - o.gx) < 150 && Math.abs(q.k - o.k) < 260)) return;
+    run.obCd = rnd(OB_GAP.cd[0], OB_GAP.cd[1]) * Math.max(0.75, 1 - lv * 0.03);
     run.obst.push(o);
   };
   const lands = Art.lands(run.theme);
   if (lands) {
     for (const L of lands) {
       if (md(prev - L.y) >= moved) continue;   // 이번에 지평선을 넘어온 섬
-      const n = 1 + (Math.random() < 0.6) + (lv >= 3 && Math.random() < 0.5);
+      const n = Math.random() < OB_GAP.island + Math.min(0.15, lv * 0.02) ? 1 : 0;   // 섬마다 세울 확률
       for (let i = 0; i < n; i++) { const a = rnd(0, TAU), d = rnd(0, L.r * 0.7); put(L.x + Math.cos(a) * d, L.y + Math.sin(a) * d * 0.8); }
     }
   } else if ((run.obT = (run.obT === undefined ? 4 : run.obT) - moved / 45) <= 0) {   // 사막은 어디나 땅
-    run.obT = rnd(5, 9) * Math.max(0.6, 1 - lv * 0.05);
+    run.obT = rnd(9, 14) * Math.max(0.75, 1 - lv * 0.03);
     put(rnd(120, 420), now);
-    if (lv >= 3 && Math.random() < 0.4) put(rnd(120, 420), now + rnd(-60, 60));
+
   }
 }
 function obstTick(dt) {
   if (!run.obst) run.obst = [];
   if (!run.arena) {
     if (run.coop || run.mode === 'dojo' || run.mode === 'rush' || run.mode === 'auto') { run.obst = []; return; }
-    groundObstSpawn();
+    if (run.obCd > 0) run.obCd -= dt; groundObstSpawn();
     for (const o of run.obst) { const g = groundPt(o.gx, o.k + bgY); o.x = g[0]; o.y = g[1]; o.s = g[2]; }   // 땅과 함께 다가온다
     run.obst = run.obst.filter(o => o.y - o.h * o.s < H + 30);
   }
@@ -3353,7 +3357,7 @@ function obstTick(dt) {
     if (P.down > 0) continue;
     if (o.ground) {   // 비행기 높이에 닿는 윗부분(위 60%)에 부딪힌다
       if (o.k + bgY < 90) continue;   // 아직 지평선 너머
-      const s = o.s, top = o.y - o.h * s, bot = o.y - o.h * s * 0.4, cy = clamp(P.y, top, bot), dx = P.x - o.x, dy = P.y - cy, d = Math.hypot(dx, dy), m = o.r * s * (o.kind === 'mill' && P.y < top + 40 * s ? 1.9 : 0.75) + st.hit + 8;
+      const s = o.s, top = o.y - o.h * s, bot = o.y - o.h * s * 0.4, cy = clamp(P.y, top, bot), dx = P.x - o.x, dy = P.y - cy, d = Math.hypot(dx, dy), m = o.r * s * (o.kind === 'mill' && P.y < top + 40 * s ? 1.6 : 0.6) + st.hit + 4;
       if (d < m) {
         if (Math.abs(dy) < 1) P.x = o.x + (dx >= 0 ? 1 : -1) * m;
         else { const k = d || 1; P.x = o.x + dx / k * m; P.y = cy + dy / k * m; }
