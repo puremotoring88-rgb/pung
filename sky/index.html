@@ -216,6 +216,11 @@
   #escape .esRes .big { font-size: calc(var(--u) * 12); font-weight: 900; color: #ffd166; }
   #escape .esRes .rec { color: #ffd166; font-weight: 800; }
   #escape .esRes small { opacity: .6; font-size: calc(var(--u) * 3); }
+  #escape .esRk { display: flex; flex-direction: column; gap: calc(var(--u) * 1); font-size: calc(var(--u) * 4); min-width: 60%; }
+  #escape .esRk div { background: rgba(255,255,255,.06); border-radius: 10px; padding: calc(var(--u) * 1.2) calc(var(--u) * 3); text-align: left; }
+  #escape .esRk div.me { outline: 2px solid #ffd166; }
+  #escape .esRk i { opacity: .6; font-size: .8em; }
+  #escape .esRes .row .hidden { display: none; }
   #escape .esStars { font-size: calc(var(--u) * 10); letter-spacing: calc(var(--u) * 1); }
   #escape .esStars span { display: inline-block; filter: grayscale(1) brightness(.4); }
   #escape .esStars span.on { filter: none; animation: esStar .5s both; }

@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.24';
+const VERSION = '0.25';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -554,7 +554,7 @@ function startRun(stage, md = 'stage') {
   if (md === 'auto') stage = S.idle.zone;
   if (md === 'rush' || md === 'endless') stage = 1;
   if (md === 'dojo') { dojoLv = Math.min(dojoLv, S.dojo.open); stage = dojoLv; }
-  if (md === 'coop') { if (!(net && net.mode === 'host' && allies.length)) { coopMsg = net && net.mode === 'guest' ? '방장이 출격을 누르면 함께 시작해요' : '먼저 방을 만들고 친구가 들어올 때까지 기다려 주세요'; renderHangar(); return; } md = coopMd; }
+  if (md === 'coop') { if (!(net && net.mode === 'host' && allies.length)) { coopMsg = net && net.mode === 'guest' ? '방장이 출격을 누르면 함께 시작해요' : '먼저 방을 만들고 친구가 들어올 때까지 기다려 주세요'; renderHangar(); return; } md = coopMd; if (md === 'escape') { escRaceHost(); return; } }
   st = buildStats();
   const assist = md === 'stage' && assistOn && (S.fails || {})[stage] >= 2;
   if (assist) { st.maxHp = Math.round(st.maxHp * 1.25); st.dmg *= 1.25; }
@@ -2880,7 +2880,7 @@ $('go').addEventListener('click', () => {
   const go = () => selMode === 'escape' ? startEscape() : startRun(hangarStage, selMode);
   if (!S.seenHelp) { afterHelp = go; $('howto').classList.remove('hidden'); } else go();
 });
-function startEscape() {   // 탈출 작전(js/escape.js)
+function startEscape(o) {   // 탈출 작전(js/escape.js)
   $('hangar').classList.add('hidden'); A.music('stage', 0);
   const SND = { rope: 'tap', release: 'click', flap: 'tap', coin: 'scrap', hurt: 'hurt', phase: 'click', alarm: 'warning', boom: 'boomL', star: 'levelup' };
   Escape.start({
@@ -2888,8 +2888,46 @@ function startEscape() {   // 탈출 작전(js/escape.js)
     img: k => IMG[k] || null, frame: S.frame,
     best: () => S.records.escape || 0,
     gain: (sc, dist, stars) => { S.records.escapeStars = Math.max(S.records.escapeStars || 0, stars || 0); S.scrap += sc; S.records.escape = Math.max(S.records.escape || 0, dist); S.plays++; dcount('runs'); weekRoll(); S.week.pts += 1 + (stars || 0); save(); },
-    home: () => showHangar(),
-  });
+    home: () => showHangar(), saveGhost, loadGhost,
+  }, o);
+}
+// 탈출 작전 유령: 최고 기록의 맵 씨앗과 길(0.1초마다 자리)을 이 기기에만 둔다(계정마다 따로)
+const ghostKey = () => { let u = ''; try { u = (JSON.parse(localStorage.getItem('boltwing.owner') || '{}') || {}).uid || ''; } catch (e) { /* 없음 */ } return 'boltwing.escGhost.' + u; };
+function saveGhost(gh) { try { localStorage.setItem(ghostKey(), JSON.stringify(gh)); } catch (e) { /* 저장 공간 없음: 유령 없이 */ } }
+function loadGhost() { try { const gh = JSON.parse(localStorage.getItem(ghostKey()) || 'null'); return gh && Array.isArray(gh.path) && gh.path.length > 5 ? gh : null; } catch (e) { return null; } }
+// 탈출 작전 「같이 달리기」(로드맵 9-5): 방장이 맵 씨앗을 보내면 모두 같은 맵을 각자 기기에서 달리고, 0.1초마다 자리만 주고받는다
+const ESC_BONUS = [0, 30, 15, 8];   // 순위 보너스 고철(2명 이상일 때)
+const escNum = (v, a, b) => (typeof v === 'number' && isFinite(v) ? clamp(v, a, b) : 0);
+const escClean = m => ({ x: escNum(m.x, -1e3, 1e7), y: escNum(m.y, -500, 1500), ph: escNum(m.ph, 0, 6) | 0, h: escNum(m.h, 0, 3) | 0, d: escNum(m.d, 0, 1e6) | 0, over: m.over ? 1 : 0, frame: frameOf(m.frame) ? m.frame : 'falcon' });
+function escRace() {
+  return {
+    host: !!(net && net.mode === 'host'),
+    others: () => {
+      if (!net) return [];
+      if (net.mode === 'host') return allies.filter(a => a.esc).map(a => Object.assign({ id: a.id, name: a.name, color: a.color }, a.esc));
+      return (net.eps || []).filter(p => p[0] !== net.myId).map(p => Object.assign({ id: p[0], name: p[1], color: p[2] }, p[3]));
+    },
+    send: o => {
+      if (!net) return;
+      if (net.mode === 'guest') { if (net.conn && net.conn.open) net.conn.send(Object.assign({ t: 'ep' }, o)); return; }
+      net.escMe = o;
+      netBroadcast({ t: 'eps', l: [['host', myNick(), '#ffd166', o], ...allies.filter(a => a.esc).map(a => [a.id, a.name, a.color, a.esc])] });
+    },
+    again: () => { if (net && net.mode === 'host') escRaceHost(); },
+    done: (rank, n) => { if (n < 2) return 0; const b = ESC_BONUS[rank] || 0; if (b) { S.scrap += b; save(); } if (rank === 1) A.sfx('levelup'); return b; },
+  };
+}
+function escRaceHost() {
+  if (!(net && net.mode === 'host')) return;
+  const seed = (Math.random() * 4294967296) >>> 0;
+  for (const a of allies) a.esc = null;
+  netBroadcast({ t: 'esc', seed, roster: roster() });
+  startEscape({ seed, race: escRace() });
+}
+function escRaceGuest(m) {
+  net.eps = [];
+  for (const id of ['away', 'howto', 'unlockPop']) { const el = $(id); if (el) el.classList.add('hidden'); }
+  startEscape({ seed: m.seed >>> 0, race: escRace() });
 }
 $('awayOk').addEventListener('click', () => { A.sfx('part'); if (showPopup()) return; if ($('away').dataset.resume) { $('away').dataset.resume = ''; state = 'play'; } renderHangar(); });
 // 처음 출격할 때는 하는 법부터
@@ -3801,6 +3839,7 @@ function hostData(c, m) {
   if (!a) return;
   if (m.t === 'in' && typeof m.x === 'number' && typeof m.y === 'number') { a.tx = clamp(m.x, 22, W - 22); a.ty = clamp(m.y, 90, H - 70); }
   else if (m.t === 'ult') allyUlt(a);
+  else if (m.t === 'ep') a.esc = escClean(m);   // 탈출 작전 같이 달리기: 친구 자리
   else if (m.t === 'emo') emote(a, m.i);
   else if (m.t === 'bye') dropAlly(c);
 }
@@ -4012,6 +4051,8 @@ function guestData(m) {
   else if (m.t === 'start') guestStart(m);
   else if (m.t === 's') applySnap(m);
   else if (m.t === 'end') guestEnd(m);
+  else if (m.t === 'esc') escRaceGuest(m);
+  else if (m.t === 'eps' && Array.isArray(m.l)) net.eps = m.l.slice(0, 3).map(p => [String(p[0]), cleanName(p[1]), ALLY_COL.concat('#ffd166').includes(p[2]) ? p[2] : '#9dffcf', escClean(p[3] || {})]);
 }
 function guestStart(m) {
   for (const id of ['away', 'howto']) $(id).classList.add('hidden');
@@ -4164,9 +4205,9 @@ function coopPanel() {
       renderHangar();
     }), btn('방 닫기', () => { leaveRoom(); coopMsg = ''; renderHangar(); }, 'off'));
     const mr = add('', 'div', 'cRow');
-    mr.append(btn(coopMd === 'stage' ? '✅ 스테이지' : '스테이지', () => { coopMd = 'stage'; renderHangar(); }), btn(coopMd === 'endless' ? '✅ 무한 생존' : '무한 생존', () => { coopMd = 'endless'; renderHangar(); }));
+    mr.append(btn(coopMd === 'stage' ? '✅ 스테이지' : '스테이지', () => { coopMd = 'stage'; renderHangar(); }), btn(coopMd === 'endless' ? '✅ 무한 생존' : '무한 생존', () => { coopMd = 'endless'; renderHangar(); }), btn(coopMd === 'escape' ? '✅ 🏃 탈출 경주' : '🏃 탈출 경주', () => { coopMd = 'escape'; renderHangar(); }));
     add(`👥 ${roster().map(p => esc(p.name) + (p.host ? '(방장)' : '')).join(' · ')}`, 'div', 'cList');
-    add(`${esc(net.status)}${allies.length ? ` — 준비되면 <b>함께 출격</b>을 누르세요. ${coopMd === 'stage' ? `스테이지 ${hangarStage}로 갑니다(아래 지도에서 바꾸기).` : ''}` : ''}`, 'div', 'cNote');
+    add(`${esc(net.status)}${allies.length ? ` — 준비되면 <b>함께 출격</b>을 누르세요. ${coopMd === 'stage' ? `스테이지 ${hangarStage}로 갑니다(아래 지도에서 바꾸기).` : coopMd === 'escape' ? '모두 같은 맵에서 탈출 작전을 달려요(각자 하트 3개, 멀리 간 순서로 고철 보너스).' : ''}` : ''}`, 'div', 'cNote');
   } else {
     add(`<small>들어간 방</small><b>${net.code}</b>`, 'div', 'cCode');
     add(`👥 ${(net.roster || []).map(p => esc(p.name) + (p.host ? '(방장)' : '')).join(' · ') || '…'}`, 'div', 'cList');

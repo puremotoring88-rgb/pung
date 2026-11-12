@@ -21,21 +21,32 @@ const K = {
 let cv, g, box, cb = {}, on = false, raf = 0, last = 0;
 let st, P, cam, items, hold = false, holdT = 0, msgs, parts, t, wrecks = [];
 
-function start(callbacks) {
-  cb = callbacks || {};
+// 씨앗(seed)이 같으면 맵이 똑같다 → 유령·친구와 같은 길을 달린다
+let seedRng = Math.random;
+const mulberry = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let q = Math.imul(a ^ a >>> 15, 1 | a); q = q + Math.imul(q ^ q >>> 7, 61 | q) ^ q; return ((q ^ q >>> 14) >>> 0) / 4294967296; };
+const srnd = (a, b) => a + seedRng() * (b - a);
+const PH_ID = ['plane', 'rope', 'bird', 'spider', 'whale', 'knight', 'core'];
+let opt = {}, others = [], netT = 0, pathT = 0, rankT = 0;
+// opt.seed: 맵 씨앗 · opt.ghost: {seed, path, dist} 내 최고 기록 유령 · opt.race: {others(), send(o), host, again(), done(rank, n)} 친구와 같이 달리기
+function start(callbacks, o) {
+  cb = callbacks || {}; opt = o || {};
   if (!box) build();
   box.classList.remove('hidden'); box.querySelector('.esRes').classList.add('hidden');
-  t = 0; cam = 0; items = []; msgs = []; parts = [];
-  st = { phase: 'plane', segEnd: K.segPlane, loop: 0, hearts: 3, inv: 1.5, coins: 0, dist: 0, genX: 600, over: false, hintT: 0, seen: {}, stars: 0, slow: 0, shake: 0, flash: 0, rides: [], best: cb.best ? cb.best() : 0, passBest: false };
+  t = 0; cam = 0; items = []; msgs = []; parts = []; others = []; netT = 0; pathT = 0;
+  const seed = opt.seed != null ? opt.seed >>> 0 : (Math.random() * 4294967296) >>> 0;
+  seedRng = mulberry(seed);
+  st = { phase: 'plane', segEnd: K.segPlane, loop: 0, hearts: 3, inv: 1.5, coins: 0, dist: 0, genX: 600, over: false, hintT: 0, seen: {}, stars: 0, slow: 0, shake: 0, flash: 0, rides: [], best: cb.best ? cb.best() : 0, passBest: false, seed, path: [], raceDone: false };
   wrecks = [];
   P = { x: 160, y: 420, vx: 300, vy: 0, rope: null, flapT: 0, tilt: 0 };
-  banner('✈️ 비행 구간', '누르고 있으면 올라가요 · 떼면 내려가요');
+  banner(opt.race ? '🏃 친구와 같이 달리기!' : opt.ghost ? '👻 유령과 달리기' : '✈️ 비행 구간', opt.race ? '모두 같은 맵이에요 · 가장 멀리 간 사람이 1등' : opt.ghost ? `최고 기록(${opt.ghost.dist.toLocaleString()} m) 때와 같은 맵이에요` : '누르고 있으면 올라가요 · 떼면 내려가요');
+  const R = box.querySelector('.esRes'); R.querySelector('.esAgain').classList.toggle('hidden', !!(opt.race && !opt.race.host));
+  R.querySelector('.esAgain').textContent = opt.race ? '다 같이 다시 ▶' : '다시 ▶';
   on = true; last = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
 }
 function build() {
   box = document.createElement('div'); box.id = 'escape'; box.className = 'hidden';
   box.innerHTML = `<canvas width="${W}" height="${H}"></canvas><button class="esQuit">✕</button>
-    <div class="esRes hidden"><h2>탈출 작전</h2><div class="esStat"></div><div class="row"><button class="btn big esAgain">다시 ▶</button><button class="btn sub esHome">격납고로</button></div><small>시험판이에요. 손맛이 어떤지 알려 주세요!</small></div>`;
+    <div class="esRes hidden"><h2>탈출 작전</h2><div class="esStat"></div><div class="esRank"></div><div class="row"><button class="btn big esAgain">다시 ▶</button><button class="btn sub esGhost hidden">👻 유령과 달리기</button><button class="btn sub esHome">격납고로</button></div><small class="esTip"></small></div>`;
   document.getElementById('stage').append(box);
   cv = box.querySelector('canvas'); g = cv.getContext('2d');
   const down = e => { if (!on || st.over) return; e.preventDefault(); press(true); };
@@ -44,10 +55,11 @@ function build() {
   window.addEventListener('keydown', e => { if (!on) return; if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat && !st.over) press(true); } if (e.code === 'Escape') { e.stopImmediatePropagation(); finish(true); } }, true);
   window.addEventListener('keyup', e => { if (!on) return; if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp') { e.stopImmediatePropagation(); press(false); } }, true);
   box.querySelector('.esQuit').addEventListener('click', () => finish(true));
-  box.querySelector('.esAgain').addEventListener('click', () => start(cb));
+  box.querySelector('.esAgain').addEventListener('click', () => { if (opt.race) opt.race.again(); else start(cb); });
+  box.querySelector('.esGhost').addEventListener('click', () => { const gh = cb.loadGhost && cb.loadGhost(); if (gh) start(cb, { seed: gh.seed, ghost: gh }); });
   box.querySelector('.esHome').addEventListener('click', () => { close(); });
 }
-function close() { on = false; cancelAnimationFrame(raf); box.classList.add('hidden'); if (cb.home) cb.home(); }
+function close() { on = false; cancelAnimationFrame(raf); box.classList.add('hidden'); if (opt.race && opt.race.leave) opt.race.leave(); opt = {}; if (cb.home) cb.home(); }
 function press(v) {
   if (v === hold) return; hold = v; holdT = 0;
   if (st.phase === 'rope') { if (v) shoot(); else letGo(); }
@@ -79,22 +91,22 @@ function flap() { P.vy = -K.birdFlap * rnd(0.85, 1.15); P.vx += rnd(-40, 40); P.
 // ---------- 맵 만들기(앞으로 나아가며 계속) ----------
 function gen() {
   while (st.genX < cam + W * 2.2) {
-    const x = st.genX, ph = phaseAt(x), lv = st.loop;
+    const x = st.genX, ph = phaseAt(x), lv = Math.floor(x / (K.segPlane + K.segRope * 2 + K.segBird));   // 같은 씨앗이면 누구에게나 같은 맵(사람 위치에 기대지 않는다)
     if (ph === 'rope') {
-      const y = rnd(130, 300); items.push({ k: 'anchor', x, y });
+      const y = srnd(130, 300); items.push({ k: 'anchor', x, y });
       for (let i = 1; i <= 3; i++) items.push({ k: 'coin', x: x + i * 60, y: y + 230 + Math.sin(i) * 30 });
-      if (lv + st.dist / 4000 > 0.6 && Math.random() < 0.35) items.push({ k: 'spike', x: x + rnd(110, 170), y: rnd(430, 620), r: 26 });
-      st.genX += rnd(230, 320) + lv * 15;
+      if (lv + x / 40000 > 0.6 && seedRng() < 0.35) items.push({ k: 'spike', x: x + srnd(110, 170), y: srnd(430, 620), r: 26 });
+      st.genX += srnd(230, 320) + lv * 15;
     } else if (ph === 'spider') {   // 거미: 천장이나 바닥에서 솟은 반쪽 기둥 → 반대쪽으로 옮겨 붙어야 한다
-      const fromTop = Math.random() < 0.5, len = rnd(330, 470);
+      const fromTop = seedRng() < 0.5, len = srnd(330, 470);
       items.push(fromTop ? { k: 'wall', x, top: 0, bot: len, w: 70 } : { k: 'wall', x, top: GROUND - len, bot: GROUND, w: 70 });
       for (let i = 0; i < 3; i++) items.push({ k: 'coin', x: x + 35, y: fromTop ? GROUND - 40 - i * 40 : 70 + i * 40 });
-      st.genX += rnd(380, 470) - Math.min(60, lv * 15);
+      st.genX += srnd(380, 470) - Math.min(60, lv * 15);
     } else {   // 비행기·새·보스 탈것: 위아래 기둥 사이 틈
-      const gap = ({ bird: 330, whale: 360, knight: 300, core: 320 }[ph] || 300) - Math.min(70, lv * 15), gy = rnd(220, GROUND - 120 - gap);
+      const gap = ({ bird: 330, whale: 360, knight: 300, core: 320 }[ph] || 300) - Math.min(70, lv * 15), gy = srnd(220, GROUND - 120 - gap);
       items.push({ k: 'wall', x, top: 0, bot: gy, w: 70 }, { k: 'wall', x, top: gy + gap, bot: GROUND, w: 70 });
       for (let i = 0; i < 3; i++) items.push({ k: 'coin', x: x + 35, y: gy + gap * (0.3 + i * 0.2) });
-      st.genX += rnd(360, 440) - Math.min(60, lv * 15);
+      st.genX += srnd(360, 440) - Math.min(60, lv * 15);
     }
   }
   items = items.filter(it => it.x > cam - 200 && !it.gone);
@@ -113,7 +125,7 @@ function phaseAt(x) {   // 이 자리가 어느 구간인가(구간 경계는 �
     st.plan = []; let at = 0, bag = [];
     for (let i = 0; i < 40; i++) {
       let ph = ['plane', 'rope', 'ride', 'rope'][i % 4];
-      if (ph === 'ride') { if (!bag.length) bag = RIDES.slice().sort(() => Math.random() - 0.5); ph = bag.pop(); }
+      if (ph === 'ride') { if (!bag.length) { bag = RIDES.slice(); for (let j = bag.length - 1; j > 0; j--) { const r = Math.floor(seedRng() * (j + 1));[bag[j], bag[r]] = [bag[r], bag[j]]; } } ph = bag.pop(); }
       const len = ph === 'plane' ? K.segPlane : ph === 'rope' ? K.segRope : K.segBird;
       st.plan.push({ ph, from: at, to: at + len }); at += len;
     }
@@ -124,14 +136,21 @@ const isRide = ph => RIDES.includes(ph) && ph !== 'bird';
 // ---------- 한 프레임 ----------
 function loop(now) {
   if (!on) return;
-  const dt = Math.min(0.033, (now - last) / 1000); last = now;
+  const dt = clamp((now - last) / 1000, 0, 0.033); last = now;
   if (st.slow > 0) st.slow -= dt; if (st.shake > 0) st.shake -= dt; if (st.flash > 0) st.flash -= dt;
   if (!st.over) update(st.slow > 0 ? dt * 0.35 : dt);   // 비상 탈출 순간은 느린 화면
+  if (opt.race) {   // 친구와 같이 달리기: 내 자리를 보내고 친구 자리를 받는다
+    const got = opt.race.others() || [];
+    others = got.map(o => { const p = others.find(q => q.id === o.id); return Object.assign({}, o, { ph: typeof o.ph === 'number' ? PH_ID[o.ph] || 'rope' : o.ph, x: p ? p.x + (o.x - p.x) * Math.min(1, dt * 10) : o.x, y: p ? p.y + (o.y - p.y) * Math.min(1, dt * 10) : o.y }); });
+    if ((netT -= dt) <= 0) { netT = 0.1; opt.race.send({ x: Math.round(P.x), y: Math.round(P.y), ph: PH_ID.indexOf(st.phase), h: st.hearts, d: st.dist, over: st.over ? 1 : 0, frame: cb.frame || 'falcon' }); }
+    if (st.over && (rankT -= dt) <= 0) { rankT = 0.5; raceRank(); }
+  }
   draw();
   raf = requestAnimationFrame(loop);
 }
 function update(dt) {
   t += dt; holdT += dt; if (st.inv > 0) st.inv -= dt; if (P.miss > 0) P.miss -= dt;
+  if ((pathT -= dt) <= 0 && st.path.length < 9000) { pathT += 0.1; st.path.push([Math.round(P.x), Math.round(P.y), PH_ID.indexOf(st.phase)]); }   // 유령용 길 기록(0.1초마다)
   const ph = phaseAt(P.x);
   if (ph !== st.phase) changePhase(ph);
   st.loop = Math.floor(P.x / (K.segPlane + K.segRope * 2 + K.segBird));
@@ -235,7 +254,6 @@ function changePhase(ph) {
     banner(off[was] || '뛰어내려!', st.seen.rope ? '누르면 로프 · 떼면 날아가요' : '누르고 있으면 앞 위 고리에 로프가 걸려 흔들려요 · 떼면 그 힘으로 날아가요');
     // 탈출하자마자 잡을 고리를 하나 둔다
     items.push({ k: 'anchor', x: P.x + 260, y: 170 });
-    st.genX = Math.max(st.genX, P.x + 520);
   } else if (RIDE_NM[ph]) {
     const nm = RIDE_NM[ph]; P.vy = -150; P.side = 1; P.gdir = 1; P.dashT = 0; P.dashCd = 0;
     banner(nm[0], st.seen[ph] ? nm[1].split(' · ')[0] : nm[1]);
@@ -269,7 +287,20 @@ function gameOver() {
     ${st.rides.length ? `<div>타 본 탈것 ${st.rides.map(k => RI[k]).join(' ')}</div>` : ''}
     ${st.dist > best && best > 0 ? `<div class="rec">🏆 최고 기록! (지난 최고 ${best.toLocaleString()} m)</div>` : !best ? '<div class="rec">🏁 첫 기록!</div>' : `<div>최고 ${best.toLocaleString()} m · ${(best - st.dist).toLocaleString()} m 모자라요</div>`}
     ${next ? `<small>다음 별: ${next.toLocaleString()} m</small>` : ''}`;
+  if (!opt.race && st.dist > best && cb.saveGhost) cb.saveGhost({ seed: st.seed, path: st.path, dist: st.dist });   // 최고 기록이면 유령으로 남긴다
+  const gh = !opt.race && cb.loadGhost && cb.loadGhost();
+  r.querySelector('.esGhost').classList.toggle('hidden', !gh);
+  r.querySelector('.esRank').innerHTML = '';
+  r.querySelector('.esTip').textContent = opt.race ? (opt.race.host ? '모두 끝나면 순위가 정해져요 · 「다 같이 다시」로 새 맵' : '모두 끝나면 순위가 정해져요 · 방장이 다시 시작하면 함께 시작해요') : gh ? '👻 유령과 달리기: 최고 기록 때와 같은 맵에서 그때의 나와 겨뤄요' : '';
+  if (opt.race) { rankT = 0; raceRank(); }
 }
+function raceRank() {   // 같이 달리기 순위(모두 끝나면 확정)
+  const list = [{ name: '나', d: st.dist, over: true, me: true }, ...others.map(o => ({ name: o.name, d: o.d || 0, over: !!o.over, color: o.color }))].sort((a, b) => b.d - a.d);
+  const all = list.every(x => x.over), myRank = list.findIndex(x => x.me) + 1;
+  box.querySelector('.esRank').innerHTML = `<div class="esRk">${list.map((x, i) => `<div class="${x.me ? 'me' : ''}"><b>${all ? ['🥇', '🥈', '🥉'][i] || i + 1 : i + 1 + '.'}</b> <span style="color:${x.color || '#ffd166'}">${esc(x.name)}</span> ${x.d.toLocaleString()} m ${x.over ? '' : '<i>달리는 중…</i>'}</div>`).join('')}</div>${all ? st.bonusHtml || '' : '<small>친구가 끝나기를 기다리는 중…</small>'}`;
+  if (all && !st.raceDone) { st.raceDone = true; if (opt.race.done) { const bonus = opt.race.done(myRank, list.length); if (bonus) { st.bonusHtml = `<div class="rec">${myRank === 1 ? '🏆 1등!' : `${myRank}등`} 순위 보너스 🔩 +${bonus}</div>`; box.querySelector('.esRank').insertAdjacentHTML('beforeend', st.bonusHtml); } } }
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function finish(quit) { if (!st || st.over) { close(); return; } if (quit) { st.hearts = 0; gameOver(); } }
 // ---------- 그리기 ----------
 function draw() {
@@ -312,6 +343,9 @@ function draw() {
     g.fillStyle = '#e6eefa'; g.font = '800 18px sans-serif'; g.textAlign = 'left'; g.fillText(`최고 ${st.best.toLocaleString()} m`, bx + 6, GROUND - 270);
   }
   for (const w of wrecks) drawWreck(w);
+  const ghost = ghostAt();
+  if (ghost) drawOther(ghost);
+  for (const o of others) drawOther(o);
   if (P.rope) { g.strokeStyle = '#f4e3b5'; g.lineWidth = 3; g.beginPath(); g.moveTo(P.rope.a.x, P.rope.a.y); g.lineTo(P.x, P.y); g.stroke(); }
   if (P.miss > 0) { g.strokeStyle = `rgba(255,180,180,${P.miss * 3})`; g.lineWidth = 2; g.beginPath(); g.moveTo(P.x, P.y); g.lineTo(P.x + 160, P.y - 260); g.stroke(); }
   drawHero();
@@ -324,6 +358,19 @@ function draw() {
   if (st.flash > 0) { g.fillStyle = `rgba(255,240,220,${st.flash * 2.4})`; g.fillRect(0, 0, W, H); }
   if (st.slow > 0) { g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, 0, W, 50); g.fillRect(0, H - 50, W, 50); }   // 느린 화면 띠
   g.fillStyle = '#ffe066'; g.font = '22px sans-serif'; g.textAlign = 'left'; g.fillText('⭐'.repeat(st.stars) + '☆'.repeat(3 - st.stars), 24, 120);
+  // 화면 밖 친구·유령: 가장자리에 화살표와 거리 차
+  for (const o of (ghost ? [ghost] : []).concat(others)) {
+    const sx = o.x - cam; if (sx > -20 && sx < W + 20) continue;
+    const left = sx < 0, y = clamp(o.y, 150, H - 120), diff = Math.round((o.x - P.x) / 10);
+    g.globalAlpha = 0.85; g.fillStyle = o.color; g.beginPath();
+    if (left) { g.moveTo(6, y); g.lineTo(22, y - 12); g.lineTo(22, y + 12); } else { g.moveTo(W - 6, y); g.lineTo(W - 22, y - 12); g.lineTo(W - 22, y + 12); }
+    g.fill(); g.font = '700 14px sans-serif'; g.textAlign = left ? 'left' : 'right';
+    g.fillText(`${o.name} ${diff > 0 ? '+' : ''}${diff}m`, left ? 26 : W - 26, y + 5); g.globalAlpha = 1;
+  }
+  if (opt.race && others.length) {   // 지금 순위
+    const rank = 1 + others.filter(o => (o.d || 0) > st.dist).length;
+    g.fillStyle = '#9dffcf'; g.font = '800 22px sans-serif'; g.textAlign = 'left'; g.fillText(`🏃 ${rank}위 / ${others.length + 1}명`, 24, 152);
+  }
   // 화면 위 글자
   g.textAlign = 'left'; g.fillStyle = '#fff'; g.font = '800 30px sans-serif'; g.fillText(`${st.dist.toLocaleString()} m`, 24, 56);
   g.font = '600 20px sans-serif'; g.fillText(`🪙 ${st.coins}`, 24, 88);
@@ -402,6 +449,22 @@ function drawRide(ph, im) {
   const py = (ph === 'spider' && P.side < 0 ? 40 : -40) + bob;
   g.fillStyle = '#ff7a5e'; g.beginPath(); g.arc(-6, py, 10, 0, TAU); g.fill();
   g.fillStyle = '#ffe0c0'; g.beginPath(); g.arc(-6, py - (P.side < 0 && ph === 'spider' ? -12 : 12), 7, 0, TAU); g.fill();
+}
+function ghostAt() {   // 유령: 기록한 길을 같은 시간에 따라간다
+  if (!opt.ghost || !opt.ghost.path || !opt.ghost.path.length) return null;
+  const pa = opt.ghost.path, f = t / 0.1, i = Math.min(pa.length - 1, Math.floor(f)), j = Math.min(pa.length - 1, i + 1), k = Math.min(1, f - i);
+  if (!(i >= 0)) return null;
+  return { x: pa[i][0] + (pa[j][0] - pa[i][0]) * k, y: pa[i][1] + (pa[j][1] - pa[i][1]) * k, ph: PH_ID[pa[i][2]] || 'rope', name: '👻 최고 기록', color: '#c8d8ff', over: i >= pa.length - 1, frame: cb.frame };
+}
+function drawOther(o) {   // 친구·유령은 반투명하게(부딪히지 않는다)
+  const im = cb.img ? (o.ph === 'plane' ? cb.img('ship-' + (o.frame || 'falcon')) : isRide(o.ph) ? cb.img('boss-' + o.ph) : null) : null;
+  g.save(); g.globalAlpha = o.over ? 0.22 : 0.5; g.translate(o.x, o.y);
+  if (im) { g.rotate(o.ph === 'plane' ? Math.PI / 2 : -Math.PI / 2); const s = o.ph === 'plane' ? 62 : 100; g.drawImage(im, -s / 2, -s / 2, s, s); }
+  else if (o.ph === 'rope') { g.fillStyle = o.color; g.beginPath(); g.ellipse(0, 4, 12, 16, 0, 0, TAU); g.fill(); g.beginPath(); g.arc(0, -14, 9, 0, TAU); g.fill(); }
+  else { g.fillStyle = o.color; g.beginPath(); g.ellipse(0, 0, 30, 14, 0, 0, TAU); g.fill(); }
+  g.restore();
+  g.globalAlpha = o.over ? 0.4 : 0.95; g.fillStyle = o.color; g.font = '800 15px sans-serif'; g.textAlign = 'center';
+  g.fillText(o.over ? `${o.name} 💥` : o.name, o.x, o.y - (o.ph === 'rope' ? 34 : 52)); g.globalAlpha = 1;
 }
 function drawWreck(w) {   // 버린 탈것(빙글빙글 떨어진다, 그을려 어둡게)
   const im = cb.img ? cb.img(w.k === 'plane' ? 'ship-' + (cb.frame || 'falcon') : 'boss-' + w.k) : null;
