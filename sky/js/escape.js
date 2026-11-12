@@ -10,7 +10,8 @@ const K = {
   g: 1500,              // 사람 중력
   ropeMin: 90,          // 로프 가장 짧은 길이
   ropeReach: 460,       // 로프가 닿는 거리
-  pump: 260,            // 매달려 앞으로 흔들 때 더해지는 힘
+  pump: 300,            // 매달려 흔들 때 더해지는 힘(흔들리는 방향으로)
+  swing: 560,           // 이 빠르기까지만 밀어 준다(그네가 한없이 커지지 않게)
   reel: 70,             // 누르고 있으면 로프가 감기는 빠르기(짧을수록 빨리 돈다)
   flyRise: 1700, flySink: 1150, flyMax: 520,   // 비행기
   birdFlap: 400, birdG: 1250, birdEvery: 0.2,  // 새: 누르고 있으면 0.2초마다 날갯짓
@@ -51,7 +52,7 @@ function start(callbacks, o) {
 function build() {
   box = document.createElement('div'); box.id = 'escape'; box.className = 'hidden';
   box.innerHTML = `<canvas width="${W}" height="${H}"></canvas><button class="esQuit">✕</button>
-    <div class="esRes hidden"><h2>탈출 작전</h2><div class="esStat"></div><div class="esRank"></div><div class="row"><button class="btn big esAgain">다시 ▶</button><button class="btn sub esEasy"></button><button class="btn sub esGhost hidden">👻 유령과 달리기</button><button class="btn sub esHome">격납고로</button></div><small class="esTip"></small><details class="esHelp"><summary>❓ 조작법</summary><div>✈️ <b>비행기</b>: 누른 채 끌기(PC는 방향키·WASD). 놓으면 그 자리에 떠 있어요.<br>🪢 <b>로프</b>: 노랗게 빛나는 고리가 보일 때 <b>누르고 있으면</b> 매달려 흔들려요. 앞쪽 위로 올라가는 순간 <b>떼면</b> 멀리 날아가요. 날아가는 중에 다시 누르면 다음 고리. 너무 일찍 떼면 아래로 떨어져요.<br>🐦 <b>새</b>: 누르고 있으면 날갯짓 · 🕷️ <b>거미</b>: 누를 때마다 천장↔바닥 · 🐋 <b>고래</b>: 누르면 오름 · ⚔️ <b>기사</b>: 누르면 돌진 · 🚀 <b>쌍둥이</b>: 누르고 있으면 오름, 누르면 대포<br>💠 <b>코어</b>: 누를 때마다 중력이 위↔아래로 바뀌어요(옆 화살표 쪽으로 떨어짐). 계속 위로 올라가 있으면 다시 한 번 눌러 내려오세요. 기둥의 빈틈 높이에 맞춰 눌러 주면 돼요.<br>🐢 처음엔 <b>연습 모드</b>(느리게·하트 5개, 고철은 조금 덜)로 익혀 보세요.</div></details></div>`;
+    <div class="esRes hidden"><h2>탈출 작전</h2><div class="esStat"></div><div class="esRank"></div><div class="row"><button class="btn big esAgain">다시 ▶</button><button class="btn sub esEasy"></button><button class="btn sub esGhost hidden">👻 유령과 달리기</button><button class="btn sub esHome">격납고로</button></div><small class="esTip"></small><details class="esHelp"><summary>❓ 조작법</summary><div>✈️ <b>비행기</b>: 누른 채 끌기(PC는 방향키·WASD). 놓으면 그 자리에 떠 있어요.<br>🪢 <b>로프</b>: 노랗게 빛나는 고리가 보일 때 <b>누르고 있으면</b> 매달려 그네처럼 앞뒤로 계속 흔들려요(떼기 전까지). 앞쪽 위로 올라가는 순간 <b>떼면</b> 멀리 날아가요. 날아가는 중에 다시 누르면 다음 고리. 너무 일찍 떼면 아래로 떨어져요.<br>🐦 <b>새</b>: 누르고 있으면 날갯짓 · 🕷️ <b>거미</b>: 누를 때마다 천장↔바닥 · 🐋 <b>고래</b>: 누르면 오름 · ⚔️ <b>기사</b>: 누르면 돌진 · 🚀 <b>쌍둥이</b>: 누르고 있으면 오름, 누르면 대포<br>💠 <b>코어</b>: 누를 때마다 중력이 위↔아래로 바뀌어요(옆 화살표 쪽으로 떨어짐). 계속 위로 올라가 있으면 다시 한 번 눌러 내려오세요. 기둥의 빈틈 높이에 맞춰 눌러 주면 돼요.<br>🐢 처음엔 <b>연습 모드</b>(느리게·하트 5개, 고철은 조금 덜)로 익혀 보세요.</div></details></div>`;
   document.getElementById('stage').append(box);
   cv = box.querySelector('canvas'); g = cv.getContext('2d');
   const at = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
@@ -104,7 +105,7 @@ function aimAnchor() {   // 지금 누르면 걸릴 고리(화면에 노랗게 �
   return best;
 }
 function grab(best) {
-  P.rope = { a: best, L: Math.max(K.ropeMin, Math.hypot(best.x - P.x, best.y - P.y)) };
+  P.rope = { a: best, L: Math.max(K.ropeMin, Math.hypot(best.x - P.x, best.y - P.y)) }; P.rope.L0 = P.rope.L;
   best.used = true; sfx('rope');
   if (best.fid) {
     const o = others.find(q => q.id === best.fid);
@@ -316,8 +317,9 @@ function update(dt) {
     if (P.rope) {
       const a = P.rope.a, dx = P.x - a.x, dy = P.y - a.y, d = Math.hypot(dx, dy) || 1;
       let tx = -dy / d, ty = dx / d; if (tx < 0) { tx = -tx; ty = -ty; }   // 줄에 수직, 앞쪽
-      if (P.vx > -50) { P.vx += tx * K.pump * dt; P.vy += ty * K.pump * dt; }
-      if (hold) P.rope.L = Math.max(K.ropeMin, P.rope.L - K.reel * dt);
+      const vt = P.vx * tx + P.vy * ty;   // 줄을 따라 도는 빠르기(+ 앞쪽, - 뒤쪽)
+      if (dy > 0 && Math.abs(vt) < K.swing) { const s = vt >= 0 ? 1 : -1; P.vx += tx * s * K.pump * dt; P.vy += ty * s * K.pump * dt; }   // 아래쪽을 지날 때 흔들리는 방향으로 밀어 준다(떼지 않으면 앞뒤로 계속 그네)
+      if (hold && P.rope.L > P.rope.L0 * 0.75) P.rope.L = Math.max(K.ropeMin, P.rope.L - K.reel * dt);   // 처음엔 조금 감기고 그다음엔 그 길이로 흔들린다
     }
     P.vx *= 1 - 0.05 * dt;
   }
@@ -328,7 +330,7 @@ function update(dt) {
       const nx = dx / d, ny = dy / d; P.x = a.x + nx * P.rope.L; P.y = a.y + ny * P.rope.L;
       const vr = P.vx * nx + P.vy * ny; if (vr > 0) { P.vx -= vr * nx; P.vy -= vr * ny; }
     }
-    if (P.x > a.x + 40 && P.y < a.y + 20) letGo();   // 고리 위로 넘어가면 저절로 놓는다
+    // 0.35: 저절로 놓지 않는다 — 손을 뗄 때까지 앞뒤로 흔들린다
   }
   if (P.y < 30) { P.y = 30; if (P.vy < 0) P.vy = 0; }
   if (st.phase === 'plane') {   // 비행기: 화면은 일정하게 흐르고, 비행기는 화면 안에서 앞뒤로 움직인다
@@ -383,7 +385,7 @@ function changePhase(ph) {
     for (let i = 0; i < 14; i++) parts.push({ x: P.x, y: P.y, vx: rnd(-200, 100), vy: rnd(-300, 100), t: 0, life: 1.2, c: was === 'bird' ? '#d9c7a8' : '#9aa6b4', s: rnd(4, 9) });
     P.vx = 320; P.vy = -720;
     const off = { plane: '🚨 엔진 고장! 비상 탈출!', bird: '🐦 새가 지쳤다! 뛰어내려!', spider: '🕷️ 거미가 멈췄다! 뛰어내려!', whale: '🐋 고래가 잠들었다! 뛰어내려!', knight: '⚔️ 기사가 무릎을 꿇었다! 뛰어내려!', core: '💠 코어가 꺼졌다! 뛰어내려!' };
-    banner(off[was] || '뛰어내려!', st.seen.rope ? '누르면 로프 · 떼면 날아가요' : '누르고 있는 동안 노랗게 빛나는 고리에 매달려 앞으로 흔들려요 · 앞쪽 위로 올라갈 때 떼면 멀리 날아가요 · 날아가는 중에 다시 누르면 다음 고리');
+    banner(off[was] || '뛰어내려!', st.seen.rope ? '누르면 로프 · 떼면 날아가요' : '누르고 있는 동안 노랗게 빛나는 고리에 매달려 그네처럼 앞뒤로 흔들려요 · 앞쪽 위로 올라갈 때 떼면 멀리 날아가요 · 날아가는 중에 다시 누르면 다음 고리');
     // 탈출하자마자 잡을 고리를 하나 둔다
     items.push({ k: 'anchor', x: P.x + 260, y: 170 });
   } else if (RIDE_NM[ph]) {
@@ -397,7 +399,7 @@ function changePhase(ph) {
 function respawn() {
   if (st.balloon > 0) return;
   const a = items.filter(it => it.k === 'anchor' && it.x > P.x - 60).sort((p, q) => p.x - q.x)[0];
-  if (a) { P.x = a.x - 20; P.y = a.y + 140; P.vx = 200; P.vy = 0; P.rope = { a, L: 150 }; }
+  if (a) { P.x = a.x - 20; P.y = a.y + 140; P.vx = 200; P.vy = 0; P.rope = { a, L: 150, L0: 150 }; }
   else { P.y = 300; P.vy = -300; }
   st.inv = 1.6;
 }
