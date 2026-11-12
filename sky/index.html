@@ -149,6 +149,19 @@
   .eq span.empty { opacity: .35; }
   .eq sup { position: absolute; right: 1px; bottom: -2px; font-size: calc(var(--u) * 2.4); color: #ffd166; }
   .ultLine { color: #ffe7a3; }
+  /* 첫 10분: 하나씩 열림 */
+  .tabs button.newDot, .modes button.newDot { position: relative; }
+  .tabs button.newDot::after, .modes button.newDot::after { content: 'NEW'; position: absolute; top: -2px; right: -2px; font-size: calc(var(--u) * 1.9); font-weight: 800; background: #ff4d6d; color: #fff; border-radius: 99px; padding: 0 calc(var(--u) * .8); animation: newDot 1s ease-in-out infinite alternate; }
+  @keyframes newDot { to { transform: scale(1.15); } }
+  .nextOpen { margin-top: calc(var(--u) * 1.5); padding: calc(var(--u) * 1.2) calc(var(--u) * 2); border-radius: calc(var(--u) * 2); background: rgba(255,255,255,.07); font-size: .9em; color: #ffe7a3; }
+  #unlockPop { position: fixed; inset: 0; z-index: 70; background: rgba(4,8,16,.78); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #unlockPop .upIn { width: min(100%, calc(var(--u) * 86)); background: linear-gradient(#22345a, #101a30); border: 1px solid #ffd166; border-radius: calc(var(--u) * 4); padding: calc(var(--u) * 4); display: flex; flex-direction: column; gap: calc(var(--u) * 2); text-align: center; animation: upIn .45s cubic-bezier(.2,1.6,.4,1); box-shadow: 0 0 calc(var(--u) * 8) rgba(255,209,102,.35); }
+  #unlockPop small { font-size: calc(var(--u) * 4.2); font-weight: 800; color: #ffd166; }
+  .upItem { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: calc(var(--u) * 2.5); text-align: left; background: rgba(255,255,255,.07); border-radius: calc(var(--u) * 2.5); padding: calc(var(--u) * 2); }
+  .upItem span { grid-row: span 2; font-size: calc(var(--u) * 8); align-self: center; }
+  .upItem b { font-size: calc(var(--u) * 4); } .upItem i { font-style: normal; opacity: .8; font-size: calc(var(--u) * 3.2); }
+  #unlockPop button { padding: calc(var(--u) * 2.5); border: 0; border-radius: calc(var(--u) * 2.5); background: #ffd166; color: #1a1a1a; font-weight: 800; font-size: calc(var(--u) * 4); }
+  @keyframes upIn { from { transform: scale(.6); opacity: 0; } }
   /* 성장이 보이게: 전투력·성장 단계 */
   .pvShip { position: relative; cursor: pointer; }
   .pvShip::after { content: '🔍'; position: absolute; right: calc(var(--u) * 1.5); bottom: calc(var(--u) * 1); font-size: calc(var(--u) * 3); opacity: .6; }

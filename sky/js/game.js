@@ -21,12 +21,13 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   weapons: { vulcan: 1, spread: 1 }, frame: 'falcon', weapon: 'vulcan', music: true, sfx: true, vib: true, plays: 0,
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
-  pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.16';
+  pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
+const VERSION = '0.17';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
   S = Object.assign(fresh(), old);
+  if (old.plays > 0 && !old.openV) S.openAll = true;   // 0.17 전부터 하던 사람은 모두 열린 것으로
   S.stats = Object.assign(fresh().stats, old.stats || {});
   S.records = Object.assign(fresh().records, old.records || {});
   S.idle = Object.assign(fresh().idle, old.idle || {});
@@ -183,6 +184,52 @@ function buildStats() {
   };
 }
 
+// ---------- 첫 10분: 처음엔 스테이지만, 판을 하고 깰수록 모드·탭이 하나씩 열린다(숫자는 해 보고 조정) ----------
+const OPENS = [
+  { k: 'tab:arms', icon: '🔫', name: '무기 강화', need: { plays: 1 }, tip: '모은 고철로 무기를 강하게 만들어요.' },
+  { k: 'tab:goals', icon: '🏅', name: '임무', need: { plays: 1 }, tip: '오늘의 임무와 도전 과제로 고철을 받아요.' },
+  { k: 'tab:parts', icon: '⚙️', name: '부품', need: { cleared: 1 }, tip: '보스가 떨어뜨린 부품을 끼우면 더 강해져요.' },
+  { k: 'tab:look', icon: '🎨', name: '꾸미기', need: { cleared: 1 }, tip: '도색·불꽃·꼬리·스티커로 내 기체를 꾸며요.' },
+  { k: 'mode:endless', icon: '♾️', name: '무한 생존', need: { cleared: 2 }, tip: '끝없이 몰려오는 적을 얼마나 버틸까요?' },
+  { k: 'tab:ship', icon: '✈️', name: '기체 고르기', need: { cleared: 2 }, tip: '새 기체가 열렸어요. 기체마다 궁극기가 달라요.' },
+  { k: 'mode:coop', icon: '🤝', name: '친구와 함께', need: { cleared: 2 }, tip: '친구 1~2명과 같은 하늘에서 싸워요.' },
+  { k: 'tab:research', icon: '🔬', name: '연구', need: { cleared: 3 }, tip: '오래 쌓이는 강화. 고철을 더 벌게도 해 줘요.' },
+  { k: 'mode:dojo', icon: '🎵', name: '리듬 도장', need: { cleared: 3 }, tip: '비행은 쉬고 리듬 게임만! 곡 8개.' },
+  { k: 'tab:rank', icon: '🏆', name: '랭킹', need: { cleared: 3 }, tip: '다른 조종사들과 점수를 겨뤄요.' },
+  { k: 'mode:auto', icon: '⭐', name: '표창 공방', need: { cleared: 4 }, tip: '로봇을 직접 몰아 표창으로 베는 넓은 들판.' },
+  { k: 'mode:rush', icon: '👑', name: '보스 러시', need: { cleared: 5 }, tip: '보스 다섯을 쉬지 않고 연달아!' },
+];
+const openCond = o => S.plays >= (o.need.plays || 0) && S.cleared >= (o.need.cleared || 0);
+const isOpen = k => { if (S.openAll || k === 'tab:sortie' || k === 'tab:settings' || k === 'mode:stage') return true; if (k === 'mode:coop' && joinCode) return true; const o = OPENS.find(x => x.k === k); return !o || openCond(o); };
+function nextOpenTip() {   // 다음에 열릴 것 한 줄
+  const n = OPENS.find(o => !isOpen(o.k)); if (!n) return '';
+  const grp = OPENS.filter(o => !isOpen(o.k) && JSON.stringify(o.need) === JSON.stringify(n.need)).map(o => o.icon + ' ' + o.name).join(' · ');
+  return `🔒 ${n.need.cleared ? `스테이지 ${n.need.cleared}를 깨면` : '한 판 해 보면'} 열려요: ${grp}`;
+}
+function unlockCheck() {   // 새로 열린 것이 있으면 축하 창
+  S.seenOpen = S.seenOpen || {}; S.newDot = S.newDot || {};
+  const got = OPENS.filter(o => isOpen(o.k) && !S.seenOpen[o.k]); if (!got.length) return;
+  got.forEach(o => { S.seenOpen[o.k] = 1; if (!S.openAll) S.newDot[o.k] = 1; }); save();
+  if (S.openAll || document.getElementById('unlockPop')) return;
+  const bx = document.createElement('div'); bx.id = 'unlockPop';
+  bx.innerHTML = `<div class="upIn"><small>🔓 새로 열렸어요!</small>${got.map(o => `<div class="upItem"><span>${o.icon}</span><b>${o.name}</b><i>${o.tip}</i></div>`).join('')}<button>좋아요</button></div>`;
+  bx.querySelector('button').addEventListener('click', () => { bx.remove(); A.sfx('click'); });
+  document.body.append(bx); A.sfx('levelup');
+}
+function drawTut() {   // 첫 판에만: 손가락 안내
+  if (!run.tut || run.mode !== 'stage') return;
+  run.tutMv = (run.tutMv || 0) + Math.abs(P.x - (run.tutLx ?? P.x)) + Math.abs(P.y - (run.tutLy ?? P.y)); run.tutLx = P.x; run.tutLy = P.y;
+  let msg = null, hand = false;
+  if (run.tutMv < 260 && run.t < 14) { msg = touchDevice ? '화면을 끌어서 움직여요 · 총은 알아서 쏴요' : '마우스나 방향키로 움직여요 · 총은 알아서 쏴요'; hand = true; }
+  else if (run.t < 22 && run.t > 3) msg = '적을 부수면 경험치! 차면 강화 카드를 골라요';
+  else if (P.ult >= 100 && !run.ults && run.t < 120) msg = touchDevice ? '🌟 궁극기 준비! 오른쪽 아래 버튼을 눌러요' : '🌟 궁극기 준비! Space 키를 눌러요';
+  if (!msg) return;
+  ctx.save(); ctx.globalAlpha = 0.85 + 0.15 * Math.sin(T * 5);
+  ctx.fillStyle = 'rgba(6,12,24,.7)'; ctx.fillRect(40, H - 330, W - 80, 46);
+  txt(msg, W / 2, H - 300, 17, '#fff', 'center', 700);
+  if (hand) { const hx = W / 2 + Math.sin(T * 2.4) * 120; ctx.font = '44px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('👆', hx, H - 200); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 3; ctx.setLineDash([8, 10]); ctx.beginPath(); ctx.moveTo(W / 2 - 120, H - 240); ctx.lineTo(W / 2 + 120, H - 240); ctx.stroke(); ctx.setLineDash([]); }
+  ctx.restore();
+}
 // ---------- 성장이 보이게: 전투력과 성장 단계(단계가 오르면 기체 모습이 바뀐다). 숫자는 해 보고 조정 ----------
 const TIERS = [
   { p: 0, name: '견습', c: '#9fb3c8', fx: '기본 모습' },
@@ -296,6 +343,7 @@ function startRun(stage, md = 'stage') {
   P = { x: W / 2, y: H - 190, tx: W / 2, ty: H - 190, lx: W / 2, bank: 0, hp: st.maxHp, maxHp: st.maxHp, inv: 2, ult: 0, fireT: 0, droneT: 0, seekT: 2,
     barrierReady: false, barrierT: 0, ultKind: null, ultT: 0, swarmQ: 0, swarmT: 0, ga: 0, novaR: 0, trap: null };
   if (md === 'auto') arenaStart();
+  run.tut = S.plays === 0 && md === 'stage';   // 첫 판 안내
   S.plays++; dcount('runs'); save();
   state = 'play';
   for (const id of ['hangar', 'cards', 'pause', 'result']) $(id).classList.add('hidden');
@@ -2187,7 +2235,7 @@ function draw() {
   drawLasers();
   drawFx();
   if (!run.arena) drawHazards(true);
-  drawNums();
+  drawNums(); drawTut();
   ctx.restore();
   ctx.restore();
   if (flash > 0) { ctx.fillStyle = `rgba(255,250,235,${flash * 0.6})`; ctx.fillRect(0, 0, W, H); }
@@ -2216,8 +2264,11 @@ function showHangar() {
 const statBar = (label, k, val) => `<div class="stat"><span>${label}</span><i><b style="width:${Math.round(clamp(k, 0.04, 1) * 100)}%"></b></i><em>${val}</em></div>`;
 function renderHangar() {
   $('scrap').textContent = `🔩 ${S.scrap}`;
+  unlockCheck();
   $('bestTxt').textContent = `최고 ${S.best.toLocaleString()} · ★${starCount()}`;
-  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  if (!isOpen('tab:' + tab)) tab = 'sortie'; if (!isOpen('mode:' + selMode)) selMode = 'stage';
+  S.newDot = S.newDot || {};
+  document.querySelectorAll('.tabs button').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.classList.toggle('hidden', !isOpen('tab:' + b.dataset.tab)); b.classList.toggle('newDot', !!S.newDot['tab:' + b.dataset.tab]); });
   { const on = document.querySelector('.tabs button.on'), nav = document.querySelector('.tabs'); if (on) nav.scrollLeft = on.offsetLeft - nav.clientWidth / 2 + on.clientWidth / 2; }
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('hidden', t.id !== 'tab-' + tab));
   if (tab === 'rank') Rank.render($('tab-rank'));
@@ -2228,16 +2279,17 @@ function renderHangar() {
   $('goalBadge').textContent = claimable || '';
   $('goalBadge').classList.toggle('hidden', !claimable);
   const mb = $('modes'); mb.innerHTML = '';
-  for (const m of MODES) {
-    const b = document.createElement('button'); b.className = m.id === selMode ? 'on' : '';
+  for (const m of MODES.filter(m => isOpen('mode:' + m.id))) {
+    const b = document.createElement('button'); b.className = (m.id === selMode ? 'on' : '') + (S.newDot['mode:' + m.id] ? ' newDot' : '');
     b.innerHTML = `<span>${m.icon}</span>${m.name}`;
-    b.addEventListener('click', () => { selMode = m.id; A.sfx('click'); renderHangar(); });
+    b.addEventListener('click', () => { selMode = m.id; if (S.newDot['mode:' + m.id]) { delete S.newDot['mode:' + m.id]; save(); } A.sfx('click'); renderHangar(); });
     mb.append(b);
   }
   const M = MODES.find(m => m.id === selMode);
   const rec = { stage: `최고 스테이지 ${S.cleared} · 별 ★${starCount()}`, endless: `최고 WAVE ${S.records.wave} · 최고 점수 ${S.records.endlessScore.toLocaleString()}`,
     rush: `최고 ${S.records.rush} / 5${S.records.rushTime ? ` · 최단 ${fmt(S.records.rushTime)}` : ''}`, auto: `구역 ${S.idle.zone} · 최고 ${S.idle.best} · 💰${Forge.fmt(S.forge.gold)} · 최고 표창 Lv ${S.forge.maxLv} · ✨ 별조각 ${S.forge.shards}` }[selMode];
   $('modeInfo').innerHTML = `<b>${M.icon} ${M.name}</b><br>${M.desc}<br><small>📊 ${rec || `열린 단계 ${S.dojo.open} / 8`}</small>`;
+  { const nt = nextOpenTip(); if (nt) $('modeInfo').insertAdjacentHTML('beforeend', `<div class="nextOpen">${nt}</div>`); }
   if (selMode === 'dojo') {
     dojoLv = Math.min(dojoLv, S.dojo.open);
     const row = document.createElement('div'); row.className = 'dojoLv';
@@ -2570,7 +2622,7 @@ $('importBtn').addEventListener('click', () => {
   catch (e) { window.alert('저장 코드가 올바르지 않습니다.'); }
 });
 $('resetBtn').addEventListener('click', () => { if (window.confirm('모든 기록을 지우고 처음부터 시작할까요? 되돌릴 수 없습니다.')) { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 무시 */ } location.reload(); } });
-document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; openSlot = null; A.sfx('click'); renderHangar(); }));
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; openSlot = null; if (S.newDot && S.newDot['tab:' + tab]) { delete S.newDot['tab:' + tab]; save(); } A.sfx('click'); renderHangar(); }));
 $('musicBtn').addEventListener('click', () => { S.music = !S.music; A.setMusic(S.music); save(); renderHangar(); });
 $('sfxBtn').addEventListener('click', () => { S.sfx = !S.sfx; A.setSfx(S.sfx); save(); renderHangar(); });
 $('vibBtn').addEventListener('click', () => { S.vib = !S.vib; save(); buzz(40); renderHangar(); });
