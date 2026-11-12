@@ -5,13 +5,13 @@ window.Rank = (() => {
 'use strict';
 const URL = 'https://karluttarljwyutztbgx.supabase.co';
 const KEY = 'sb_publishable_oT_Z6aYJ3uDZxcJeF3ArIA_4ivykkte';   // 공개용 열쇠(누구나 봐도 되는 키)
-const MODES = [['stage', '🗺️ 스테이지'], ['endless', '♾️ 무한 생존'], ['rush', '👑 보스 러시'], ['dojo', '🎵 리듬 도장']];
+const MODES = [['league', '🏅 주간 리그'], ['stage', '🗺️ 스테이지'], ['endless', '♾️ 무한 생존'], ['rush', '👑 보스 러시'], ['dojo', '🎵 리듬 도장']];
 // 이름 앞 보석: 조종사 계급(Lv)이 오를수록 귀한 보석
 const GEMS = [[40, '다이아', '#bff6ff'], [30, '루비', '#ff4d6d'], [20, '사파이어', '#4c9bff'], [15, '에메랄드', '#3fe39a'], [10, '금', '#ffd166'], [6, '은', '#dfe7f2'], [3, '동', '#d08a4a'], [1, '강철', '#8f9aa8']];
 // 구역: 순위가 높을수록 더 높은 하늘. 상위 몇 %인지로 정해서, 사람이 많아져도 누구나 자기 구역이 있다
 const ZONES = [[0.01, '🚀', '우주', '#ff9df0'], [0.05, '🌌', '성층권', '#b48cff'], [0.15, '✨', '오로라', '#5ee6c8'], [0.3, '☁️', '구름 위', '#9fd0ff'], [0.5, '🌤️', '하늘', '#ffd166'], [1, '🛫', '활주로', '#b9c8dc']];
 const BAD = /(씨발|시발|ㅅㅂ|ㅆㅂ|병신|ㅂㅅ|개새|좆|존나|졸라|섹스|느금|니애미|애미|에미|창녀|fuck|shit|bitch|sex|porn)/i;
-let S, save, sfx, ver = '', view = { mode: 'stage', week: true }, cache = {};
+let S, save, sfx, ver = '', view = { mode: 'league', week: true }, cache = {};
 
 const gemOf = lv => GEMS.find(g => lv >= g[0]) || GEMS[GEMS.length - 1];
 const gem = lv => { const g = gemOf(lv); return `<i class="gem" style="--c:${g[2]}" title="${g[1]} (조종사 Lv ${lv})"></i>`; };
@@ -28,13 +28,66 @@ function rpc(fn, body) {
     .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.status === 204 ? null : r.json().catch(() => null); });
 }
 function init(o) {
-  S = o.S; save = o.save; sfx = o.sfx || (() => {}); ver = o.ver || '';
+  S = o.S; save = o.save; sfx = o.sfx || (() => {}); ver = o.ver || ''; gift = o.gift || null;
   S.rank = S.rank || {};
   if (!S.rank.dev) S.rank.dev = uuid();
   if (!S.nick || nickProblem(S.nick)) S.nick = '조종사' + ((Math.random() * 9000 + 1000) | 0);   // 처음엔 자동 별명, 언제든 바꿀 수 있다
   save();
 }
 const joined = () => !S.rank.off;
+
+// ---------- 주간 리그(server/league.sql): 주간 별로 30명 조 안에서 겨루고, 주가 바뀌면 위 20% 승급·아래 20% 강등 ----------
+const LEAGUE = [['🛩️', '훈련', '#b9c8dc'], ['🦅', '독수리', '#d08a4a'], ['⚡', '번개', '#ffd166'], ['🌪️', '폭풍', '#5ee6c8'], ['☄️', '혜성', '#b48cff'], ['👑', '전설', '#ff9df0']];
+const lgTag = t => { const L = LEAGUE[t] || LEAGUE[0]; return `<em class="zone" style="--c:${L[2]}">${L[0]} ${L[1]} 리그</em>`; };
+const noLg = e => /PGRST202|Could not find the function|does not exist/.test(String(e && e.message || e));   // 서버에 리그 함수가 아직 없을 때
+const lgCut = n => ({ up: n >= 5 ? Math.ceil(n * 0.2) : n >= 2 ? 1 : 0, down: n >= 5 ? Math.floor(n * 0.2) : 0 });
+let lg = null, gift = null;   // lg: 마지막으로 받은 내 리그 정보, gift: 지난주 결과를 받으면 부르는 게임 쪽 함수
+function lgGot(d) {   // 서버 답: 내 조 + (있으면) 받지 않은 지난주 결과
+  if (!d) return d; lg = d; S.rank.lgTier = d.tier;
+  if (d.result && gift) rpc('league_claim', { p_device: S.rank.dev }).then(r => { if (r) gift(r, LEAGUE); }).catch(() => {});
+  return d;
+}
+function lgMine(d) { const rows = (d && d.rows) || [], me = rows.find(r => r.me); return me ? { pos: Number(me.pos), n: rows.length } : null; }
+// 주간 별이 늘 때마다(결과 화면): 올리고, box가 있으면 한 줄 보여 준다
+function league(pts, box) {
+  if (!joined()) return;
+  const line = box ? document.createElement('div') : null;
+  if (line) { line.className = 'rankLine'; line.textContent = '🏅 리그에 올리는 중…'; box.append(line); }
+  rpc('league_submit', { p_device: S.rank.dev, p_pts: pts, p_nick: S.nick, p_lv: S.pilot.lv })
+    .then(lgGot).then(d => { cache.league = null;
+      const m = lgMine(d); if (!line) return;
+      if (!m) { line.textContent = '🏅 리그에 올렸어요'; return; }
+      const c = lgCut(m.n), zone = m.pos <= c.up ? ' · <b class="lgUp">⬆ 승급권</b>' : c.down && m.pos > m.n - c.down ? ' · <b class="lgDown">⬇ 강등권</b>' : '';
+      line.innerHTML = `🏅 ${lgTag(d.tier)} 조 <b>${m.pos}위</b> / ${m.n}명${zone}`;
+    })
+    .catch(e => { if (!line) return; if (noLg(e)) line.remove(); else line.textContent = '🏅 ' + why(e); });
+}
+function leagueView(el, add, stat) {
+  const end = new Date(); end.setDate(end.getDate() + (7 - (end.getDay() + 6) % 7)); end.setHours(0, 0, 0, 0);
+  const left = Math.max(0, end - Date.now()), dd = Math.floor(left / 864e5), hh = Math.floor(left / 36e5) % 24;
+  const list = add('<p class="note">불러오는 중…</p>', 'rkList');
+  add(`판을 하면 모이는 <b>주간 별</b>로 겨뤄요. 같은 리그 사람 30명이 한 조. 주가 바뀌면(월요일) 조에서 위 20%는 승급, 아래 20%는 강등(5명 이상일 때), 쉬는 주에는 그대로예요. 보상 고철: 기본 20+리그×10, 1·2·3등 150·100·70 더, 승급 50 더. 리그: ${LEAGUE.map(L => L[0] + ' ' + L[1]).join(' → ')}.`, 'note');
+  const show = d => {
+    const rows = d.rows || [], m = lgMine(d), c = lgCut(rows.length);
+    stat.innerHTML = `${lgTag(d.tier)} ${m ? `조 <b>${m.pos}위</b> / ${rows.length}명` : '이번 주는 아직 참가 전'} · ⏳ ${dd ? dd + '일 ' : ''}${hh}시간 남음`;
+    if (!d.joined) { list.innerHTML = `<p class="note">이번 주에 한 판 하면 ${lgTag(d.tier)}의 조에 들어가요!</p>`; return; }
+    let html = '';
+    rows.forEach((r, i) => {
+      const pos = Number(r.pos), cls = pos <= c.up ? ' lgU' : c.down && pos > rows.length - c.down ? ' lgD' : '';
+      if (i === c.up && c.up) html += '<div class="rkGap lgLine">⬆ 여기까지 승급</div>';
+      if (c.down && pos === rows.length - c.down + 1) html += '<div class="rkGap lgLine down">⬇ 여기부터 강등</div>';
+      html += `<div class="rk${r.me ? ' me' : ''}${cls}"><span class="pos">${['🥇', '🥈', '🥉'][pos - 1] || pos}</span><span class="who">${gem(r.lv)}${esc(r.nick)}</span><b>⭐ ${Number(r.pts).toLocaleString()}</b></div>`;
+    });
+    list.innerHTML = html;
+  };
+  if (!joined()) { stat.textContent = '랭킹에서 빠져 있어서 리그에도 참가하지 않아요'; list.innerHTML = ''; return; }
+  if (cache.league && Date.now() - cache.league.t < 30000) { show(cache.league.d); return; }
+  rpc('league_board', { p_device: S.rank.dev }).then(lgGot)
+    .then(d => { cache.league = { t: Date.now(), d }; if (list.isConnected) show(d); })
+    .catch(e => { if (list.isConnected) { list.innerHTML = `<p class="note">${noLg(e) ? "🏅 주간 리그 서버를 준비하는 중이에요. 조금만 기다려 주세요!" : why(e)}</p>`; stat.textContent = ''; } });
+}
+// 격납고를 열 때 한 번: 지난주 결과가 있으면 받는다
+function leagueCheck() { if (S && joined() && S.rank.lgSeen !== new Date().toDateString()) { S.rank.lgSeen = new Date().toDateString(); rpc('league_board', { p_device: S.rank.dev }).then(lgGot).catch(() => {}); } }
 
 // 판이 끝났을 때: 자동으로 올리고 결과 화면에 이번 주 순위와 구역을 보여 준다
 function after(mode, score, info, ok = true) {
@@ -68,6 +121,7 @@ function render(el) {
   if (/^조종사\d+$/.test(S.nick)) add('지금 별명은 자동으로 붙은 이름이에요. 마음에 드는 별명으로 바꿔 보세요! (실명·학교 이름 말고)', 'rkHint');
   const chips = add('', 'rkChips');
   for (const [id, label] of MODES) { const b = document.createElement('button'); b.textContent = label; b.className = view.mode === id ? 'on' : ''; b.addEventListener('click', () => { view.mode = id; sfx('click'); render(el); }); chips.append(b); }
+  if (view.mode === 'league') { leagueView(el, add, me.querySelector('.rkStat')); return; }
   const wk = add('', 'rkChips small');
   for (const [w, label] of [[true, '이번 주'], [false, '전체']]) { const b = document.createElement('button'); b.textContent = label; b.className = view.week === w ? 'on' : ''; b.addEventListener('click', () => { view.week = w; sfx('click'); render(el); }); wk.append(b); }
   const zl = add(ZONES.map(z => `<em class="zone" style="--c:${z[3]}">${z[1]} ${z[2]}<small>${z[0] < 1 ? `상위 ${z[0] * 100}%` : '나머지'}</small></em>`).join(''), 'rkZones');
@@ -107,5 +161,5 @@ function render(el) {
     .catch(e => { if (list.isConnected) { list.innerHTML = `<p class="note">${why(e)}</p>`; stat.textContent = ''; } });
 }
 
-return { init, after, render, gem, gemOf };
+return { init, after, render, gem, gemOf, league, leagueCheck, LEAGUE, get lg() { return lg; } };
 })();

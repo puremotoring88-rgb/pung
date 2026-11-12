@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.30';
+const VERSION = '0.31';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -187,6 +187,15 @@ function renderWeekly(el) {
     popups.push({ title: '🎁 주간 도전 보상', html: `<div class="rules">${got.join('<br>')}</div>` }); showPopup(); renderHangar();
   });
   requestAnimationFrame(() => { const row = el.querySelector('.wkRow'), c = row && row.children[Math.max(0, reach - 2)]; if (c) row.scrollLeft = c.offsetLeft - 8; });
+}
+// 주간 리그: 지난주 결과(서버가 정산)를 받으면 고철을 주고 알려 준다
+function leagueGift(r, L) {
+  const was = L[r.tier] || L[0], now = L[r.new_tier] || L[0], rw = Math.max(0, Math.min(400, r.reward | 0));
+  S.scrap += rw; save();
+  const mv = r.move === 'up' ? `<div class="big">⬆ ${now[0]} ${now[1]} 리그로 승급!</div>` : r.move === 'down' ? `<div>⬇ ${now[0]} ${now[1]} 리그로 내려가요. 이번 주에 다시 올라가 봐요!</div>` : `<div>${now[0]} ${now[1]} 리그에 그대로 있어요</div>`;
+  popups.push({ title: '🏅 지난주 리그 결과', html: `<div>${was[0]} ${was[1]} 리그 · 조 ${r.pos}위 / ${r.n}명 · ⭐ ${r.pts}</div>${mv}<div class="big">🔩 ${rw}</div>` });
+  if (r.move === 'up') A.sfx('levelup');
+  if (state === 'hangar' && $('away').classList.contains('hidden')) { showPopup(); renderHangar(); }
 }
 // 돌아온 조종사: 3일 이상 쉬었다가 오면 반가운 선물(고철 + 다음 3판 고철 1.5배)
 function comebackGift(last, t) {
@@ -1858,7 +1867,7 @@ async function keepAwake(on) {   // 자동 출격 중에는 화면이 꺼지지 
   } catch (e) { /* 안 되는 기기 */ }
 }
 function resultFx() {   // 결과 점수가 0부터 올라가고, 최고 기록이면 반짝인다
-  if ($('rStats')) $('rStats').insertAdjacentHTML('beforeend', weekGain());   // 주간 별
+  if ($('rStats')) { $('rStats').insertAdjacentHTML('beforeend', weekGain()); Rank.league(S.week.pts, $('rStats')); }   // 주간 별 → 주간 리그
   const el = $('rStats') && $('rStats').querySelector('.big'); if (!el || !el.firstChild || el.firstChild.nodeType !== 3) return;
   const node = el.firstChild, goal = +node.textContent.replace(/[^0-9]/g, ''); if (!goal) return;
   const t0 = performance.now(), dur = Math.min(1400, 500 + goal / 50); let tick = 0;
@@ -2540,7 +2549,7 @@ function showHangar() {
 const statBar = (label, k, val) => `<div class="stat"><span>${label}</span><i><b style="width:${Math.round(clamp(k, 0.04, 1) * 100)}%"></b></i><em>${val}</em></div>`;
 function renderHangar() {
   $('scrap').textContent = `🔩 ${S.scrap}`;
-  unlockCheck(); titleCheck();
+  unlockCheck(); titleCheck(); Rank.leagueCheck();
   $('bestTxt').textContent = `최고 ${S.best.toLocaleString()} · ★${starCount()}`;
   if (!isOpen('tab:' + tab)) tab = 'sortie'; if (!isOpen('mode:' + selMode)) selMode = 'stage';
   S.newDot = S.newDot || {};
@@ -2888,7 +2897,7 @@ function startEscape(o) {   // 탈출 작전(js/escape.js)
     sfx: k => A.sfx(SND[k] || 'click'),
     img: k => IMG[k] || null, frame: S.frame,
     best: () => S.records.escape || 0,
-    gain: (sc, dist, stars) => { S.records.escapeStars = Math.max(S.records.escapeStars || 0, stars || 0); S.scrap += sc; S.records.escape = Math.max(S.records.escape || 0, dist); S.plays++; dcount('runs'); weekRoll(); S.week.pts += 1 + (stars || 0); save(); },
+    gain: (sc, dist, stars) => { S.records.escapeStars = Math.max(S.records.escapeStars || 0, stars || 0); S.scrap += sc; S.records.escape = Math.max(S.records.escape || 0, dist); S.plays++; dcount('runs'); weekRoll(); S.week.pts += 1 + (stars || 0); save(); Rank.league(S.week.pts); },
     home: () => showHangar(), saveGhost, loadGhost,
   }, o);
 }
@@ -4261,7 +4270,7 @@ Forge.init({
 });
 { const q = new URLSearchParams(location.search).get('room'); if (q) { selMode = 'coop'; joinCode = q.toUpperCase().slice(0, 5); } }   // 초대 링크로 들어오면
 Notice.init();   // 첫 화면의 한 줄·공지·편지
-Rank.init({ S, save, sfx: n => A.sfx(n), ver: VERSION });
+Rank.init({ S, save, sfx: n => A.sfx(n), ver: VERSION, gift: leagueGift });
 // 로그인 문: 로그인하지 않았거나 어느 기록을 쓸지 고르는 중이면 첫 화면을 덮는다
 let gateJoin = !!(joinCode && selMode === 'coop');   // 초대 링크로 왔으면 로그인한 뒤에 방에 들어간다
 const gateUi = () => {
