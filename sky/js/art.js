@@ -356,6 +356,34 @@ function enemyBase(type) {
       g.beginPath(); g.moveTo(-24, -8); g.lineTo(24, -8); g.moveTo(-24, 10); g.lineTo(24, 10); g.moveTo(-8, -26); g.lineTo(-8, -8); g.moveTo(8, 10); g.lineTo(8, 26); g.stroke();
       g.fillStyle = '#d6dde6'; for (const [px, py] of [[-19, -21], [19, -21], [-19, 21], [19, 21], [0, -17], [0, 17]]) { g.beginPath(); g.arc(px, py, 1.6, 0, TAU); g.fill(); }
       eye(0, 1, 4, 'rgba(255,120,80,1)');
+    } else if (type === 'm4') {   // 공장: 녹슨 굴뚝 로봇
+      g.beginPath(); g.rect(-17, -16, 34, 32); g.fillStyle = metal(g, -17, -16, 17, 16, [[0, '#e0b090'], [0.45, '#a0582e'], [1, '#3a1a0a']]); g.fill(); g.stroke();
+      g.fillStyle = '#2a2420'; for (let y = -12; y <= 12; y += 6) g.fillRect(-15, y, 30, 2.5);   // 컨베이어 줄
+      for (const sx of [-1, 1]) { g.beginPath(); g.rect(sx * 17 - (sx > 0 ? 0 : 6), -8, 6, 16); g.fillStyle = '#5a5048'; g.fill(); g.stroke(); }
+      g.beginPath(); g.arc(0, -3, 6, 0, TAU); g.fillStyle = '#3a3532'; g.fill(); g.stroke();
+      eye(0, 12, 2.6, 'rgba(255,80,60,1)');
+    } else if (type === 'm5') {   // 설원: 서리 드론
+      poly(g, [[0, 20], [7, 4], [22, -4], [8, -6], [0, -18], [-8, -6], [-22, -4], [-7, 4]]);
+      g.fillStyle = metal(g, -22, -18, 22, 20, [[0, '#ffffff'], [0.45, '#9fd8f2'], [1, '#2a6a8f']]); g.fill(); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(-18, -4); g.lineTo(18, -4); g.moveTo(0, -16); g.lineTo(0, 18); g.stroke();
+      eye(0, 2, 3, 'rgba(180,240,255,1)');
+    } else if (type === 'm6') {   // 화산: 용암 새
+      for (const sx of [-1, 1]) { poly(g, [[sx * 4, -4], [sx * 26, -14], [sx * 22, 0], [sx * 26, 8], [sx * 6, 8]]); g.fillStyle = metal(g, sx * 4, -14, sx * 26, 8, [[0, '#4a3a36'], [1, '#141010']]); g.fill(); g.stroke(); }
+      g.beginPath(); g.ellipse(0, 2, 8, 17, 0, 0, TAU); g.fillStyle = metal(g, -8, -15, 8, 19, [[0, '#5a4440'], [1, '#1a1210']]); g.fill(); g.stroke();
+      g.strokeStyle = 'rgba(255,140,40,.95)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(-3, -10); g.lineTo(2, -2); g.lineTo(-2, 6); g.lineTo(3, 14); g.moveTo(-20, -8); g.lineTo(-10, -2); g.moveTo(20, -8); g.lineTo(10, -2); g.stroke();
+      poly(g, [[0, 24], [4, 16], [-4, 16]]); g.fillStyle = '#ffb347'; g.fill();
+      eye(0, 12, 2.4, 'rgba(255,160,40,1)');
+    } else if (type === 'm7') {   // 정글: 잎 딱정벌레
+      g.beginPath(); g.ellipse(0, 0, 16, 20, 0, 0, TAU); g.fillStyle = metal(g, -16, -20, 16, 20, [[0, '#c8f0a0'], [0.45, '#4f8a3a'], [1, '#18320f']]); g.fill(); g.stroke();
+      g.strokeStyle = 'rgba(20,50,10,.7)'; g.lineWidth = 1; g.beginPath(); g.moveTo(0, -20); g.lineTo(0, 20); for (const y of [-10, 0, 10]) { g.moveTo(0, y); g.lineTo(-12, y - 5); g.moveTo(0, y); g.lineTo(12, y - 5); } g.stroke();
+      g.strokeStyle = '#18320f'; g.lineWidth = 1.5; for (const sx of [-1, 1]) for (const y of [-8, 2, 12]) { g.beginPath(); g.moveTo(sx * 14, y); g.lineTo(sx * 22, y + 4); g.stroke(); }
+      eye(-5, 16, 2, 'rgba(255,230,80,1)'); eye(5, 16, 2, 'rgba(255,230,80,1)');
+    } else if (type === 'm8') {   // 구름 위 성: 연 기사
+      poly(g, [[0, -22], [20, -2], [0, 14], [-20, -2]]);
+      g.fillStyle = metal(g, -20, -22, 20, 14, [[0, '#ffffff'], [0.5, '#f4d8e8'], [1, '#b08aa8']]); g.fill(); g.stroke();
+      g.strokeStyle = '#d4a840'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(0, -22); g.lineTo(0, 14); g.moveTo(-20, -2); g.lineTo(20, -2); g.stroke();
+      g.fillStyle = '#d4a840'; poly(g, [[0, 30], [3, 14], [-3, 14]]); g.fill(); g.stroke();   // 창
+      eye(0, -2, 2.6, 'rgba(255,170,220,1)');
     }
   }));
 }

@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.21';
+const VERSION = '0.22';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -222,7 +222,7 @@ function loadImg(key) {
   const next = i => { if (i >= exts.length) return; const im = new Image(); im.onload = () => { IMG[key] = im; }; im.onerror = () => next(i + 1); im.src = `assets/${key}.${exts[i]}`; };
   next(0);
 }
-const ASSET_KEYS = ['falcon', 'turtle', 'hornet', 'phoenix'].map(k => 'ship-' + k).concat(['spider', 'whale', 'twins', 'knight', 'core'].map(k => 'boss-' + k), ['scout', 'weaver', 'diver', 'turret', 'splitter', 'tank', 'netter', 'treasure'].map(k => 'enemy-' + k), ['civ-ddrone', 'civ-liner', 'obst-tower', 'obst-spire', 'obst-bldg']);   // 그림 파일을 넣으면 여기에 이름을 적는다(예: 'ship-falcon', 'boss-spider'). 비어 있으면 찾지 않는다
+const ASSET_KEYS = ['falcon', 'turtle', 'hornet', 'phoenix'].map(k => 'ship-' + k).concat(['spider', 'whale', 'twins', 'knight', 'core'].map(k => 'boss-' + k), ['scout', 'weaver', 'diver', 'turret', 'splitter', 'tank', 'netter', 'treasure', 'm4', 'm5', 'm6', 'm7', 'm8'].map(k => 'enemy-' + k), ['civ-ddrone', 'civ-liner', 'obst-tower', 'obst-spire', 'obst-bldg']);   // 그림 파일을 넣으면 여기에 이름을 적는다(예: 'ship-falcon', 'boss-spider'). 비어 있으면 찾지 않는다
 ASSET_KEYS.forEach(loadImg);
 // 맵 배경 그림(540×1600, 위아래 거울로 이어 붙인 것). 섬 자리에 높은 구조물이 선다
 const BG_LANDS = { 0: [[130, 130], [432, 250], [122, 395], [432, 555], [148, 672]], 2: [[158, 129], [420, 263], [125, 397], [404, 520], [172, 665]],
@@ -634,6 +634,8 @@ function spawnWave() {
   if (s >= 2) opts.push(['dive', 2], ['turret', 2], ['net', 1.2]);
   if (s >= 3) opts.push(['split', 2]);
   if (s >= 4) opts.push(['tank', 1]);
+  const mf = Object.keys(D.ENEMIES).find(k => D.ENEMIES[k].map === run.theme);   // 맵 전용 적
+  if (mf && !run.arena) opts.push(['map', 2.6]);
   let roll = Math.random() * opts.reduce((a, o) => a + o[1], 0), kind = opts[0][0];
   for (const [k, w] of opts) { if ((roll -= w) <= 0) { kind = k; break; } }
   if (kind === 'net' && foes.some(e => e.type === 'netter')) kind = 'line';   // 그물기는 한 번에 하나만
@@ -645,6 +647,13 @@ function spawnWave() {
   else if (kind === 'split') { for (let i = 0; i < 2 + (extra >> 1); i++) addFoe('splitter', rnd(80, W - 80), -40 - i * 70); }
   else if (kind === 'tank') addFoe('tank', W / 2 + rnd(-120, 120), -50, { ty: rnd(150, 220) });
   else if (kind === 'net') addFoe('netter', rnd(90, W - 90), -40, { ty: rnd(150, 230), fireT: 2 });
+  else if (kind === 'map') {
+    if (mf === 'm4') for (let i = 0; i < 2 + (extra >> 1); i++) addFoe('m4', rnd(80, W - 80), -40 - i * 60, { ty: rnd(110, 240) });
+    else if (mf === 'm5') { const bx = rnd(120, W - 120); for (let i = 0; i < 3 + (extra >> 1); i++) addFoe('m5', bx, -30 - i * 70, { bx, ph: i * 0.9 }); }
+    else if (mf === 'm6') for (let i = 0; i < 2 + (extra >> 1); i++) { const L = i % 2 === 0; addFoe('m6', L ? -30 : W + 30, rnd(60, 200), { vx: L ? 230 : -230 }); }
+    else if (mf === 'm7') for (let i = 0; i < 3 + (extra >> 1); i++) addFoe('m7', rnd(70, W - 70), -30 - i * 80);
+    else if (mf === 'm8') for (let i = 0; i < 2; i++) addFoe('m8', 120 + i * 300 + rnd(-40, 40), -40, { mode: 'in', ty: rnd(130, 260) });
+  }
 }
 
 function foeAI(e, dt) {
@@ -684,6 +693,30 @@ function foeAI(e, dt) {
     case 'tank':
       if (e.t < 13) { if (e.y < e.ty) e.y += 45 * dt; if ((e.fireT -= dt) <= 0) { e.fireT = 2.3 / fr; ring(e.x, e.y, 10, e.t, 150, { color: '#ff8a5e' }); } }
       else e.y += 55 * dt;
+      break;
+    case 'm4':   // 굴뚝 로봇: 내려와 멈춰서 기름 덩이 3개를 아래로 떨군 뒤 다시 내려간다
+      if (e.y < e.ty) e.y += 120 * dt;
+      else if (!e.done) { if ((e.fireT -= dt) <= 0) { e.n = (e.n || 0) + 1; e.fireT = 0.35; eShot(e.x, e.y + 14, Math.PI / 2, 150, { color: '#3a2a1a', r: 10 }); if (e.n >= 3) { e.done = true; e.fireT = 2.2 / fr; } } }
+      else { if ((e.fireT -= dt) <= 0) { e.done = false; e.n = 0; e.ty += 120; } }
+      if (e.t > 12) e.y += 90 * dt;
+      break;
+    case 'm5':   // 서리 드론: 물결치며 얼음 탄(맞으면 잠깐 느려짐)
+      e.y += 95 * dt; e.x = e.bx + Math.sin(e.t * 1.8 + (e.ph || 0)) * 80;
+      if ((e.fireT -= dt) <= 0) { e.fireT = 2.4 / fr; eShot(e.x, e.y + 12, angTo(e), 200, { color: '#bff0ff', r: 8, ice: true }); }
+      break;
+    case 'm6':   // 용암 새: 옆에서 휘어 들어와 지나가며 불씨를 떨어뜨린다
+      e.x += e.vx * dt; e.y += (60 + Math.sin(e.t * 2.2) * 110) * dt; e.vx += (W / 2 - e.x) * 0.25 * dt;
+      if ((e.fireT -= dt) <= 0) { e.fireT = 0.45 / fr; eShot(e.x, e.y + 10, Math.PI / 2 + rnd(-0.2, 0.2), 110, { color: '#ff8a2a', r: 6 }); }
+      break;
+    case 'm7':   // 잎 딱정벌레: 숲에 숨어 천천히 내려오다 가까워지면(또는 맞으면) 드러나 부채꼴로 쏜다
+      e.y += (e.seen ? 60 : 75) * dt;
+      if (!e.seen && (Math.hypot(P.x - e.x, P.y - e.y) < 300 || e.hp < e.maxHp)) { e.seen = true; e.fireT = 0.5; say('!', e.x, e.y - 30, '#ffe066', 26, 0.6); }
+      if (e.seen && (e.fireT -= dt) <= 0) { e.fireT = 2.2 / fr; fan(e.x, e.y + 12, angTo(e), 5, 0.9, 190, { color: '#b8f5a0' }); }
+      break;
+    case 'm8':   // 구름 연 기사: 떠 있다가 붉은 선으로 겨눈 뒤 창을 들고 곧장 돌격
+      if (e.mode === 'in') { e.y += (e.ty - e.y) * 2 * dt; e.x += Math.sin(e.t * 1.4) * 40 * dt; if (e.t > 1.6) { e.mode = 'aim'; e.w = 0.9; e.ax = clamp(P.x, 40, W - 40); } }
+      else if (e.mode === 'aim') { e.x += (e.ax - e.x) * 4 * dt; if ((e.w -= dt) <= 0) { e.mode = 'go'; e.vy = 620 * run.d.bs; A.sfx('warning'); } }
+      else e.y += e.vy * dt;
       break;
     case 'treasure':   // 천천히 가로질러 지나간다. 놓치면 끝
       e.x += e.vx * dt; e.y = e.by + Math.sin(e.t * 1.5) * 18;
@@ -1511,7 +1544,7 @@ function update(dt) {
   if (run.hurtT > 0) run.hurtT -= dt;
   if (run.comboT > 0 && (run.comboT -= dt) <= 0) run.combo = 0;
   // 움직이기: 손가락이나 방향키가 가리키는 곳으로 기체 속도만큼 따라간다(그물에 걸리면 못 움직인다)
-  const ks = 420 * st.speed * run.m.speed * (run.hzSlow || 1);
+  const ks = 420 * st.speed * run.m.speed * (run.hzSlow || 1) * (P.iceT > 0 ? 0.55 : 1);
   if (!P.trap) {
     if (keys.ArrowLeft || keys.a) P.tx -= ks * dt;
     if (keys.ArrowRight || keys.d) P.tx += ks * dt;
@@ -1527,7 +1560,7 @@ function update(dt) {
     if (Math.hypot(P.x - boss.x, P.y - boss.y) < 130) hurtPlayer(run.d.dmg);
   }
   const PB = bounds(); P.tx = clamp(P.tx, PB[0], PB[1]); P.ty = clamp(P.ty, PB[2], PB[3]);
-  const maxMove = 900 * st.speed * run.m.speed * (run.hzSlow || 1) * dt, dx = P.tx - P.x, dy = P.ty - P.y, dl = Math.hypot(dx, dy);
+  const maxMove = 900 * st.speed * run.m.speed * (run.hzSlow || 1) * (P.iceT > 0 ? 0.55 : 1) * dt, dx = P.tx - P.x, dy = P.ty - P.y, dl = Math.hypot(dx, dy);
   if (dl > maxMove) { P.x += dx / dl * maxMove; P.y += dy / dl * maxMove; } else { P.x = P.tx; P.y = P.ty; }
   obstTick(dt);   // 높은 구조물에 막힌다
   P.bank += (clamp((P.x - P.lx) / Math.max(dt, 0.001) / 600, -1, 1) - P.bank) * Math.min(1, dt * 10);   // 옆으로 움직이면 기체가 기운다
@@ -1615,6 +1648,7 @@ function update(dt) {
   }
   if (boss && run.phase === 'boss') { if (boss.sneezeT > 0) boss.sneezeT -= dt; else bossAI(dt); }
   if (run.theme !== run.bookTh) { run.bookTh = run.theme; bookMark('maps', run.theme); }   // 도감: 날아 본 맵
+  if (P.iceT > 0) P.iceT -= dt;
   flakTick(dt);   // 재채기하는 동안은 쉰다
   hazardTick(dt);   // 돌풍·토네이도·민간 비행체
   for (const e of foes) { if (e.type !== 'boss') foeAI(e, dt * (e.mod === 'swift' ? 1.6 : 1)); if (e.flash > 0) e.flash -= dt; }
@@ -1667,7 +1701,7 @@ function update(dt) {
         if (P.ultKind === 'bulwark' || P.inv > 0 || P.trap) continue;
         if (run.m.barrier && P.barrierReady) { P.barrierReady = false; P.barrierT = 16; A.sfx('barrier'); ringFx(P.x, P.y, 40, '#7fd8ff'); continue; }
         catchInNet();
-      } else hurtPlayer(run.d.dmg);
+      } else { hurtPlayer(run.d.dmg); if (b.ice) { P.iceT = 1.6; say('❄️ 얼었다! 잠깐 느려져요', P.x, P.y - 60, '#bff0ff', 18, 0.9); } }
     }
   }
   ebul = ebul.filter(b => !b.dead);
@@ -2463,7 +2497,11 @@ function draw() {
   drawFlak();
   drawDrops();
   drawGates();
-  for (const e of foes) if (e.type !== 'boss') drawFoe(e);
+  for (const e of foes) if (e.type !== 'boss') {
+    if (e.type === 'm8' && e.mode === 'aim') { ctx.strokeStyle = `rgba(255,80,80,${0.4 + 0.4 * Math.sin(T * 20)})`; ctx.lineWidth = 3; ctx.setLineDash([14, 10]); ctx.beginPath(); ctx.moveTo(e.x, e.y + 20); ctx.lineTo(e.x, H); ctx.stroke(); ctx.setLineDash([]); }   // 연 기사 돌격 경고
+    if (e.type === 'm7' && !e.seen) ctx.globalAlpha = 0.2;   // 숲에 숨은 딱정벌레
+    drawFoe(e); ctx.globalAlpha = 1;
+  }
   drawBoss();
   drawShots();
   drawHazards(false);
@@ -4031,7 +4069,7 @@ function guestTick(dt) {
   if (run.banner) { run.banner.t += dt; if (run.banner.t > run.banner.life) run.banner = null; }
   if (run.hurtT > 0) run.hurtT -= dt;
   if (!(P.down > 0)) {
-    const ks = 420 * st.speed * run.m.speed * (run.hzSlow || 1);
+    const ks = 420 * st.speed * run.m.speed * (run.hzSlow || 1) * (P.iceT > 0 ? 0.55 : 1);
     if (keys.ArrowLeft || keys.a) P.tx -= ks * dt;
     if (keys.ArrowRight || keys.d) P.tx += ks * dt;
     if (keys.ArrowUp || keys.w) P.ty -= ks * dt;

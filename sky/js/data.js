@@ -65,6 +65,11 @@ const ENEMIES = {
   splitter: { name: '분열기', hp: 32, r: 20, xp: 2, score: 120, from: 3 },
   tank:     { name: '장갑기', hp: 140, r: 30, xp: 6, score: 400, from: 4, elite: true },
   netter:   { name: '그물기', hp: 36, r: 21, xp: 3, score: 180, from: 2 },   // 그물을 쏜다. 걸리면 연타해서 빠져나온다
+  m4:       { name: '굴뚝 로봇', hp: 30, r: 20, xp: 2, score: 140, from: 2, map: 4 },   // 맵 전용 적(map: 맵 번호)
+  m5:       { name: '서리 드론', hp: 22, r: 19, xp: 2, score: 130, from: 2, map: 5 },   // 얼음 탄: 맞으면 잠깐 느려짐
+  m6:       { name: '용암 새', hp: 26, r: 20, xp: 2, score: 140, from: 2, map: 6 },     // 휘어 날며 불씨를 떨어뜨림
+  m7:       { name: '잎 딱정벌레', hp: 34, r: 20, xp: 3, score: 160, from: 2, map: 7 }, // 숨어 있다가 가까우면 드러남
+  m8:       { name: '구름 연 기사', hp: 28, r: 20, xp: 2, score: 150, from: 2, map: 8 }, // 경고선 뒤 창 돌격
   treasure: { name: '황금 수송선', hp: 160, r: 34, xp: 5, score: 1500, from: 1 },   // 가끔 지나간다. 놓치기 전에 부수면 고철이 쏟아진다
 };
 
