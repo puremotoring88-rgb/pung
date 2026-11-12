@@ -261,6 +261,9 @@
     border-radius: 50%; border: 3px solid #5b6b85; background: radial-gradient(circle, rgba(10, 16, 28, .9) 58%, transparent 60%), conic-gradient(#ffd166 calc(var(--p, 0) * 1%), rgba(40, 52, 74, .9) 0);
     font-size: calc(var(--u) * 3); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.15; touch-action: none; }
   #ultBtn b { font-size: calc(var(--u) * 4); } #ultBtn small { opacity: .8; }
+  #throwBtn { pointer-events: auto; position: absolute; right: calc(var(--u) * 7); bottom: calc(var(--u) * 30 + env(safe-area-inset-bottom)); width: calc(var(--u) * 15); height: calc(var(--u) * 15); border-radius: 50%; border: 3px solid #ffd166; background: radial-gradient(circle, rgba(60,40,10,.92) 58%, transparent 60%), conic-gradient(#ffd166 calc(var(--p, 100) * 1%), rgba(40,52,74,.9) 0); font-size: calc(var(--u) * 6); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; touch-action: none; color: #fff; }
+  #throwBtn small { font-size: calc(var(--u) * 2.4); font-weight: 800; } #throwBtn.cd { opacity: .55; border-color: #5b6b85; }
+  #stage.lefty #throwBtn { right: auto; left: calc(var(--u) * 7); }
   #ultBtn.ready { border-color: #fff3b0; animation: pulse .7s infinite alternate; }
   #ultBtn.ready b { font-size: calc(var(--u) * 3.2); color: #ffe066; }
   @keyframes pulse { from { transform: scale(1); box-shadow: 0 0 0 rgba(255, 209, 102, 0); } to { transform: scale(1.07); box-shadow: 0 0 calc(var(--u) * 6) rgba(255, 209, 102, .85); } }
@@ -324,6 +327,7 @@
   <div id="hud" class="hidden">
     <button id="pauseBtn">⏸</button>
     <button id="ultBtn">궁극기</button>
+    <button id="throwBtn" class="hidden">🌀<small>던지기</small></button>
     <button id="emoBtn" class="hidden">💬</button>
     <div id="emoBar" class="hidden"></div>
   </div>

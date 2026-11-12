@@ -22,7 +22,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0 } });
-const VERSION = '0.8';
+const VERSION = '0.9';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -129,7 +129,7 @@ const MODES = [
   { id: 'stage', icon: '🗺️', name: '스테이지', go: '출격! ▶', desc: '한 판 약 3분. 보스를 잡으면 다음 스테이지가 열리고 점점 어려워집니다. 스테이지마다 별 3개.' },
   { id: 'endless', icon: '♾️', name: '무한 생존', go: '버티기 시작 ▶', desc: '끝없이 몰려오는 적을 버팁니다. 30초마다 웨이브가 오르고 90초마다 보스가 나옵니다. 얼마나 오래 버티나!' },
   { id: 'rush', icon: '👑', name: '보스 러시', go: '보스 러시 ▶', desc: '보스 다섯을 쉬지 않고 연달아 잡습니다. 다 잡으면 걸린 시간이 기록됩니다. 보스마다 부품 상자!' },
-  { id: 'auto', icon: '⭐', name: '표창 공방', go: '공방 열기 ▶', desc: '넓은 들판에서 로봇을 직접 몰아 사방에서 몰려오는 적을 피하며 싸웁니다. 가장 좋은 표창 다섯이 둘레를 돌며 적에게 날아가고, 싸우는 동안 표창이 생겨 쌓입니다. 40초를 버티면 대장 등장! 쓰러뜨리면 정비 시간에 쌓인 표창을 몰아서 합쳐요(같은 단계 둘 → 한 단계 위). 적을 많이 쓰러뜨리면 표창 폭풍. 꺼 두어도 비운 시간만큼 금화를 받아요(최대 8시간, 절반 속도). 구역 10을 넘기면 환생해서 영원히 강해집니다.' },
+  { id: 'auto', icon: '⭐', name: '표창 공방', go: '공방 열기 ▶', desc: '넓은 들판에서 로봇을 직접 몰아 싸웁니다. 로봇은 쏘지 않아요! 가장 좋은 표창들이 둘레를 돌며 닿는 적을 베니, 로봇을 몰아 적에게 들이대세요. 🌀 던지기(X키)로 표창을 쭉 퍼뜨렸다 거둘 수 있어요. 적을 쓰러뜨릴수록 표창이 생겨 쌓입니다. 40초를 버티면 대장 등장! 쓰러뜨리면 정비 시간에 쌓인 표창을 몰아서 합쳐요(같은 단계 둘 → 한 단계 위). 적을 많이 쓰러뜨리면 표창 폭풍. 꺼 두어도 비운 시간만큼 금화를 받아요(최대 8시간, 절반 속도). 구역 10을 넘기면 환생해서 영원히 강해집니다.' },
 ];
 MODES.push({ id: 'dojo', icon: '🎵', name: '리듬 도장', go: '리듬 결투 ▶', desc: '비행은 쉬고 리듬 게임만! 8가지 장르 곡 중에 골라, 4줄로 떨어지는 음표를 박자에 맞춰 누릅니다. B 랭크 이상이면 다음 단계가 열립니다.' });
 MODES.push({ id: 'coop', icon: '🤝', name: '친구와 함께', go: '함께 출격 ▶', desc: '친구 1~2명과 같은 하늘에서 함께 싸웁니다. 한 명이 방을 만들고 코드나 초대 링크를 보내면 됩니다. 휴대폰과 PC가 섞여도 됩니다.' });
@@ -702,6 +702,65 @@ function onTap() {
 }
 
 // ---------- 맞히기·맞기 ----------
+// ---------- 표창 공방: 표창이 로봇 둘레를 돌며 닿는 적을 벤다. 로봇을 몰아 적에게 들이대야 부서진다 ----------
+// 🌀 던지기(버튼·X키): 표창이 바깥으로 쭉 퍼졌다가 돌아오며 길에 있는 적을 모두 벤다.
+// 카드 강화도 표창에 붙는다: 화력 = 표창 피해, 연사 = 도는 속도, 탄 갈래 = 기본 날 하나 더.
+const THROW_CD = 3.2;
+function bladeSet() {   // 장착한 표창(최대 5) + 모자라면 기본 날로 3개까지, 탄 갈래 카드마다 기본 날 하나 더
+  const eq = Forge.equipped().slice(), need = Math.max(3, eq.length) + (run.m.multi || 0);
+  while (eq.length < need) eq.push(1);
+  return eq.slice(0, 8);
+}
+function bladeTick(dt, fighting) {
+  const eq = bladeSet(), n = eq.length;
+  if (!run.blades || run.blades.length !== n || run.blades.some((b, i) => b.lv !== eq[i])) run.blades = eq.map((lv, i) => ({ lv, x: P.x, y: P.y, cool: new Map(), tr: [] }));
+  const fev = Forge.fever, spin = 3.4 * (run.m.rate || 1) * (fev ? 1.7 : 1) * (itemOn('rapid') ? 1.4 : 1);
+  run.bAng = (run.bAng || 0) + spin * dt;
+  const th = run.throwT || 0; if (th > 0) run.throwT = Math.max(0, th - dt);
+  if (run.throwCd > 0) run.throwCd -= dt * (fev ? 2 : 1);
+  const out = th > 0 ? Math.sin((1 - th / 0.7) * Math.PI) : 0;   // 던지면 0 → 1 → 0
+  const R0 = 62 + n * 5 + (fev ? 14 : 0), R = R0 + out * 230;
+  const dmgK = (run.m.dmg || 1) * (out > 0.2 ? 1.3 : 1);
+  run.blades.forEach((b, i) => {
+    const a = run.bAng + i * TAU / n;
+    b.x = P.x + Math.cos(a) * R; b.y = P.y + Math.sin(a) * R;
+    b.tr.push(b.x, b.y); if (b.tr.length > 12) b.tr.splice(0, 2);
+    if (!fighting || P.down > 0) return;
+    const size = Math.min(23, 11 + b.lv * 0.8);
+    for (const e of foes) {
+      if (e.inv || e.dead || e.gone || e.harmless) continue;
+      if (Math.hypot(e.x - b.x, e.y - b.y) > (e.r || 20) + size) continue;
+      const t0 = b.cool.get(e) || 0; if (run.t - t0 < 0.28) continue;   // 같은 적은 0.28초에 한 번
+      b.cool.set(e, run.t);
+      hitFoe(e, Forge.starDmg(b.lv) * dmgK);
+      spark(b.x, b.y, Q.low ? 3 : 6, Forge.tierOf(b.lv), 240, 0.3, 3);
+      if (!e.boss && !e.dead) { const k = Math.hypot(e.x - P.x, e.y - P.y) || 1; e.x += (e.x - P.x) / k * 10; e.y += (e.y - P.y) / k * 10; }   // 살짝 밀려난다
+    }
+    if (b.cool.size > 40) b.cool.clear();
+  });
+}
+function throwBlades() {
+  if (!run || !run.arena || run.phase === 'rest' || run.throwCd > 0 || state !== 'play') return;
+  run.throwT = 0.7; run.throwCd = THROW_CD; A.sfx('ult'); ringFx(P.x, P.y, 80, '#ffd166');
+}
+function drawBlades() {
+  if (!run.blades) return;
+  const thrown = (run.throwT || 0) > 0, fev = Forge.fever;
+  if (thrown || fev) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+    for (const b of run.blades) {
+      ctx.strokeStyle = Forge.tierOf(b.lv);
+      for (let k = 2; k < b.tr.length; k += 2) { ctx.globalAlpha = k / b.tr.length * 0.55; ctx.lineWidth = 2 + k / b.tr.length * 8; ctx.beginPath(); ctx.moveTo(b.tr[k - 2], b.tr[k - 1]); ctx.lineTo(b.tr[k], b.tr[k + 1]); ctx.stroke(); }
+    }
+    ctx.restore();
+  } else {   // 도는 길을 옅게
+    const b0 = run.blades[0]; if (b0) { ctx.strokeStyle = 'rgba(255,230,150,.12)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(P.x, P.y, Math.hypot(b0.x - P.x, b0.y - P.y), 0, TAU); ctx.stroke(); }
+  }
+  for (const b of run.blades) {
+    const s = Math.min(46, 22 + b.lv * 1.6) * (thrown ? 1.25 : 1);
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(T * 18); ctx.drawImage(Forge.sprite(b.lv), -s / 2, -s / 2, s, s); ctx.restore();
+  }
+}
 function hitFoe(e, dmg, own) {
   if (e.inv || e.dead || e.gone) return;
   if (e.sh > 0) {
@@ -741,7 +800,7 @@ function killFoe(e) {
     drops.push({ kind: 'heart', x: e.x + 20, y: e.y, vy: 60, v: 20 });
     say('황금 수송선 격파! 고철이 쏟아진다', W / 2, H * 0.3, '#ffd166', 26, 2); flash = 0.4;
   }
-  if (run.mode === 'auto') { const gv = Forge.addGold((e.elite ? 4 : 1) * Math.pow(1.17, run.stage - 1)); if (!Q.low && Math.random() < 0.5) say('💰' + Forge.fmt(gv), e.x, e.y - 10, '#ffd166', 13, 0.6); Forge.tap(0.025); }
+  if (run.mode === 'auto') { const gv = Forge.addGold((e.elite ? 4 : 1) * Math.pow(1.17, run.stage - 1)); if (!Q.low && Math.random() < 0.5) say('💰' + Forge.fmt(gv), e.x, e.y - 10, '#ffd166', 13, 0.6); Forge.tap(0.025); Forge.kill(); }
   if (e.xp) drops.push({ kind: 'xp', x: e.x, y: e.y, vy: 60, v: e.xp * dm });
   if (dm > 1 && Math.random() < 0.5) drops.push({ kind: 'scrap', x: e.x, y: e.y, vy: 70, v: 1 });
   if (Math.random() < (run.mode === 'auto' ? 0.2 : 0.3) || e.elite) drops.push({ kind: 'scrap', x: e.x + rnd(-10, 10), y: e.y, vy: 70, v: e.elite ? 6 : 1 });
@@ -942,6 +1001,7 @@ function update(dt) {
     if (keys.ArrowUp || keys.w) P.ty -= ks * dt;
     if (keys.ArrowDown || keys.s) P.ty += ks * dt;
   } else { P.tx = P.x; P.ty = P.y; }
+  padSteer(dt);
   if (boss && boss.inhale > 0 && run.phase === 'boss' && !P.trap) {   // 고래가 숨을 들이쉬면 입 앞까지 끌려간다
     const pull = 170 * dt, side = Math.sign(boss.x - P.x) * 60 * dt, stop = boss.y + 125;
     const ny = Math.max(stop, P.ty - pull), moved = P.ty - ny;
@@ -981,22 +1041,9 @@ function update(dt) {
   const fighting = run.phase !== 'dead' && run.phase !== 'clear';
   if (run.mode === 'auto') {   // 표창 공방: 표창이 생기고, 장착한 표창이 적에게 날아간다
     Forge.tick(dt, run.phase === 'waves');
-    const eq = Forge.equipped();
-    run.starT = (run.starT || 0) - dt * (Forge.fever ? 3 : 1);
-    if (fighting && run.starT <= 0 && eq.length && foes.length) {
-      run.starIdx = ((run.starIdx || 0) + 1) % eq.length;
-      run.starT = (run.arena ? 0.6 : 0.9) / eq.length / (itemOn('rapid') ? 2 : 1);
-      const lv = eq[run.starIdx], a = P.ga + run.starIdx * TAU / eq.length, sx = P.x + Math.cos(a) * 50, sy = P.y + Math.sin(a) * 50;
-      let best = null, bd = 1e9;
-      for (const e of foes) { if (e.inv || e.dead || e.harmless) continue; const dd = Math.hypot(e.x - sx, e.y - sy); if (dd < bd) { bd = dd; best = e; } }
-      if (run.arena && bd > 650) best = null;   // 너무 먼 적에게는 던지지 않는다
-      if (best || !run.arena) {
-        const ang = best ? Math.atan2(best.y - sy, best.x - sx) : -Math.PI / 2;
-        addShot(sx, sy, Math.cos(ang) * 640, Math.sin(ang) * 640, Forge.starDmg(lv), { star: lv, r: 10, homing: true, color: Forge.tierOf(lv), pierce: lv >= 10 ? 1 : 0 });
-      }
-    }
+    bladeTick(dt, fighting);
   }
-  if (fighting && !(P.down > 0)) {
+  if (fighting && !(P.down > 0) && !run.arena) {   // 표창 공방에서는 로봇이 쏘지 않는다(표창이 무기)
     P.fireT -= dt;
     while (P.fireT <= 0) { fire(); P.fireT += 1 / (st.rate * run.m.rate * (P.trap ? 0.5 : 1) * (run.evo && st.Wp.id === 'vulcan' ? 2 : 1) * (itemOn('rapid') ? 2 : 1)); }
     if ((P.droneT -= dt) <= 0) {
@@ -1575,10 +1622,7 @@ function drawPlayer() {
   if (P.twinT > 0) { ctx.globalAlpha = 0.5; for (const s of [-1, 1]) drawShipAt(ctx, st.F.id, P.x + s * 46, P.y + 6, 0.6, P.bank, T, false, myLook()); ctx.globalAlpha = 1; }   // 분신
   if (!blink) drawShipAt(ctx, st.F.id, P.x + shakeX, P.y, 1, P.trap ? Math.sin(T * 25) * 0.4 : P.bank, T, hasGround(), myLook());
   if (P.orb) { ctx.strokeStyle = `rgba(127,216,255,${0.5 + Math.sin(T * 6) * 0.3})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(P.x, P.y, 40, 0, TAU); ctx.stroke(); }
-  if (run.mode === 'auto') {   // 장착한 표창이 둘레를 돈다
-    const eq = Forge.equipped();
-    eq.forEach((lv, i) => { const a = P.ga + i * TAU / eq.length; ctx.save(); ctx.translate(P.x + Math.cos(a) * 50, P.y + Math.sin(a) * 50); ctx.rotate(T * 8); ctx.drawImage(Forge.sprite(lv), -11, -11, 22, 22); ctx.restore(); });
-  }
+  if (run.mode === 'auto') drawBlades();   // 표창이 둘레를 돌다가 적에게 날아간다
   if (P.trap) drawNet(P.x, P.y, 46 - P.trap.g * 16, T * 0.5, 0.95 - P.trap.g * 0.4);
   if (P.ultKind === 'bulwark') {
     ctx.globalCompositeOperation = 'lighter';
@@ -1786,6 +1830,9 @@ function updateUltBtn() {
   b.classList.toggle('ready', p >= 100);
   const html = p >= 100 ? `<b>${st.F.ult.name}</b><small>누르기!</small>` : `<b>${p}%</b><small>궁극기</small>`;
   if (b.dataset.h !== html) { b.dataset.h = html; b.innerHTML = html; }
+  const tb = $('throwBtn'), showT = !!(run.arena && run.phase !== 'rest');   // 표창 공방: 🌀 던지기
+  if (tb.classList.contains('hidden') === showT) tb.classList.toggle('hidden', !showT);
+  if (showT) { const cd = Math.max(0, run.throwCd || 0); tb.style.setProperty('--p', Math.round(100 - cd / THROW_CD * 100)); tb.classList.toggle('cd', cd > 0); }
 }
 
 function draw() {
@@ -2036,6 +2083,7 @@ cv.addEventListener('pointerdown', e => {
   drag = { px: p.x, py: p.y, ox: P.tx, oy: P.ty, fx: p.x, fy: p.y, touch: e.pointerType !== 'mouse' };
   $('emoBar').classList.add('hidden');
   if (S.touch === 'above' && drag.touch) { P.tx = p.x + cam.x; P.ty = p.y - ABOVE + cam.y; }
+  if (padMode() && drag.touch) { if (p.y < PAD_Y) { drag = null; return; } drag.pad = true; }   // 조종판: 판 안을 누른 자리가 중심
   cv.setPointerCapture(e.pointerId);
 });
 cv.addEventListener('pointermove', e => {
@@ -2045,13 +2093,37 @@ cv.addEventListener('pointermove', e => {
   if (!drag || state !== 'play' || P.trap) return;
   const p = toWorld(e); drag.fx = p.x; drag.fy = p.y;
   if (S.touch === 'above' && drag.touch) { P.tx = p.x + cam.x; P.ty = p.y - ABOVE + cam.y; return; }   // 기체가 손가락보다 위에 뜬다
+  if (drag.pad) return;   // 조종판은 update에서 기울기만큼 움직인다
   const k = S.sens || 1.3;   // 민감도: 손가락을 조금만 움직여도 멀리 간다(손이 화면을 덜 가린다)
   const PB = bounds(); P.tx = clamp(drag.ox + (p.x - drag.px) * k, PB[0], PB[1]);
   P.ty = clamp(drag.oy + (p.y - drag.py) * k, PB[2], PB[3]);
 });
 const ABOVE = 150;
+// 🕹️ 조종판: 화면 아래 판 안에서 누른 자리를 중심으로, 민 방향·거리만큼 그쪽으로 날아간다. 손을 떼면 멈춘다.
+const PAD_Y = H * 0.68, PAD_R = 70;
+const padMode = () => touchDevice && (S.touch || 'pad') === 'pad';
+function padSteer(dt) {   // update에서 부른다: 민 거리만큼의 속도로
+  if (!drag || !drag.pad || P.trap) return;
+  let jx = drag.fx - drag.px, jy = drag.fy - drag.py; const m = Math.hypot(jx, jy);
+  if (m > PAD_R) { drag.px = drag.fx - jx / m * PAD_R; drag.py = drag.fy - jy / m * PAD_R; jx = jx / m * PAD_R; jy = jy / m * PAD_R; }   // 너무 멀리 밀면 중심이 따라온다
+  const v = (m < 8 ? 0 : 900 * st.speed * run.m.speed * dt) / PAD_R; P.tx = P.x + jx * v; P.ty = P.y + jy * v;
+}
+function drawPad() {
+  if (!padMode() || state !== 'play' || run.phase === 'dead' || (run.arena && run.phase === 'rest')) return;
+  const ox = cam.x, oy = cam.y; ctx.save();
+  ctx.fillStyle = 'rgba(127,216,255,.05)'; ctx.strokeStyle = 'rgba(127,216,255,.16)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(ox + 14, oy + PAD_Y, W - 28, H - PAD_Y - 14, 26); ctx.fill(); ctx.stroke();
+  if (drag && drag.pad) {
+    ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.strokeStyle = 'rgba(255,255,255,.35)';
+    ctx.beginPath(); ctx.arc(ox + drag.px, oy + drag.py, PAD_R, 0, TAU); ctx.fill(); ctx.stroke();
+    let jx = drag.fx - drag.px, jy = drag.fy - drag.py; const m = Math.hypot(jx, jy); if (m > PAD_R) { jx = jx / m * PAD_R; jy = jy / m * PAD_R; }
+    ctx.fillStyle = 'rgba(127,216,255,.55)'; ctx.beginPath(); ctx.arc(ox + drag.px + jx, oy + drag.py + jy, 30, 0, TAU); ctx.fill();
+  } else { ctx.fillStyle = 'rgba(200,230,255,.35)'; ctx.font = '700 16px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🕹️ 여기를 누르고 밀어서 조종', ox + W / 2, oy + (PAD_Y + H) / 2 + 6); }
+  ctx.restore();
+}
 function drawFinger() {   // 손가락 자리를 옅게 보여 준다(기체가 어디 있는지 헷갈리지 않게)
-  if (!drag || !drag.touch || state !== 'play' || run.phase === 'dead' || P.down > 0) return;
+  drawPad();
+  if (!drag || !drag.touch || drag.pad || state !== 'play' || run.phase === 'dead' || P.down > 0) return;
   ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(drag.fx + cam.x, drag.fy + cam.y, 30, 0, TAU); ctx.stroke();
   if (S.touch === 'above') { ctx.setLineDash([4, 8]); ctx.beginPath(); ctx.moveTo(drag.fx + cam.x, drag.fy - 30 + cam.y); ctx.lineTo(P.x, P.y + 30); ctx.stroke(); ctx.setLineDash([]); }
@@ -2064,14 +2136,14 @@ function renderCtl(el) {
     for (const [v, label] of opts) { const b = document.createElement('button'); b.textContent = label; if (v === cur) b.className = 'on'; b.addEventListener('click', () => { set(v); save(); A.sfx('click'); renderHangar(); }); r.append(b); }
     el.append(r);
   };
-  row('움직이는 방식', [['rel', '👆 끌어서(기본)'], ['above', '☝️ 기체를 손가락 위로']], S.touch || 'rel', v => { S.touch = v; });
-  if ((S.touch || 'rel') === 'rel') row('민감도: 빠를수록 손가락을 조금만 움직여도 돼요', SENS.map(([v, l]) => [v, l]), S.sens || 1.3, v => { S.sens = v; });
+  row('움직이는 방식', [['pad', '🕹️ 조종판(기본)'], ['rel', '👆 끌어서'], ['above', '☝️ 기체를 손가락 위로']], S.touch || 'pad', v => { S.touch = v; });
+  if (S.touch === 'rel') row('민감도: 빠를수록 손가락을 조금만 움직여도 돼요', SENS.map(([v, l]) => [v, l]), S.sens || 1.3, v => { S.sens = v; });
   const n = document.createElement('div'); n.className = 'acNote';
-  n.textContent = (S.touch === 'above') ? '기체가 손가락보다 한 뼘 위에 떠요. 손에 가리지 않지만 화면 맨 아래로는 못 내려가요.' : '팁: 화면 아래쪽 빈 곳에서 끌면 손이 기체를 가리지 않아요. 손가락을 기체 위에 둘 필요가 없어요.';
+  n.textContent = (S.touch || 'pad') === 'pad' ? '화면 아래 조종판 안을 누르고 가고 싶은 쪽으로 밀어요. 많이 밀수록 빨라지고, 손을 떼면 멈춰요.' : (S.touch === 'above') ? '기체가 손가락보다 한 뼘 위에 떠요. 손에 가리지 않지만 화면 맨 아래로는 못 내려가요.' : '팁: 화면 아래쪽 빈 곳에서 끌면 손이 기체를 가리지 않아요. 손가락을 기체 위에 둘 필요가 없어요.';
   el.append(n);
 }
 const duelPtr = {};
-const endDrag = e => { drag = null; if (e && duelPtr[e.pointerId] !== undefined) { if (state === 'duel') Duel.release(duelPtr[e.pointerId]); delete duelPtr[e.pointerId]; } };
+const endDrag = e => { if (drag && drag.pad && P) { P.tx = P.x; P.ty = P.y; } drag = null; if (e && duelPtr[e.pointerId] !== undefined) { if (state === 'duel') Duel.release(duelPtr[e.pointerId]); delete duelPtr[e.pointerId]; } };
 window.addEventListener('pointerup', endDrag); window.addEventListener('pointercancel', endDrag);
 cv.addEventListener('pointerup', endDrag);
 cv.addEventListener('pointercancel', endDrag);
@@ -2090,6 +2162,7 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     if (state === 'play') { if (P.trap) tapTrap(); else if (run.rush) rushTap(); else useUlt(); }
   }
+  if ((e.key === 'x' || e.key === 'X') && state === 'play' && run && run.arena) throwBlades();
   if (e.key === 'p' || e.key === 'Escape') { if (state === 'play') pauseGame(); else if (state === 'pause') resumeGame(); }
   if (state === 'cards' && ['1', '2', '3'].includes(e.key)) { const ids = $('cards').dataset.ids.split(','); if (ids[+e.key - 1]) takeCard(ids[+e.key - 1]); }
   if (state === 'hangar' && e.key === 'Enter' && document.activeElement.tagName !== 'INPUT' && $('gate').classList.contains('hidden')) startRun(hangarStage, selMode);
@@ -2127,6 +2200,7 @@ function goFullscreen() {
 
 $('emoBtn').addEventListener('pointerdown', e => { e.stopPropagation(); $('emoBar').classList.toggle('hidden'); });
 $('ultBtn').addEventListener('pointerdown', e => { e.stopPropagation(); if (P && P.trap) tapTrap(); else if (run && run.rush) rushTap(); else useUlt(); });
+$('throwBtn').addEventListener('pointerdown', e => { e.stopPropagation(); throwBlades(); });
 $('pauseBtn').addEventListener('click', pauseGame);
 $('resume').addEventListener('click', resumeGame);
 $('quit').addEventListener('click', () => { save(); $('pause').classList.add('hidden'); if (net && net.mode === 'guest') { leaveRoom(); showHangar(); return; } if (run && run.mode !== 'stage') endRun(false); else showHangar(); });
@@ -2458,6 +2532,7 @@ function arenaClear(e) {   // 대장을 쓰러뜨렸다
   run.banner = { kind: 'stage', title: `ZONE ${run.stage} 정리!`, sub: '정비 시간으로', t: 0, life: 2 }; A.sfx('clear'); flash = 0.4;
 }
 function enterRest(win) {   // 정비 시간: 싸움을 멈추고 표창을 몰아서 합친다
+  if (run.blades) run.blades.forEach(b => { b.st = 'orbit'; b.t = null; b.tr.length = 0; });   // 날던 표창은 곁으로
   for (const d of drops) if (d.kind === 'scrap') gainScrap(d.v);
   clearField(); drops = []; shots = []; texts = [];
   run.phase = 'rest'; run.keeper = null; run.combo = 0;

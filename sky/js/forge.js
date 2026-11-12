@@ -6,7 +6,7 @@ const TAU = Math.PI * 2;
 const TIER = ['#9aa6b4', '#c87533', '#e3e8ef', '#ffd166', '#6ee3a8', '#4cc9ff', '#ff5d8f', '#b98bff', '#ff8a3c', '#ffffff'];
 const TIER_NAME = ['쇠', '구리', '은', '금', '비취', '청옥', '홍옥', '자수정', '태양', '별빛'];
 const UPS = [
-  { id: 'spd', icon: '⏱', name: '제작 속도', max: 10, cost: l => Math.round(40 * Math.pow(2, l)), desc: l => `표창이 생기는 간격 ${(6 / (1 + 0.18 * l)).toFixed(1)}초` },
+  { id: 'spd', icon: '⚔️', name: '처치 제작', max: 10, cost: l => Math.round(40 * Math.pow(2, l)), desc: l => `적을 쓰러뜨릴 때마다 제작 게이지 +${12 + 5 * l}% (가만히 있어도 8초마다 조금)` },
   { id: 'gen', icon: '🔨', name: '제작 단계', max: 8, cost: l => Math.round(180 * Math.pow(3, l)), desc: l => `새 표창이 Lv ${1 + l}로 나옴` },
   { id: 'gold', icon: '💰', name: '금화 수집', max: 15, cost: l => Math.round(70 * Math.pow(1.8, l)), desc: l => `얻는 금화 +${20 * l}%` },
   { id: 'slots', icon: '🧰', name: '보관 칸', max: 4, cost: l => Math.round(300 * Math.pow(4, l)), desc: l => `칸 ${8 + l}개` },
@@ -119,7 +119,7 @@ function up(e) {
 }
 
 function tick(dt, running) {
-  const iv = 6 / (1 + 0.18 * F().up.spd);
+  const iv = 8;   // 가만히 있으면 8초에 하나, 처치하면 더 빨리(kill)
   if (running) {
     genT += dt;
     if (genT >= iv) { genT = 0; made++; if (place(1 + F().up.gen)) cb.sfx('xp'); else F().pend = Math.min(30, (F().pend || 0) + 1); }   // 칸이 차면 대기 바구니로
@@ -134,7 +134,8 @@ function tick(dt, running) {
   el.querySelector('#fBuy').disabled = F().gold < buyCost();
 }
 // 화면을 톡톡 두드리면 열기가 차고, 다 차면 5초 동안 표창 폭풍(던지기 3배)
-function tap(v = 0.05) { if (feverT > 0) return; fever += v; if (fever >= 1) { fever = 0; feverT = 5; cb.sfx('rush'); cb.toast('표창 폭풍! 5초 동안 3배로 던진다'); } }
+function kill() { genT += 8 * (0.12 + 0.05 * F().up.spd); }   // 처치 제작: 잘 싸울수록 표창이 많이 생긴다
+function tap(v = 0.05) { if (feverT > 0) return; fever += v; if (fever >= 1) { fever = 0; feverT = 5; cb.sfx('rush'); cb.toast('표창 폭풍! 5초 동안 표창이 더 빠르게 난다'); } }
 function addGold(n) { const v = n * goldMult(); F().gold += v; F().earned += v; return v; }
 function equipped() { return F().grid.slice(0, slots()).filter(Boolean).sort((a, b) => b - a).slice(0, 5); }
 
@@ -174,5 +175,5 @@ function fillPending() { while ((F().pend || 0) > 0 && place(1 + F().up.gen)) F(
 function takeMade() { const m = made; made = 0; return m; }
 function show(on) { el.classList.toggle('hidden', !on); if (on) { fillPending(); render(); } }
 
-return { init, tick, tap, addGold, fillPending, takeMade, equipped, starDmg, sprite, tierOf, render, show, fmt, get fever() { return feverT > 0; }, get gold() { return F().gold; } };
+return { init, tick, tap, kill, addGold, fillPending, takeMade, equipped, starDmg, sprite, tierOf, render, show, fmt, get fever() { return feverT > 0; }, get gold() { return F().gold; } };
 })();
