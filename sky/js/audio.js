@@ -143,7 +143,7 @@ function duel(chart, bpm, countIn, song) {
 }
 // 박자 시계: 리듬 구간의 음표를 음악 박자에 맞추려고 쓴다(소리가 꺼져 있으면 보통 시계로 대신한다)
 function clock() {
-  if (ac && ac.state === 'running' && mood) return { t: ac.currentTime, bpm: MOODS[mood].bpm, t0: startT };
+  if (ac && ac.state === 'running' && mood) return { t: ac.currentTime, bpm: MOODS[mood].bpm, t0: startT, lat: Math.min(0.3, (ac.outputLatency || 0) + (ac.baseLatency || 0)) };   // lat: 예약한 소리가 실제로 귀에 들리기까지 늦는 시간
   return { t: performance.now() / 1000, bpm: 128, t0: 0 };
 }
 function tick() {

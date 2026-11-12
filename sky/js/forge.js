@@ -52,6 +52,7 @@ function init(o) {
   el.querySelector('#fBuy').addEventListener('click', buy);
   el.querySelector('#fUpBtn').addEventListener('click', () => { el.querySelector('#fUps').classList.toggle('hidden'); renderUps(); cb.sfx('click'); });
   el.querySelector('#fReborn').addEventListener('click', reborn);
+  el.querySelector('#fAll').addEventListener('click', mergeAll);
 }
 
 function place(lv) {   // 빈 칸에 표창 넣기
@@ -104,6 +105,19 @@ function move(e) {
   if (!ghost) return;
   const r = document.getElementById('stage').getBoundingClientRect();
   ghost.style.left = (e.clientX - r.left - ghost.offsetWidth / 2) + 'px'; ghost.style.top = (e.clientY - r.top - ghost.offsetHeight / 2) + 'px';
+}
+function mergeAll() {   // ⚡ 한번에 합치기: 같은 단계 둘을 낮은 단계부터 계속 합치고, 빈 칸은 대기 바구니에서 채운다
+  const g = F().grid; let n = 0, top = 0;
+  for (let guard = 0; guard < 400; guard++) {
+    fillPending();
+    const at = {}; let a = -1, b = -1;
+    for (let i = 0; i < slots(); i++) { const v = g[i]; if (!v) continue; if (at[v] !== undefined && (a < 0 || v < g[a])) { a = at[v]; b = i; } else if (at[v] === undefined) at[v] = i; }
+    if (a < 0) break;
+    g[a]++; g[b] = 0; n++; top = Math.max(top, g[a]); noteMax(g[a]);
+  }
+  if (!n) { cb.toast('합칠 짝이 없어요'); cb.sfx('click'); return; }
+  cb.sfx('levelup'); cb.merged(top); cb.toast(`⚡ ${n}번 합쳤어요! 가장 높은 표창 Lv ${top}`);
+  render();
 }
 function up(e) {
   if (!ghost) return;

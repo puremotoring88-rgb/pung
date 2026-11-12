@@ -98,9 +98,9 @@ function startFresh() {   // 이 기기 기록을 비우고 새로 시작(다시
 }
 async function enter(kind, id, pw, keep) {
   if (busy) return;
-  id = String(id || '').trim().toLowerCase(); lastId = id;
-  if (!/^[a-z0-9_]{4,16}$/.test(id)) { msg = '아이디는 영어 소문자·숫자·_ 로 4~16글자예요.'; ui(); return; }
-  if (String(pw || '').length < 6) { msg = '비밀번호는 6글자 이상이에요.'; ui(); return; }
+  id = String(id || '').replace(/[\s​-‏﻿]/g, '').toLowerCase(); lastId = id;   // 보이지 않는 글자·띄어쓰기는 뺀다
+  if (!/^[a-z0-9_]{4,16}$/.test(id)) { msg = '아이디(위 칸)는 영어 소문자·숫자·_ 로 4~16글자예요. 한글 자판이면 영어로 바꿔 주세요.'; ui(); return; }
+  if (String(pw || '').length < 6) { msg = '비밀번호(아래 칸)는 6글자 이상이면 돼요. 아무 글자나 괜찮아요.'; ui(); return; }
   msg = kind === 'signup' ? '만드는 중…' : '로그인하는 중…'; ui();
   try {
     const token = await rpc(kind === 'signup' ? 'acct_signup' : 'acct_login', { p_uid: id, p_pw: pw });
@@ -191,6 +191,8 @@ function render(el) {
     const kp = add('', 'acKeep', 'label'), keep = document.createElement('input'); keep.type = 'checkbox';
     kp.append(keep, document.createTextNode(' 이 기기에서 로그인 유지 (내 기기일 때만)'));
     const go = kind => enter(kind, id.value, pw.value, keep.checked);
+    const calm = () => { if (msg && !busy) { msg = ''; const m = el.querySelector('.acMsg'); if (m) m.remove(); } };   // 다시 쓰기 시작하면 앞 안내는 지운다
+    id.addEventListener('input', calm); pw.addEventListener('input', calm);
     pw.addEventListener('keydown', e => { if (e.key === 'Enter') go('login'); });
     const r = add('', 'acRow');
     r.append(btn('로그인', () => go('login'), 'main'), btn('처음이면 새로 만들기', () => go('signup')));

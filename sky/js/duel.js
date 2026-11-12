@@ -54,7 +54,7 @@ function start(opt) {
   const level = Math.max(1, Math.min(8, opt.level | 0)), beats = 40, countIn = 4;
   const song = (A.SONGS || []).find(s => s.id === opt.song) || (A.SONGS || [])[R((A.SONGS || [1]).length)] || null;
   const bpm = Math.round(Math.min(168, 112 + level * 6) * (song ? song.k : 1)), beat = 60 / bpm;
-  APPROACH = Math.max(1.0, 1.45 - 0.05 * (level - 1));
+  APPROACH = Math.max(1.0, 1.45 - 0.05 * (level - 1)) / (opt.speed || 1);   // 내려오는 빠르기(설정)
   const chart = makeChart(level, beats);
   const t0 = A.duel(chart, bpm, countIn, song);   // 0번째 박이 울리는 시각
   d = {
@@ -67,7 +67,7 @@ function start(opt) {
   d.total = d.notes.length + d.notes.filter(n => n.end).length;   // 길게 누르기는 끝까지 버텨야 1점 더
 }
 
-const now = () => A.clock().t;
+const now = () => { const c = A.clock(); return c.t - (c.lat || 0); };   // 기기 소리 지연만큼 늦춰서, 음표가 선에 닿는 때 = 소리가 들리는 때
 function judgeOf(dt) { return dt <= WIN.p ? 'p' : dt <= WIN.g ? 'g' : dt <= WIN.o ? 'o' : null; }
 function press(lane) {
   if (!d || d.done) return;

@@ -21,8 +21,8 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   weapons: { vulcan: 1, spread: 1 }, frame: 'falcon', weapon: 'vulcan', music: true, sfx: true, vib: true, plays: 0,
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
-  pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0 } });
-const VERSION = '0.9';
+  pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
+const VERSION = '0.10';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -213,7 +213,7 @@ function startRun(stage, md = 'stage') {
   for (const id of ['hangar', 'cards', 'pause', 'result']) $(id).classList.add('hidden');
   $('hud').classList.remove('hidden');
   A.music('stage', run.theme);
-  if (md === 'dojo') { state = 'duel'; $('hud').classList.add('hidden'); Duel.start({ level: dojoLv, title: '리듬 도장', song: S.dojo.song, sync: S.dojo.sync, onEnd: dojoEnd }); }
+  if (md === 'dojo') { state = 'duel'; $('hud').classList.add('hidden'); Duel.start({ level: dojoLv, title: '리듬 도장', song: S.dojo.song, sync: S.dojo.sync, speed: S.dojo.spd, onEnd: dojoEnd }); }
   if (net && net.mode === 'host' && allies.length && (md === 'stage' || md === 'endless')) coopBegin();
 }
 
@@ -347,6 +347,64 @@ function spawnBoss() {
 
 function addLaser(src, a, warn, dur) { lasers.push({ src, x: src.x, y: src.y, a, warn, dur, w: 26, hit: false }); A.sfx('charge'); }
 
+// ---------- 보스가 지상으로: 땅에 내려가 대공포를 쏜다. 그동안은 공격이 닿지 않으니 붉은 표적을 피하기만 한다 ----------
+function groundDive(b, dt, fr, L) {
+  if (run.arena || run.coop || b.entering) return false;
+  if (!b.dive) {
+    if (b.phT > 0) return false;
+    b.diveT = (b.diveT === undefined ? 10 : b.diveT) - dt;
+    if (b.diveT > 0) return false;
+    b.dive = { st: 'down', t: 0, ft: 0.5 };
+    b.parts.forEach(p => { if (!p.dead) p.inv = true; });
+    run.banner = { kind: 'boss', title: '보스가 지상으로!', sub: '땅에서는 공격이 닿지 않아요. 붉은 표적을 피하세요', t: 0, life: 1.8 };
+    A.sfx('charge');
+  }
+  const d = b.dive; d.t += dt;
+  if (d.st === 'down') {
+    b.gs = 1 - 0.45 * Math.min(1, d.t / 0.9); b.y += (300 - b.y) * Math.min(1, dt * 2);
+    if (d.t >= 0.9) { d.st = 'ground'; d.t = 0; shake = Math.max(shake, 0.6); }
+  } else if (d.st === 'ground') {
+    b.gs = 0.55; b.x += (clamp(P.x, 90, W - 90) - b.x) * Math.min(1, dt * 0.5);   // 땅을 따라 기어 온다
+    if ((d.ft -= dt) <= 0) {
+      d.ft = Math.max(0.45, 0.85 - 0.06 * L) / fr;
+      run.flak.push({ x: clamp(P.x + rnd(-55, 55), 40, W - 40), y: clamp(P.y + rnd(-55, 40), 140, H - 60), t: 0, warn: 0.95 });
+      if (b.p2 && Math.random() < 0.4) run.flak.push({ x: rnd(60, W - 60), y: rnd(300, H - 100), t: 0, warn: 1.1 });
+    }
+    if (d.t >= 5 + Math.min(2, L)) { d.st = 'up'; d.t = 0; }
+  } else {
+    b.gs = 0.55 + 0.45 * Math.min(1, d.t / 0.9); b.y += (175 - b.y) * Math.min(1, dt * 2.5);
+    if (d.t >= 0.9) {
+      b.gs = 1; b.dive = null; b.diveT = rnd(14, 19);
+      b.parts.forEach(p => { if (!p.dead) p.inv = false; });
+      ring(b.x, b.y, 16 + 2 * L, 0, 150, { color: '#ffb347' }); shake = Math.max(shake, 0.5);
+    }
+  }
+  return true;
+}
+function flakTick(dt) {   // 대공포 표적: 붉은 원이 조여 들다가 터진다
+  if (!run.flak || !run.flak.length) return;
+  for (const f of run.flak) {
+    f.t += dt;
+    if (f.t >= f.warn && !f.done) {
+      f.done = true;
+      explode(f.x, f.y, 26, '#ffb347'); A.sfx('hit');
+      if (Math.hypot(P.x - f.x, P.y - f.y) < 58 && !(P.down > 0)) hurtPlayer(run.d.dmg);
+      ring(f.x, f.y, 6 + 2 * run.loop, rnd(0, TAU), 130, { color: '#ffb347', r: 6 });
+    }
+  }
+  run.flak = run.flak.filter(f => f.t < f.warn + 0.3);
+}
+function drawFlak() {
+  if (!run.flak || !run.flak.length) return;
+  for (const f of run.flak) {
+    if (f.done) continue;
+    const k = f.t / f.warn;
+    ctx.strokeStyle = `rgba(255,70,70,${0.4 + 0.5 * k})`; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(f.x, f.y, 58, 0, TAU); ctx.stroke();
+    ctx.fillStyle = `rgba(255,60,60,${0.12 + 0.25 * k})`; ctx.beginPath(); ctx.arc(f.x, f.y, 58 * k, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(f.x - 12, f.y); ctx.lineTo(f.x + 12, f.y); ctx.moveTo(f.x, f.y - 12); ctx.lineTo(f.x, f.y + 12); ctx.stroke();
+  }
+}
 function bossAI(dt) {
   const b = boss, fr = run.d.fr, L = run.loop;
   const alive = b.parts.filter(p => !p.dead);
@@ -373,6 +431,8 @@ function bossAI(dt) {
   const p2 = ph >= 2, p3 = ph >= 3;
   b.p2 = p2;
   const main = alive[0];
+  if (!run.flak) run.flak = [];
+  if (groundDive(b, dt, fr, L)) { for (const p of b.parts) { p.x = b.x + p.dx * (b.gs || 1); p.y = b.y; } return; }   // 지상에 있는 동안은 평소 공격을 쉰다
   switch (b.def.id) {
     case 'spider':
       b.x = W / 2 + Math.sin(b.t * 0.7) * 150;
@@ -545,7 +605,7 @@ function startDuelEvent() {
   state = 'duel'; drag = null;
   $('hud').classList.add('hidden');
   ebul = []; lasers = [];
-  Duel.start({ level: Math.min(8, run.stage + run.loop * 2 + (run.mode === 'endless' ? run.wave >> 1 : 0)), title: '중간 보스', sync: S.dojo.sync, onEnd: duelEnd });
+  Duel.start({ level: Math.min(8, run.stage + run.loop * 2 + (run.mode === 'endless' ? run.wave >> 1 : 0)), title: '중간 보스', sync: S.dojo.sync, speed: S.dojo.spd, onEnd: duelEnd });
 }
 function duelEnd(r) {
   state = 'play'; $('hud').classList.remove('hidden');
@@ -1012,6 +1072,7 @@ function update(dt) {
   const PB = bounds(); P.tx = clamp(P.tx, PB[0], PB[1]); P.ty = clamp(P.ty, PB[2], PB[3]);
   const maxMove = 900 * st.speed * run.m.speed * dt, dx = P.tx - P.x, dy = P.ty - P.y, dl = Math.hypot(dx, dy);
   if (dl > maxMove) { P.x += dx / dl * maxMove; P.y += dy / dl * maxMove; } else { P.x = P.tx; P.y = P.ty; }
+  obstTick(dt);   // 높은 구조물에 막힌다
   P.bank += (clamp((P.x - P.lx) / Math.max(dt, 0.001) / 600, -1, 1) - P.bank) * Math.min(1, dt * 10);   // 옆으로 움직이면 기체가 기운다
   P.lx = P.x;
   if (run.arena) { cam.x = clamp(P.x - W / 2, 0, AW - W); cam.y = clamp(P.y - H * 0.55, 0, AH - H); bgY = -cam.y * 0.5; nearY = -cam.y; }   // 화면이 로봇을 따라간다
@@ -1094,7 +1155,8 @@ function update(dt) {
   } else if (run.phase === 'warning') {
     if ((run.warnT -= dt) <= 0) { run.phase = 'boss'; spawnBoss(); }
   }
-  if (boss && run.phase === 'boss') { if (boss.sneezeT > 0) boss.sneezeT -= dt; else bossAI(dt); }   // 재채기하는 동안은 쉰다
+  if (boss && run.phase === 'boss') { if (boss.sneezeT > 0) boss.sneezeT -= dt; else bossAI(dt); }
+  flakTick(dt);   // 재채기하는 동안은 쉰다
   for (const e of foes) { if (e.type !== 'boss') foeAI(e, dt * (e.mod === 'swift' ? 1.6 : 1)); if (e.flash > 0) e.flash -= dt; }
 
   // 내 탄
@@ -1201,7 +1263,7 @@ function update(dt) {
   }
 }
 
-function clearField() { foes = []; ebul = []; lasers = []; boss = null; }
+function clearField() { foes = []; ebul = []; lasers = []; boss = null; if (run) run.flak = []; }
 function afterBoss() {
   if (run.arena) { enterRest(true); return; }
   const m = run.mode;
@@ -1444,6 +1506,7 @@ function drawBoss() {
     if (p.dead) continue;
     if (hasGround()) { ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(p.x + 34, p.y + 60, p.r * 1.1, p.r * 0.8, 0, 0, TAU); ctx.fill(); }
     ctx.save(); ctx.translate(p.x, p.y);
+    if (b.gs && b.gs < 1) { ctx.scale(b.gs, b.gs); ctx.filter = `brightness(${(0.35 + 0.65 * (b.gs - 0.55) / 0.45).toFixed(2)}) saturate(.7)`; }   // 지상: 작고 어둡게
     if (im) { const w = p.r * 2.8; ctx.drawImage(im, -w / 2, -w / 2, w, w); if (p.flash > 0) glowAt(0, 0, '#ffffff', p.r); ctx.restore(); continue; }
     ctx.lineWidth = 3; ctx.strokeStyle = '#0b0f18'; ctx.lineJoin = 'round';
     const grad = (a, c) => { const g = ctx.createRadialGradient(-p.r * 0.3, -p.r * 0.4, 4, 0, 0, p.r * 1.1); g.addColorStop(0, a); g.addColorStop(0.55, c); g.addColorStop(1, '#0a0d14'); return g; };
@@ -1848,12 +1911,13 @@ function draw() {
   drawBg(run.theme);
   ctx.save(); ctx.translate(-cam.x, -cam.y);   // 표창 공방: 화면이 로봇을 따라간다
   if (run.arena) drawArenaFloor();
+  drawFlak();
   drawDrops();
   drawGates();
   for (const e of foes) if (e.type !== 'boss') drawFoe(e);
   drawBoss();
   drawShots();
-  drawPlayer(); drawFinger();
+  drawObst(false); drawPlayer(); drawObst(true); drawFinger();
   drawEbul();
   drawLasers();
   drawFx();
@@ -1926,6 +1990,14 @@ function renderHangar() {
       sr.append(b);
     });
     $('modeInfo').append(sr);
+    const vr = document.createElement('div'); vr.className = 'dojoLv dojoSong';   // 음표 내려오는 빠르기(빠른 걸 좋아하는 사람용)
+    [[0.8, '🐢 느긋'], [1, '보통'], [1.25, '빠르게'], [1.5, '아주 빠르게'], [1.8, '⚡ 번개']].forEach(([v, l]) => {
+      const b = document.createElement('button'); b.className = (S.dojo.spd || 1) === v ? 'on' : ''; b.innerHTML = `${l}<i>×${v}</i>`;
+      b.addEventListener('click', () => { S.dojo.spd = v; save(); A.sfx('click'); renderHangar(); });
+      vr.append(b);
+    });
+    const vt = document.createElement('div'); vt.className = 'acNote'; vt.textContent = '음표 빠르기: 빠를수록 음표 사이가 넓어져 보기 쉬워요(박자와 판정은 같아요). 단계가 오르면 곡도 빨라져요.';
+    $('modeInfo').append(vt, vr);
     const sy = document.createElement('div'); sy.className = 'dojoSync';   // 싱크(이어폰이면 소리가 늦게 들린다)
     const sb = (t, v) => { const b = document.createElement('button'); b.textContent = t; b.addEventListener('click', () => { S.dojo.sync = v === 0 ? 0 : Math.max(-250, Math.min(250, S.dojo.sync + v)); save(); A.sfx('click'); renderHangar(); }); return b; };
     sy.append(document.createTextNode(`🎧 싱크 ${S.dojo.sync > 0 ? '+' : ''}${S.dojo.sync}ms `), sb('−10', -10), sb('+10', 10), sb('0', 0));
@@ -2552,11 +2624,84 @@ function leaveRest() {
   nextZone(run.nextZ, `ZONE ${run.nextZ}`, '사방에서 온다! 피하면서 싸우자');
   arenaStart();
 }
+// ---------- 높은 구조물: 땅에서 솟은 전파탑·바위 기둥·풍차. 로봇이 뚫고 지나갈 수 없어 돌아가야 한다 ----------
+// 표창 공방: 구역마다 들판 곳곳에 서 있고 적도 막는다. 스테이지·무한: 가끔 땅과 함께 내려온다(보스전·협동에는 없음).
+const OB_KINDS = ['tower', 'spire', 'mill'];
+function makeObst(x, y, kind) {
+  kind = kind || OB_KINDS[(Math.random() * 3) | 0];
+  return { x, y, kind, r: kind === 'spire' ? rnd(30, 42) : kind === 'mill' ? 24 : 22, h: kind === 'spire' ? rnd(80, 115) : kind === 'mill' ? 125 : 145, ph: Math.random() * TAU, bump: 0 };
+}
+function arenaObstacles() {
+  const list = [], n = 9 + Math.min(6, run.stage);
+  for (let k = 0; k < 300 && list.length < n; k++) {
+    const x = rnd(130, AW - 130), y = rnd(170, AH - 130);
+    if (Math.hypot(x - AW / 2, y - AH / 2) < 260 || list.some(o => Math.hypot(o.x - x, o.y - y) < 230)) continue;
+    list.push(makeObst(x, y));
+  }
+  run.obst = list;
+}
+function obstTick(dt) {
+  if (!run.obst) run.obst = [];
+  if (!run.arena) {
+    if (run.coop || run.mode === 'dojo' || run.mode === 'rush') return;
+    for (const o of run.obst) o.y += 120 * dt;   // 가까운 땅과 같은 빠르기로 내려온다
+    run.obst = run.obst.filter(o => o.y < H + 180);
+    if (run.phase === 'waves' && !boss && (run.obT = (run.obT === undefined ? 8 : run.obT) - dt) <= 0) { run.obT = rnd(6, 11); run.obst.push(makeObst(rnd(80, W - 80), -40)); }
+  }
+  for (const o of run.obst) {
+    if (o.bump > 0) o.bump -= dt;
+    if (P.down > 0) continue;
+    const dx = P.x - o.x, dy = P.y - o.y, d = Math.hypot(dx, dy), m = o.r + 20;
+    if (d < m) {   // 부딪히면 밀려난다(다치지는 않는다)
+      if (run.arena || Math.abs(dy) < m * 0.6) { const k = d || 1; P.x = o.x + dx / k * m; P.y = o.y + dy / k * m; }
+      else P.x = o.x + (dx >= 0 ? 1 : -1) * Math.sqrt(Math.max(0, m * m - dy * dy));
+      if (o.bump <= 0) { o.bump = 0.5; shake = Math.max(shake, 4); A.sfx('hit'); }
+    }
+    if (run.arena) for (const e of foes) {
+      if (e.type === 'boss' || e.dead) continue;
+      const ex = e.x - o.x, ey = e.y - o.y, ed = Math.hypot(ex, ey), em = o.r + (e.r || 16);
+      if (ed < em && ed > 0) { e.x = o.x + ex / ed * em; e.y = o.y + ey / ed * em; }
+    }
+  }
+}
+function drawObst(front) {   // front: 로봇보다 앞(아래)에 있는 것만 / 뒤에 있는 것만
+  if (!run.obst || !run.obst.length) return;
+  for (const o of run.obst) {
+    if ((o.y > P.y) !== front) continue;
+    if (o.y - o.h > cam.y + H + 40 || o.y < cam.y - 60 || o.x < cam.x - 120 || o.x > cam.x + W + 120) continue;
+    const { x, y, r, h } = o;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(x + h * 0.32, y + 6, r * 1.15 + h * 0.18, r * 0.5, -0.25, 0, TAU); ctx.fill();   // 그림자
+    if (o.kind === 'spire') {   // 바위 기둥
+      const gr = ctx.createLinearGradient(x - r, 0, x + r, 0); gr.addColorStop(0, '#5e5246'); gr.addColorStop(0.5, '#9a8a74'); gr.addColorStop(1, '#4a4036');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(x - r, y); ctx.lineTo(x - r * 0.62, y - h); ctx.lineTo(x + r * 0.55, y - h - 4); ctx.lineTo(x + r, y); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(40,30,20,.45)'; ctx.lineWidth = 2; for (const k of [0.3, 0.55, 0.8]) { ctx.beginPath(); ctx.moveTo(x - r * (1 - k * 0.4), y - h * k); ctx.lineTo(x + r * (0.9 - k * 0.4), y - h * k + 5); ctx.stroke(); }
+      ctx.fillStyle = '#5c9a4c'; ctx.beginPath(); ctx.ellipse(x - r * 0.03, y - h - 2, r * 0.66, r * 0.26, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#7cc266'; ctx.beginPath(); ctx.ellipse(x - r * 0.12, y - h - 5, r * 0.4, r * 0.15, 0, 0, TAU); ctx.fill();
+    } else if (o.kind === 'mill') {   // 풍차
+      ctx.fillStyle = '#e8eef5'; ctx.beginPath(); ctx.moveTo(x - 8, y); ctx.lineTo(x - 3, y - h); ctx.lineTo(x + 3, y - h); ctx.lineTo(x + 8, y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#b9c6d4'; ctx.fillRect(x + 1, y - h, 3, h);
+      ctx.translate(x, y - h); ctx.rotate(T * 1.6 + o.ph); ctx.fillStyle = '#f4f8fc';
+      for (let k = 0; k < 3; k++) { ctx.rotate(TAU / 3); ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(54, -6); ctx.lineTo(58, 0); ctx.lineTo(0, 4); ctx.closePath(); ctx.fill(); }
+      ctx.fillStyle = '#c8d2de'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, TAU); ctx.fill();
+    } else {   // 전파탑
+      ctx.strokeStyle = '#c9ced8'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x - r, y); ctx.lineTo(x - 3, y - h); ctx.moveTo(x + r, y); ctx.lineTo(x + 3, y - h); ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(220,226,236,.8)';
+      for (let k = 0; k < 6; k++) { const a = k / 6, b = (k + 1) / 6, wa = r * (1 - a) + 3 * a, wb = r * (1 - b) + 3 * b; ctx.beginPath(); ctx.moveTo(x - wa, y - h * a); ctx.lineTo(x + wb, y - h * b); ctx.moveTo(x + wa, y - h * a); ctx.lineTo(x - wb, y - h * b); ctx.stroke(); }
+      ctx.fillStyle = '#e94b4b'; ctx.fillRect(x - r * 0.75, y - h * 0.3, r * 1.5, 4); ctx.fillRect(x - r * 0.45, y - h * 0.62, r * 0.9, 4);
+      const on = Math.sin(T * 4 + o.ph) > 0; ctx.fillStyle = on ? '#ff4040' : '#7a2020'; ctx.beginPath(); ctx.arc(x, y - h - 4, 5, 0, TAU); ctx.fill();
+      if (on) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,60,60,.35)'; ctx.beginPath(); ctx.arc(x, y - h - 4, 14, 0, TAU); ctx.fill(); }
+    }
+    ctx.restore();
+    if (o.bump > 0) { ctx.strokeStyle = `rgba(255,220,120,${o.bump})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(o.x, o.y, o.r + 6, 0, TAU); ctx.stroke(); }
+  }
+}
 function arenaStart() {
   run.arena = true; run.keeper = null; run.spawnT = 1.2; run.waveDur = /fast/.test(location.hash) ? 12 : 40;
   P.x = P.tx = P.lx = AW / 2; P.y = P.ty = AH / 2; P.inv = 2;
   cam.x = clamp(P.x - W / 2, 0, AW - W); cam.y = clamp(P.y - H * 0.55, 0, AH - H);
-  Forge.takeMade();
+  Forge.takeMade(); arenaObstacles();
 }
 function drawArenaFloor() {   // 들판의 점 무늬와 울타리(어디로 움직이는지 보이게)
   const g0 = 110, x0 = Math.floor(cam.x / g0) * g0, y0 = Math.floor(cam.y / g0) * g0;
