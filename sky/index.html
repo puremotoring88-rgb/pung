@@ -162,6 +162,38 @@
   .upItem b { font-size: calc(var(--u) * 4); } .upItem i { font-style: normal; opacity: .8; font-size: calc(var(--u) * 3.2); }
   #unlockPop button { padding: calc(var(--u) * 2.5); border: 0; border-radius: calc(var(--u) * 2.5); background: #ffd166; color: #1a1a1a; font-weight: 800; font-size: calc(var(--u) * 4); }
   @keyframes upIn { from { transform: scale(.6); opacity: 0; } }
+  /* 수집과 자랑: 도감·칭호·세트·사진 카드 */
+  .pvTtl { font-weight: 700; font-size: .85em; }
+  #tab-book { display: flex; flex-direction: column; gap: calc(var(--u) * 2); }
+  #tab-book.hidden { display: none; }
+  .bkTop { display: flex; flex-direction: column; gap: calc(var(--u) * 1); font-size: calc(var(--u) * 3.6); }
+  .bkTop small { opacity: .7; }
+  .bkSec { font-size: calc(var(--u) * 3.2); }
+  .bkSec h3 { margin: 0 0 calc(var(--u) * 1.5); font-size: 1.15em; display: flex; justify-content: space-between; }
+  .bkSec h3 em { font-style: normal; color: #ffd166; font-size: .9em; }
+  .bkGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 19), 1fr)); gap: calc(var(--u) * 1.2); }
+  .bkCell { background: rgba(255,255,255,.07); border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 1.2); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; }
+  .bkCell span { font-size: calc(var(--u) * 6); line-height: 1.2; } .bkCell img { width: calc(var(--u) * 9); height: calc(var(--u) * 9); object-fit: contain; }
+  .bkCell b { font-size: .85em; } .bkCell i { font-style: normal; font-size: .75em; opacity: .65; }
+  .bkCell.off { opacity: .4; }
+  .bkBoss { display: grid; grid-template-columns: 1fr auto; gap: 2px calc(var(--u) * 2); padding: calc(var(--u) * 1.2) 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .bkBoss span em { font-style: normal; font-size: calc(var(--u) * 5); filter: grayscale(1); opacity: .3; margin-left: 2px; }
+  .bkBoss span em.on { filter: none; opacity: 1; }
+  .bkBoss i { grid-column: span 2; font-style: normal; font-size: .8em; opacity: .65; }
+  .bkBoss.off b { opacity: .5; }
+  .bkNote { display: block; margin-top: calc(var(--u) * 1); opacity: .6; }
+  .ttlList { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * 1.2); }
+  .ttl { background: rgba(255,255,255,.07); border: 1px solid transparent; border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 1.5); color: #fff; text-align: left; display: flex; flex-direction: column; font-size: calc(var(--u) * 3); }
+  .ttl i { font-style: normal; opacity: .6; font-size: .85em; } .ttl.on { border-color: #ffd166; background: rgba(255,209,102,.15); } .ttl.off { opacity: .45; }
+  .setList { display: flex; flex-direction: column; gap: calc(var(--u) * 1); margin-top: calc(var(--u) * 1); }
+  .setRow { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: calc(var(--u) * 1.5); background: rgba(255,255,255,.06); border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 1.2) calc(var(--u) * 1.8); font-size: calc(var(--u) * 3); }
+  .setRow span em { font-style: normal; font-size: .85em; opacity: .45; margin-right: calc(var(--u) * 1); } .setRow span em.on { opacity: 1; color: #9dffcf; }
+  .setRow i { font-style: normal; color: #ffd166; } .setRow.on { box-shadow: 0 0 0 1px #ffd166 inset; }
+  #photoPop { position: fixed; inset: 0; z-index: 80; background: rgba(4,8,16,.88); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .phIn { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 2); max-height: 100%; }
+  .phIn img { max-width: 100%; max-height: 70vh; border-radius: calc(var(--u) * 2.5); box-shadow: 0 0 calc(var(--u) * 6) rgba(0,0,0,.6); }
+  .phIn .row { display: flex; gap: calc(var(--u) * 1.5); flex-wrap: wrap; justify-content: center; } .phIn a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+  .phIn small { opacity: .6; font-size: calc(var(--u) * 2.8); }
   /* 성장이 보이게: 전투력·성장 단계 */
   .pvShip { position: relative; cursor: pointer; }
   .pvShip::after { content: '🔍'; position: absolute; right: calc(var(--u) * 1.5); bottom: calc(var(--u) * 1); font-size: calc(var(--u) * 3); opacity: .6; }
@@ -393,7 +425,7 @@
     <nav class="tabs">
       <button data-tab="sortie">🚀 출격</button><button data-tab="ship">✈️ 기체</button><button data-tab="look">🎨 꾸미기</button><button data-tab="arms">🔫 무기</button>
       <button data-tab="parts">⚙️ 부품</button><button data-tab="research">🔬 연구</button>
-      <button data-tab="goals">🏅 임무<span id="goalBadge" class="badge hidden"></span></button><button data-tab="rank">🏆 랭킹</button><button data-tab="settings">⚙ 설정</button>
+      <button data-tab="goals">🏅 임무<span id="goalBadge" class="badge hidden"></span></button><button data-tab="book">📖 도감</button><button data-tab="rank">🏆 랭킹</button><button data-tab="settings">⚙ 설정</button>
     </nav>
     <section id="tab-sortie" class="tab">
       <div id="modes" class="modes"></div>
@@ -405,6 +437,7 @@
     </section>
     <section id="tab-ship" class="tab hidden"><p class="note">기체마다 체력·속도와 궁극기가 다릅니다.</p><div id="frames" class="cards"></div></section>
     <section id="tab-look" class="tab hidden"></section>
+    <section id="tab-book" class="tab hidden"></section>
     <section id="tab-arms" class="tab hidden"><p class="note">무기마다 쏘는 방식과 소리가 다릅니다. 고철로 강화하세요.</p><div id="weapons" class="cards"></div></section>
     <section id="tab-parts" class="tab hidden"><div id="slots" class="slots"></div><div id="partList"></div></section>
     <section id="tab-research" class="tab hidden"><p class="note">고철로 연구하면 모든 기체가 영구히 강해집니다.</p><div id="research"></div></section>
@@ -471,6 +504,7 @@
     <div id="rStars"></div>
     <div id="rStats" class="stats"></div>
     <div class="row" id="rBtns"></div>
+    <button id="photo" class="btn sub">📸 사진 카드 만들기</button>
     <button id="copy" class="btn sub">📋 결과 복사해서 자랑하기</button>
   </div>
 

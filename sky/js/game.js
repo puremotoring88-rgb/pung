@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.18';
+const VERSION = '0.19';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -189,12 +189,167 @@ function buildStats() {
   };
 }
 
+// ---------- 수집과 자랑(로드맵 5단계): 도감·보스 무훈·칭호·꾸미기 세트·결과 사진 카드 ----------
+const MAP_ICON = ['🏝️', '🏜️', '🌃', '🌌', '🏭', '❄️', '🌋', '🌿', '🏰'];
+const MEDALS = [['kill', '⚔️', '처치'], ['five', '🔥', '5번 처치'], ['nohit', '🛡️', '안 맞고 잡기'], ['fast', '⚡', '기준 시간 안에']];
+function bk() {
+  if (!S.book) {   // 도감이 생기기 전 기록에서 채워 넣는다(깬 스테이지의 맵, 만난 보스, 나올 수 있었던 적)
+    S.book = { maps: {}, foes: {}, boss: {}, hz: {} };
+    for (let s = 1; s <= Math.min(S.maxStage, 9); s++) if (S.plays) S.book.maps[themeFor(s)] = 1;
+    (S.stats.bossSeen || []).forEach(i => { const b = D.BOSSES[i % D.BOSSES.length]; if (b) S.book.boss[b.id] = { k: 1, nohit: 0, fast: 0, best: 0 }; });
+    if (S.stats.kills > 0) for (const [k, e] of Object.entries(D.ENEMIES)) if ((e.from || 1) <= S.cleared + 1 && k !== 'treasure') S.book.foes[k] = 1;
+  }
+  for (const k of ['maps', 'foes', 'boss', 'hz']) S.book[k] = S.book[k] || {}; return S.book;
+}
+function bookMark(cat, key) {
+  const B = bk(), first = !B[cat][key];
+  B[cat][key] = (B[cat][key] || 0) + 1;
+  if (!first || !run || state !== 'play') return;
+  const nm = cat === 'maps' ? MAP_ICON[key] + ' ' + D.THEMES[key].name : cat === 'foes' ? (D.ENEMIES[key] || {}).name : cat === 'hz' ? HZ_NM[key] : '';
+  if (nm) say(`📖 도감에 새로: ${nm}`, W / 2, H * (cat === 'maps' ? 0.5 : 0.46), '#ffd166', 18, 2);
+  S.newDot = S.newDot || {}; S.newDot['tab:book'] = 1;
+}
+function bossRecord(id, nohit, fast, bt) {
+  const B = bk(), r = B.boss[id] = B.boss[id] || { k: 0, nohit: 0, fast: 0, best: 0 }, before = medalsOf(id).length;
+  r.k++; if (nohit) r.nohit = 1; if (fast) r.fast = 1; if (!r.best || bt < r.best) r.best = Math.round(bt * 10) / 10;
+  const after = medalsOf(id);
+  if (after.length > before) { say(`🎖️ 보스 무훈: ${MEDALS.find(m => m[0] === after[after.length - 1])[2]}!`, W / 2, H * 0.5, '#ffd166', 22, 2.6); S.newDot = S.newDot || {}; S.newDot['tab:book'] = 1; }
+}
+function medalsOf(id) { const r = bk().boss[id]; if (!r) return []; return MEDALS.map(m => m[0]).filter(k => k === 'kill' ? r.k >= 1 : k === 'five' ? r.k >= 5 : r[k]); }
+function bookCount() {
+  const B = bk(), foeKeys = Object.keys(D.ENEMIES), hzKeys = Object.keys(HZ_NM);
+  const parts = [
+    ['maps', Object.keys(B.maps).length, D.THEMES.length],
+    ['foes', foeKeys.filter(k => B.foes[k]).length, foeKeys.length],
+    ['boss', D.BOSSES.reduce((s, b) => s + medalsOf(b.id).length, 0), D.BOSSES.length * MEDALS.length],
+    ['routes', Object.keys(S.routes || {}).length, Object.keys(ROUTES).length],
+    ['hz', hzKeys.filter(k => B.hz[k]).length, hzKeys.length],
+  ];
+  const got = parts.reduce((s, p) => s + p[1], 0), total = parts.reduce((s, p) => s + p[2], 0);
+  return { parts, got, total, pct: Math.floor(got / total * 100) };
+}
+// 칭호: 이름 위에 붙는 작은 글. 조건을 채우면 얻고, 도감에서 골라 단다
+const TITLES = [
+  { id: 'rookie', name: '새내기 조종사', hint: '처음부터', ok: () => true },
+  { id: 'hunter', name: '사냥꾼', hint: '적 500대 부수기', ok: () => S.stats.kills >= 500 },
+  { id: 'hunter2', name: '하늘의 포식자', hint: '적 3000대 부수기', ok: () => S.stats.kills >= 3000 },
+  { id: 'explorer', name: '하늘 탐험가', hint: '맵 9곳 모두 날기', ok: () => Object.keys(bk().maps).length >= D.THEMES.length },
+  { id: 'weather', name: '날씨 박사', hint: '하늘의 사건 모두 겪기', ok: () => Object.keys(HZ_NM).every(k => bk().hz[k]) },
+  { id: 'route', name: '항로 개척자', hint: '갈림길 항로 10가지 모두', ok: () => Object.keys(S.routes || {}).length >= Object.keys(ROUTES).length },
+  { id: 'untouch', name: '털끝도 못 건드려', hint: '보스 3종을 안 맞고 잡기', ok: () => D.BOSSES.filter(b => (bk().boss[b.id] || {}).nohit).length >= 3 },
+  { id: 'flash', name: '번개 사냥꾼', hint: '보스 5종을 기준 시간 안에', ok: () => D.BOSSES.every(b => (bk().boss[b.id] || {}).fast) },
+  ...D.BOSSES.map(b => ({ id: 'b_' + b.id, name: `${b.name} 사냥꾼`, hint: `${b.name} 5번 잡기`, ok: () => ((bk().boss[b.id] || {}).k || 0) >= 5 })),
+  { id: 'combo', name: '연쇄 폭발 장인', hint: '콤보 100', ok: () => S.stats.bestCombo >= 100 },
+  { id: 'rhythm', name: '박자의 신', hint: '리듬 도장 8단계 열기', ok: () => S.dojo.open >= 8 },
+  { id: 'ace', name: '에이스', hint: '성장 단계 「에이스」', ok: () => myTierV >= 4 },
+  { id: 'myth', name: '신화의 조종사', hint: '성장 단계 「신화」', ok: () => myTierV >= 6 },
+  { id: 'half', name: '도감 수집가', hint: '도감 50%', ok: () => bookCount().pct >= 50 },
+  { id: 'full', name: '도감 박사', hint: '도감 100%', ok: () => bookCount().pct >= 100 },
+];
+const titleName = () => (TITLES.find(t => t.id === S.title && t.ok()) || TITLES[0]).name;
+function titleCheck() {   // 새로 얻은 칭호 알림
+  S.titleSeen = S.titleSeen || { rookie: 1 };
+  const got = TITLES.filter(t => !S.titleSeen[t.id] && t.ok()); if (!got.length) return;
+  got.forEach(t => { S.titleSeen[t.id] = 1; }); S.newDot = S.newDot || {}; S.newDot['tab:book'] = 1; save();
+  if (document.getElementById('unlockPop')) return;
+  const bx = document.createElement('div'); bx.id = 'unlockPop';
+  bx.innerHTML = `<div class="upIn"><small>🎖️ 새 칭호를 얻었어요!</small>${got.slice(0, 4).map(t => `<div class="upItem"><span>🎖️</span><b>「${t.name}」</b><i>${t.hint}</i></div>`).join('')}${got.length > 4 ? `<i>외 ${got.length - 4}개</i>` : ''}<i>📖 도감에서 골라 달 수 있어요</i><button>좋아요</button></div>`;
+  bx.querySelector('button').addEventListener('click', () => { bx.remove(); A.sfx('click'); });
+  document.body.append(bx); A.sfx('levelup');
+}
+function renderBook(el) {
+  if (S.newDot && S.newDot['tab:book']) { delete S.newDot['tab:book']; save(); }
+  const B = bk(), C = bookCount();
+  const sec = (title, n, tot, body) => `<div class="bkSec glass"><h3>${title}<em>${n} / ${tot}</em></h3>${body}</div>`;
+  const cell = (on, icon, name, sub) => `<div class="bkCell${on ? '' : ' off'}"><span>${on ? icon : '❔'}</span><b>${on ? name : '???'}</b>${sub ? `<i>${sub}</i>` : ''}</div>`;
+  const P0 = Object.fromEntries(C.parts.map(p => [p[0], p]));
+  let h = `<div class="bkTop glass"><b>📖 도감 ${C.pct}%</b><div class="tierBar" style="--tc:#ffd166"><b style="width:${C.pct}%"></b></div><small>${C.got} / ${C.total} · 모을수록 칭호가 열려요</small></div>`;
+  h += sec('🎖️ 칭호', TITLES.filter(t => t.ok()).length, TITLES.length, `<div class="ttlList">${TITLES.map(t => { const ok = t.ok(), on = titleName() === t.name; return `<button class="ttl${ok ? '' : ' off'}${on ? ' on' : ''}" data-t="${t.id}" ${ok ? '' : 'disabled'}><b>${ok ? '「' + t.name + '」' : '🔒 ???'}</b><i>${t.hint}</i></button>`; }).join('')}</div>`);
+  h += sec('👑 보스 무훈', P0.boss[1], P0.boss[2], D.BOSSES.map(b => { const ms = medalsOf(b.id), r = B.boss[b.id]; return `<div class="bkBoss${r ? '' : ' off'}"><b>${r ? b.name : '???'}</b><span>${MEDALS.map(m => `<em class="${ms.includes(m[0]) ? 'on' : ''}" title="${m[2]}">${m[1]}</em>`).join('')}</span><i>${r ? `${r.k}번 · 최고 ${r.best ? r.best + '초' : '-'}` : '아직 못 만남'}</i></div>`; }).join('') + `<small class="bkNote">${MEDALS.map(m => m[1] + ' ' + m[2]).join(' · ')}</small>`);
+  h += sec('🗺️ 맵', P0.maps[1], P0.maps[2], `<div class="bkGrid">${D.THEMES.map((t, i) => cell(B.maps[i], MAP_ICON[i], t.name, B.maps[i] ? `${B.maps[i]}번` : '')).join('')}</div>`);
+  h += sec('👾 적', P0.foes[1], P0.foes[2], `<div class="bkGrid">${Object.keys(D.ENEMIES).map(k => { const im = IMG['enemy-' + k]; return cell(B.foes[k], im ? `<img src="${im.src}" alt="">` : '👾', D.ENEMIES[k].name, B.foes[k] ? `${B.foes[k]}대` : ''); }).join('')}</div>`);
+  h += sec('🧭 항로', P0.routes[1], P0.routes[2], `<div class="bkGrid">${Object.keys(ROUTES).map(k => cell((S.routes || {})[k], ROUTES[k].icon, ROUTES[k].name, ['일반', '희귀', '전설'][ROUTES[k].tier])).join('')}</div>`);
+  h += sec('🌦️ 하늘의 사건', P0.hz[1], P0.hz[2], `<div class="bkGrid">${Object.keys(HZ_NM).map(k => { const [ic, ...nm] = HZ_NM[k].split(' '); return cell(B.hz[k], ic, nm.join(' ')); }).join('')}</div>`);
+  el.innerHTML = h;
+  el.querySelectorAll('.ttl[data-t]').forEach(b => b.addEventListener('click', () => { S.title = b.dataset.t; save(); A.sfx('click'); renderHangar(); }));
+}
+// 꾸미기 세트: 네 칸을 맞추면 특별한 빛이 더해진다(모습만, 힘은 그대로)
+const LOOK_SETS = [
+  { id: 'bolt', name: '⚡ 번개 세트', need: { paint: 'yellow', flame: 'blue', trail: 'star', decal: 'bolt' }, c: '#fff36a' },
+  { id: 'spring', name: '🌸 봄꽃 세트', need: { paint: 'pink', flame: 'pink', trail: 'petal', decal: 'flower' }, c: '#ffb3d9' },
+  { id: 'heart', name: '❤️ 하트 세트', need: { paint: 'red', flame: 'pink', trail: 'heart', decal: 'heart' }, c: '#ff5d7a' },
+  { id: 'night', name: '🌙 밤하늘 세트', need: { paint: 'night', flame: 'violet', trail: 'star', decal: 'crown' }, c: '#c58bff' },
+  { id: 'rainbow', name: '🌈 무지개 세트', need: { flame: 'rainbow', trail: 'rainbow', decal: 'star' }, c: 'rainbow' },
+  { id: 'jungle', name: '🍀 숲 세트', need: { paint: 'green', flame: 'green', trail: 'note', decal: 'cat' }, c: '#4dff9e' },
+];
+const setOf = L => L && LOOK_SETS.find(s => Object.keys(s.need).every(k => L[k] === s.need[k]));
+function shipSetFx(g, look, t, size) {
+  const s = setOf(look); if (!s) return;
+  const col = s.c === 'rainbow' ? `hsl(${(Math.round(t * 8) * 30) % 360},100%,62%)` : s.c;
+  g.save(); g.globalCompositeOperation = 'lighter';
+  g.strokeStyle = col; g.globalAlpha = 0.45 + 0.2 * Math.sin(t * 4); g.lineWidth = 2;
+  g.beginPath(); g.arc(0, 4, size * 0.56 + Math.sin(t * 3) * 2, 0, TAU); g.stroke();
+  g.globalAlpha = 0.9; g.font = '12px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = col;
+  const ch = lookOf('decal', look.decal)[2] || '✦';
+  for (let i = 0; i < 2; i++) { const a = -t * 1.6 + i * Math.PI; g.fillText(ch, Math.cos(a) * size * 0.56, 4 + Math.sin(a) * size * 0.56); }
+  g.restore();
+}
+function lookSetsBox() {
+  const L = myLook(), box = document.createElement('div'); box.className = 'lkCat';
+  box.innerHTML = `<b>✨ 꾸미기 세트 <small>(네 칸을 맞추면 특별한 빛 · 모습만 바뀌어요)</small></b><div class="setList">${LOOK_SETS.map(s => {
+    const ks = Object.keys(s.need), n = ks.filter(k => L[k] === s.need[k]).length, done = n === ks.length;
+    return `<div class="setRow${done ? ' on' : ''}"><b>${s.name}</b><span>${ks.map(k => `<em class="${L[k] === s.need[k] ? 'on' : ''}">${lookOf(k, s.need[k])[1]}</em>`).join('')}</span><i>${done ? '✨ 완성!' : `${n} / ${ks.length}`}</i></div>`;
+  }).join('')}</div>`;
+  return box;
+}
+// 결과 사진 카드: 맵 그림 위에 내 기체·칭호·점수를 한 장으로
+function photoCard() {
+  const c = document.createElement('canvas'); c.width = 720; c.height = 960; const g = c.getContext('2d');
+  const th = run ? run.theme : themeFor(hangarStage), far = Art.far(th);
+  g.drawImage(far, 0, 0, far.width, Math.min(far.height, far.width * 960 / 720), 0, 0, 720, 960);
+  const sh = g.createLinearGradient(0, 0, 0, 960); sh.addColorStop(0, 'rgba(4,8,18,.75)'); sh.addColorStop(0.35, 'rgba(4,8,18,.2)'); sh.addColorStop(0.62, 'rgba(4,8,18,.35)'); sh.addColorStop(1, 'rgba(4,8,18,.92)');
+  g.fillStyle = sh; g.fillRect(0, 0, 720, 960);
+  const tc = TIERS[myTierV].c;
+  g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = '900 54px sans-serif'; g.fillText('BOLTWING', 360, 86);
+  g.font = '600 22px sans-serif'; g.fillStyle = '#b9c8dc'; g.fillText(`${MAP_ICON[th]} ${D.THEMES[th].name}`, 360, 124);
+  const L = myLook();
+  g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.5; g.drawImage(Art.glow(tc, 60), 160, 160, 400, 400); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  drawShipAt(g, S.frame, 360, 350, 4.2, -0.18, 1.3, false, L);
+  const title = $('rTitle').innerText.replace(/\s+/g, ' ').trim();
+  g.fillStyle = '#ffd166'; g.font = '800 44px sans-serif'; g.fillText(title, 360, 610);
+  const big = document.querySelector('#rStats .big'), score = run ? run.score : big ? +big.textContent.replace(/[^\d]/g, '') : 0;
+  g.fillStyle = '#fff'; g.font = '900 76px sans-serif'; g.fillText(score.toLocaleString(), 360, 700);
+  g.font = '600 24px sans-serif'; g.fillStyle = '#cfe0f5';
+  const line = run ? [`최대 콤보 ${run.maxCombo}`, `처치 ${run.kills}`, run.bossRank ? `보스 ${run.bossRank} 랭크` : ''].filter(Boolean).join('  ·  ') : '';
+  g.fillText(line, 360, 744);
+  g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(60, 790, 600, 110);
+  g.textAlign = 'left'; g.fillStyle = tc; g.font = '700 22px sans-serif'; g.fillText(`「${titleName()}」`, 84, 830);
+  g.fillStyle = '#fff'; g.font = '800 32px sans-serif'; g.fillText(myNick(), 84, 874);
+  g.textAlign = 'right'; g.fillStyle = tc; g.font = '700 22px sans-serif'; g.fillText(`${TIERS[myTierV].name} · ⚡${powerOf(buildStats()).toLocaleString()}`, 636, 830);
+  g.fillStyle = '#9fb3c8'; g.font = '600 20px sans-serif'; g.fillText(`${frameOf(S.frame).name} · 도감 ${bookCount().pct}% · ${new Date().toLocaleDateString('ko-KR')}`, 636, 874);
+  return c;
+}
+function showPhoto() {
+  const c = photoCard(), bx = document.createElement('div'); bx.id = 'photoPop';
+  const url = c.toDataURL('image/png');
+  bx.innerHTML = `<div class="phIn"><img src="${url}" alt="결과 사진 카드"><div class="row"><button class="btn" id="phShare">📤 공유하기</button><a class="btn sub" id="phSave" download="boltwing.png" href="${url}">💾 저장</a><button class="btn sub" id="phX">닫기</button></div><small>휴대폰에서는 사진을 길게 눌러도 저장돼요</small></div>`;
+  document.body.append(bx); A.sfx('click');
+  bx.querySelector('#phX').addEventListener('click', () => bx.remove());
+  bx.addEventListener('click', e => { if (e.target === bx) bx.remove(); });
+  const sb = bx.querySelector('#phShare');
+  c.toBlob(blob => {
+    const file = new File([blob], 'boltwing.png', { type: 'image/png' });
+    if (!(navigator.canShare && navigator.canShare({ files: [file] }))) { sb.remove(); return; }
+    sb.addEventListener('click', () => { navigator.share({ files: [file], text: `⚡ 볼트윙 ${location.origin}${location.pathname}` }).catch(() => {}); });
+  }, 'image/png');
+}
 // ---------- 첫 10분: 처음엔 스테이지만, 판을 하고 깰수록 모드·탭이 하나씩 열린다(숫자는 해 보고 조정) ----------
 const OPENS = [
   { k: 'tab:arms', icon: '🔫', name: '무기 강화', need: { plays: 1 }, tip: '모은 고철로 무기를 강하게 만들어요.' },
   { k: 'tab:goals', icon: '🏅', name: '임무', need: { plays: 1 }, tip: '오늘의 임무와 도전 과제로 고철을 받아요.' },
   { k: 'tab:parts', icon: '⚙️', name: '부품', need: { cleared: 1 }, tip: '보스가 떨어뜨린 부품을 끼우면 더 강해져요.' },
   { k: 'tab:look', icon: '🎨', name: '꾸미기', need: { cleared: 1 }, tip: '도색·불꽃·꼬리·스티커로 내 기체를 꾸며요.' },
+  { k: 'tab:book', icon: '📖', name: '도감·칭호', need: { cleared: 1 }, tip: '만난 맵·적·보스 무훈을 모으고 칭호를 달아요.' },
   { k: 'mode:endless', icon: '♾️', name: '무한 생존', need: { cleared: 2 }, tip: '끝없이 몰려오는 적을 얼마나 버틸까요?' },
   { k: 'tab:ship', icon: '✈️', name: '기체 고르기', need: { cleared: 2 }, tip: '새 기체가 열렸어요. 기체마다 궁극기가 달라요.' },
   { k: 'mode:coop', icon: '🤝', name: '친구와 함께', need: { cleared: 2 }, tip: '친구 1~2명과 같은 하늘에서 싸워요.' },
@@ -283,7 +438,7 @@ function showGrowth() {   // 기체 크게 보기: 천천히 돌고, 단계 목�
 }
 function growthFx(box, pw) {   // 강화 순간: 전투력 +N, 단계가 오르면 크게 축하
   const old = lastPow; lastPow = pw;
-  const tr = tierOf(pw); if (old < 0) { myTierV = tr; return; }
+  const tr = tierOf(pw); if (old < 0) { myTierV = tr; titleCheck(); return; }
   const up = tr > myTierV; myTierV = tr;
   if (old < 0 || pw === old) return;
   const d = pw - old, pop = document.createElement('div'); pop.className = 'pwPop' + (d < 0 ? ' down' : '');
@@ -666,6 +821,7 @@ function bossDown() {
   const bt = run.t - run.bossStart, hits = run.hits - run.hitsAtBoss, par = (boss.def.par || 45) + 3 * Math.min(run.stage, 10);
   const rank = run.assist ? 'C' : hits === 0 && bt <= par ? 'S' : hits <= 1 && bt <= par * 1.3 ? 'A' : hits <= 3 && bt <= par * 1.8 ? 'B' : 'C';
   run.bossRank = rank; run.bossTime = bt;
+  if (run.mode !== 'auto') bossRecord(boss.def.id, hits === 0 && !run.assist, bt <= par && !run.assist, bt);   // 보스 무훈
   const bonus = { S: 6, A: 3, B: 1, C: 0 }[rank];
   for (let i = 0; i < bonus; i++) drops.push({ kind: 'scrap', x: x + rnd(-60, 60), y: y + rnd(-30, 30), vy: rnd(30, 80), v: 5 });
   say(`${rank} 랭크 · ${bt.toFixed(1)}초`, W / 2, H * 0.4, { S: '#ffd166', A: '#9dffcf', B: '#9fd0ff', C: '#c9d2dc' }[rank], 34, 2.6);
@@ -1063,6 +1219,7 @@ function hitFoe(e, dmg, own) {
 const comboMul = () => 1 + Math.min(run.combo, 50) * 0.02;
 function killFoe(e) {
   e.dead = true;
+  if (!e.isBoss && !e.civ && !e.harmless && D.ENEMIES[e.type]) bookMark('foes', e.type);   // 도감: 만난 적
   run.kills++; S.stats.kills++; dcount('kills');
   run.combo++; run.comboT = 2.5; run.maxCombo = Math.max(run.maxCombo, run.combo);
   if (run.mode !== 'auto') { if (A.chain) A.chain(run.combo); if (!net && !e.isBoss) { if (e.r > 25) hitStop = Math.max(hitStop, FEEL.stopBig); else if (e.elite || e.mod) hitStop = Math.max(hitStop, FEEL.stopElite); } }
@@ -1384,6 +1541,7 @@ function update(dt) {
     if ((run.warnT -= dt) <= 0) { run.phase = 'boss'; spawnBoss(); }
   }
   if (boss && run.phase === 'boss') { if (boss.sneezeT > 0) boss.sneezeT -= dt; else bossAI(dt); }
+  if (run.theme !== run.bookTh) { run.bookTh = run.theme; bookMark('maps', run.theme); }   // 도감: 날아 본 맵
   flakTick(dt);   // 재채기하는 동안은 쉰다
   hazardTick(dt);   // 돌풍·토네이도·민간 비행체
   for (const e of foes) { if (e.type !== 'boss') foeAI(e, dt * (e.mod === 'swift' ? 1.6 : 1)); if (e.flash > 0) e.flash -= dt; }
@@ -1704,7 +1862,7 @@ function drawShipAt(g, id, x, y, s, bank, t, withShadow, look) {
   const dc = look && lookOf('decal', look.decal)[2];
   if (dc) { g.font = '15px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(dc, 0, 6); g.textBaseline = 'alphabetic'; }   // 스티커
   g.restore();
-  shipTierFx(g, tier, t, size, sx);
+  shipTierFx(g, tier, t, size, sx); if (look) shipSetFx(g, look, t, size);
   const tips ={ falcon: 31, turtle: 30, phoenix: 34 }[id];
   if (tips && Math.floor(t * 2.5) % 2 === 0) {
     g.globalCompositeOperation = 'lighter';
@@ -2269,7 +2427,7 @@ function showHangar() {
 const statBar = (label, k, val) => `<div class="stat"><span>${label}</span><i><b style="width:${Math.round(clamp(k, 0.04, 1) * 100)}%"></b></i><em>${val}</em></div>`;
 function renderHangar() {
   $('scrap').textContent = `🔩 ${S.scrap}`;
-  unlockCheck();
+  unlockCheck(); titleCheck();
   $('bestTxt').textContent = `최고 ${S.best.toLocaleString()} · ★${starCount()}`;
   if (!isOpen('tab:' + tab)) tab = 'sortie'; if (!isOpen('mode:' + selMode)) selMode = 'stage';
   S.newDot = S.newDot || {};
@@ -2279,7 +2437,8 @@ function renderHangar() {
   if (tab === 'rank') Rank.render($('tab-rank'));
   if (tab === 'settings' && !$('acctBox').contains(document.activeElement)) Cloud.render($('acctBox'));
   if (tab === 'settings') renderCtl($('ctlBox'));
-  if (tab === 'look') renderLook($('tab-look'));
+  if (tab === 'look') { renderLook($('tab-look')); $('tab-look').append(lookSetsBox()); }
+  if (tab === 'book') renderBook($('tab-book'));
   const claimable = GOALS.filter(g => !S.claimed[g.id] && g.val() >= g.need).length;
   $('goalBadge').textContent = claimable || '';
   $('goalBadge').classList.toggle('hidden', !claimable);
@@ -2344,7 +2503,7 @@ function renderHangar() {
   const pw = powerOf(s2);
   pv.append(shipBox); growthFx(shipBox, pw);
   const eqIcons = Object.keys(D.SLOTS).map(k => { const p = D.PARTS.find(x => x.id === S.equip[k]); return p ? `<span title="${p.name}">${p.icon}<sup>${S.parts[p.id]}</sup></span>` : '<span class="empty">＋</span>'; }).join('');
-  pv.insertAdjacentHTML('beforeend', `<div class="pvInfo"><b>${s2.F.name}</b><span>${s2.Wp.name} Lv ${S.weapons[s2.Wp.id] || 1}</span><div class="eq">${eqIcons}</div>
+  pv.insertAdjacentHTML('beforeend', `<div class="pvInfo"><small class="pvTtl" style="color:${TIERS[myTierV].c}">「${titleName()}」 ${myNick()}</small><b>${s2.F.name}</b><span>${s2.Wp.name} Lv ${S.weapons[s2.Wp.id] || 1}</span><div class="eq">${eqIcons}</div>
     ${statBar('체력', s2.maxHp / 230, s2.maxHp)}${statBar('속도', s2.speed / 1.8, Math.round(s2.speed * 100) + '%')}${statBar('화력', s2.dmg * s2.rate / 110, Math.round(s2.dmg * s2.rate))}
     ${powerLine(pw, myTierV)}<div class="ultLine">🌟 ${s2.F.ult.name}</div></div>`);
   const map = $('stageMap'); map.innerHTML = '';
@@ -2632,6 +2791,7 @@ $('musicBtn').addEventListener('click', () => { S.music = !S.music; A.setMusic(S
 $('sfxBtn').addEventListener('click', () => { S.sfx = !S.sfx; A.setSfx(S.sfx); save(); renderHangar(); });
 $('vibBtn').addEventListener('click', () => { S.vib = !S.vib; save(); buzz(40); renderHangar(); });
 $('fsBtn').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else goFullscreen(); });
+$('photo').addEventListener('click', showPhoto);
 $('copy').addEventListener('click', async () => {
   const t = `${$('copy').dataset.text || ''}\n${location.origin}${location.pathname}`;   // 친구가 바로 들어올 수 있게 주소도 붙인다
   try { await navigator.clipboard.writeText(t); $('copy').textContent = '복사했어요! 카톡에 붙여 넣으세요 ✔'; } catch (e) { $('copy').textContent = t; }
@@ -3295,6 +3455,7 @@ function hazardTick(dt) {
 }
 function hzStart(kind) {
   const Z = run.hz, first = !Z.seen[kind]; Z.seen[kind] = true;
+  bookMark('hz', kind);
   if (['fire', 'snow', 'erupt', 'vine', 'bolt'].includes(kind)) return hzStart2(kind, first);
   if (kind === 'gust') {
     const dir = Math.random() < 0.5 ? -1 : 1;
