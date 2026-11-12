@@ -106,17 +106,21 @@ function move(e) {
   const r = document.getElementById('stage').getBoundingClientRect();
   ghost.style.left = (e.clientX - r.left - ghost.offsetWidth / 2) + 'px'; ghost.style.top = (e.clientY - r.top - ghost.offsetHeight / 2) + 'px';
 }
-function mergeAll() {   // ⚡ 한번에 합치기: 같은 단계 둘을 낮은 단계부터 계속 합치고, 빈 칸은 대기 바구니에서 채운다
-  const g = F().grid; let n = 0, top = 0;
-  for (let guard = 0; guard < 400; guard++) {
-    fillPending();
-    const at = {}; let a = -1, b = -1;
-    for (let i = 0; i < slots(); i++) { const v = g[i]; if (!v) continue; if (at[v] !== undefined && (a < 0 || v < g[a])) { a = at[v]; b = i; } else if (at[v] === undefined) at[v] = i; }
-    if (a < 0) break;
-    g[a]++; g[b] = 0; n++; top = Math.max(top, g[a]); noteMax(g[a]);
+function mergeAll() {   // ⚡ 단계 합치기: 누를 때마다 짝이 있는 가장 낮은 단계만 모두 합친다(한 번 더 누르면 다음 단계)
+  const g = F().grid;
+  fillPending();
+  const cnt = {};
+  for (let i = 0; i < slots(); i++) if (g[i]) cnt[g[i]] = (cnt[g[i]] || 0) + 1;
+  const lv = Object.keys(cnt).map(Number).filter(v => cnt[v] >= 2).sort((a, b) => a - b)[0];
+  if (!lv) { cb.toast('합칠 짝이 없어요'); cb.sfx('click'); return; }
+  let a = -1, n = 0;
+  for (let i = 0; i < slots(); i++) {
+    if (g[i] !== lv) continue;
+    if (a < 0) { a = i; continue; }
+    g[a] = lv + 1; g[i] = 0; a = -1; n++;
   }
-  if (!n) { cb.toast('합칠 짝이 없어요'); cb.sfx('click'); return; }
-  cb.sfx('levelup'); cb.merged(top); cb.toast(`⚡ ${n}번 합쳤어요! 가장 높은 표창 Lv ${top}`);
+  noteMax(lv + 1); fillPending();
+  cb.sfx('levelup'); cb.merged(lv + 1); cb.toast(`⚡ Lv ${lv} 표창 ${n}쌍 → Lv ${lv + 1}! 한 번 더 누르면 다음 단계`);
   render();
 }
 function up(e) {

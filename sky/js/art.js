@@ -47,6 +47,7 @@ function blobPath(g, x, y, r, R, n = 20, rough = 0.32, sx = 1, sy = 1) {
 const wrap = (fn, y, span) => { fn(0); if (y < span) fn(TH); if (y > TH - span) fn(-TH); };
 
 // ---------- 배경 먼 층(땅·바다·우주) ----------
+const LANDS = [[], null, [], []];   // 테마별 섬(땅) 자리. 1번 사막은 어디나 땅
 function far(theme) {
   return once('far' + theme, () => mk(W, TH, (g, w, h) => {
     const R = rng(theme * 977 + 13);
@@ -57,6 +58,7 @@ function far(theme) {
       for (let i = 0; i < 1100; i++) { const x = R() * w, y = R() * h, l = 4 + R() * 10; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + l / 2, y - 2, x + l, y); g.stroke(); }
       for (let k = 0; k < 5; k++) {
         const x = 60 + R() * (w - 120), y = R() * h, r = 60 + R() * 90, seed = R() * 1e6;
+        LANDS[0].push({ x, y, r });   // 높은 구조물을 세울 땅
         wrap(dy => {
           const r2 = rng(seed);
           g.fillStyle = 'rgba(70,200,225,.28)'; blobPath(g, x, y + dy, r * 1.55, r2, 22, 0.35); g.fill();
@@ -125,6 +127,7 @@ function far(theme) {
       g.globalCompositeOperation = 'lighter';
       for (let k = 0; k < 4; k++) {
         const x = 60 + R() * (w - 120), y = R() * h, r = 55 + R() * 80, seed = R() * 1e6;
+        LANDS[2].push({ x, y, r });
         wrap(dy => {
           const r2 = rng(seed);
           g.globalCompositeOperation = 'source-over';
@@ -358,5 +361,5 @@ function enemyShadow(type) {
   return once('ens' + type, () => mk(EN, EN, g => { g.drawImage(enemyBase(type), 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(0, 0, EN, EN); }));
 }
 
-return { TH, glow, fire, smoke, far, near, ship, shipShadow, SHIP, SS, enemy, enemyShadow, EN, ES, metal };
+return { TH, lands: th => (far(th), LANDS[th]), glow, fire, smoke, far, near, ship, shipShadow, SHIP, SS, enemy, enemyShadow, EN, ES, metal };
 })();

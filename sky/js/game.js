@@ -22,7 +22,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.10';
+const VERSION = '0.11';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -280,6 +280,7 @@ function spawnWave() {
 
 function foeAI(e, dt) {
   if (e.arena) { arenaAI(e, dt); return; }
+  if (e.civ) { civAI(e, dt); return; }
   if (e.harmless) { critterAI(e, dt); return; }
   if (e.balloonT > 0) {   // 풍선: 둥실둥실 떠오르기만 한다
     e.balloonT -= dt; e.t += dt; e.y -= 30 * dt; e.x += Math.sin(e.t * 2 + e.nid) * 30 * dt;
@@ -822,6 +823,7 @@ function drawBlades() {
   }
 }
 function hitFoe(e, dmg, own) {
+  if (e.civ) { if (!e.dead && !e.gone) civHit(e, dmg); return; }   // 쏘면 안 되는 민간 비행체
   if (e.inv || e.dead || e.gone) return;
   if (e.sh > 0) {
     const a = Math.min(e.sh, dmg); e.sh -= a; dmg -= a; e.flash = 0.04;
@@ -1157,6 +1159,7 @@ function update(dt) {
   }
   if (boss && run.phase === 'boss') { if (boss.sneezeT > 0) boss.sneezeT -= dt; else bossAI(dt); }
   flakTick(dt);   // 재채기하는 동안은 쉰다
+  hazardTick(dt);   // 돌풍·토네이도·민간 비행체
   for (const e of foes) { if (e.type !== 'boss') foeAI(e, dt * (e.mod === 'swift' ? 1.6 : 1)); if (e.flash > 0) e.flash -= dt; }
 
   // 내 탄
@@ -1164,7 +1167,7 @@ function update(dt) {
     s.t += dt;
     if (s.homing) {
       let best = null, bd = 1e9;
-      for (const e of foes) { if (e.dead || e.inv || e.y < -20) continue; const d = Math.hypot(e.x - s.x, e.y - s.y); if (d < bd) { bd = d; best = e; } }
+      for (const e of foes) { if (e.dead || e.inv || e.civ || e.y < -20) continue; const d = Math.hypot(e.x - s.x, e.y - s.y); if (d < bd) { bd = d; best = e; } }
       const sp = Math.min(720, Math.hypot(s.vx, s.vy) + 900 * dt);
       let a = Math.atan2(s.vy, s.vx);
       if (best && s.t > 0.12) { let da = Math.atan2(best.y - s.y, best.x - s.x) - a; while (da > Math.PI) da -= TAU; while (da < -Math.PI) da += TAU; a += clamp(da, -7 * dt, 7 * dt); }
@@ -1263,7 +1266,7 @@ function update(dt) {
   }
 }
 
-function clearField() { foes = []; ebul = []; lasers = []; boss = null; if (run) run.flak = []; }
+function clearField() { foes = []; ebul = []; lasers = []; boss = null; if (run) { run.flak = []; if (run.hz) { run.hz.tw = []; run.hz.wind = null; } } }
 function afterBoss() {
   if (run.arena) { enterRest(true); return; }
   const m = run.mode;
@@ -1475,6 +1478,7 @@ function drawShipAt(g, id, x, y, s, bank, t, withShadow, look) {
 }
 
 function drawFoe(e) {
+  if (e.civ) { drawCiv(e); return; }
   const size = Art.EN / Art.ES, rot = e.arena ? Math.atan2(e.vy || 1, e.vx || 0) - Math.PI / 2 : e.type === 'weaver' ? e.t * 3 : e.type === 'netter' ? e.t * 0.8 : e.type === 'diver' && e.mode === 'go' ? Math.atan2(e.vy, e.vx) - Math.PI / 2 : 0;
   if (hasGround()) { ctx.save(); ctx.translate(e.x + 16, e.y + 26); ctx.scale(0.85, 0.85); ctx.rotate(rot); ctx.drawImage(Art.enemyShadow(e.type), -size / 2, -size / 2, size, size); ctx.restore(); }
   if (e.mod) {   // 정예 표시
@@ -1917,10 +1921,12 @@ function draw() {
   for (const e of foes) if (e.type !== 'boss') drawFoe(e);
   drawBoss();
   drawShots();
+  drawHazards(false);
   drawObst(false); drawPlayer(); drawObst(true); drawFinger();
   drawEbul();
   drawLasers();
   drawFx();
+  if (!run.arena) drawHazards(true);
   ctx.restore();
   ctx.restore();
   if (flash > 0) { ctx.fillStyle = `rgba(255,250,235,${flash * 0.6})`; ctx.fillRect(0, 0, W, H); }
@@ -2629,7 +2635,7 @@ function leaveRest() {
 const OB_KINDS = ['tower', 'spire', 'mill'];
 function makeObst(x, y, kind) {
   kind = kind || OB_KINDS[(Math.random() * 3) | 0];
-  return { x, y, kind, r: kind === 'spire' ? rnd(30, 42) : kind === 'mill' ? 24 : 22, h: kind === 'spire' ? rnd(80, 115) : kind === 'mill' ? 125 : 145, ph: Math.random() * TAU, bump: 0 };
+  return { x, y, kind, r: kind === 'spire' ? rnd(30, 42) : kind === 'mill' ? 24 : kind === 'bldg' ? rnd(24, 32) : 22, h: kind === 'spire' ? rnd(80, 115) : kind === 'mill' ? 125 : kind === 'bldg' ? rnd(130, 180) : 145, ph: Math.random() * TAU, bump: 0 };
 }
 function arenaObstacles() {
   const list = [], n = 9 + Math.min(6, run.stage);
@@ -2640,21 +2646,63 @@ function arenaObstacles() {
   }
   run.obst = list;
 }
+// 눕힌 땅 캔버스의 한 점(cx, cy)이 화면 어디에 보이는지(index.html #bg의 perspective·rotateX와 같은 계산). s는 멀수록 작아지는 배율
+const GR_A = 28 * Math.PI / 180, GR_C = Math.cos(GR_A), GR_S = Math.sin(GR_A), GR_D = 120 * W / 100;
+function groundPt(cx, cy) {
+  const X = cx * (W * 3) / BGW - W * 1.5, Y = cy * (H * 2.3) / BGH - H * 2.3, s = GR_D / (GR_D - Y * GR_S);
+  return [W / 2 + X * s, H + Y * GR_C * s, s];
+}
+const GR_ROW = 24;   // 땅 끝(지평선) 가까이에서 구조물이 나타난다
+function groundObstSpawn() {   // 스테이지·무한: 지나가는 섬(사막은 아무 데나) 위에 구조물이 서 있다
+  if (run.theme === 3) return;   // 우주에는 땅이 없다
+  const TH = Art.TH, md = v => (v % TH + TH) % TH, now = md(GR_ROW - bgY);
+  const prev = run.obTy === undefined ? now : run.obTy, moved = md(prev - now);
+  run.obTy = now;
+  if (run.phase !== 'waves' || boss || moved > 200) return;
+  const lv = run.stage + (run.loop || 0) * 5, kinds = run.theme === 2 ? ['bldg', 'bldg', 'tower'] : run.theme === 1 ? ['spire', 'spire', 'tower'] : OB_KINDS;
+  const put = (tx, ty) => {   // tx, ty: 땅 그림 안의 자리
+    if (tx < 110 || tx > 430) return;
+    const o = makeObst(0, 0, pick(kinds)); o.ground = true; o.gx = (BGW - W) / 2 + tx; o.k = GR_ROW + md(ty - now + TH / 2) - TH / 2 - bgY;
+    if (run.obst.some(q => q.ground && Math.abs(q.gx - o.gx) < 70 && Math.abs(q.k - o.k) < 90)) return;
+    run.obst.push(o);
+  };
+  const lands = Art.lands(run.theme);
+  if (lands) {
+    for (const L of lands) {
+      if (md(prev - L.y) >= moved) continue;   // 이번에 지평선을 넘어온 섬
+      const n = 1 + (Math.random() < 0.6) + (lv >= 3 && Math.random() < 0.5);
+      for (let i = 0; i < n; i++) { const a = rnd(0, TAU), d = rnd(0, L.r * 0.7); put(L.x + Math.cos(a) * d, L.y + Math.sin(a) * d * 0.8); }
+    }
+  } else if ((run.obT = (run.obT === undefined ? 4 : run.obT) - moved / 45) <= 0) {   // 사막은 어디나 땅
+    run.obT = rnd(5, 9) * Math.max(0.6, 1 - lv * 0.05);
+    put(rnd(120, 420), now);
+    if (lv >= 3 && Math.random() < 0.4) put(rnd(120, 420), now + rnd(-60, 60));
+  }
+}
 function obstTick(dt) {
   if (!run.obst) run.obst = [];
   if (!run.arena) {
-    if (run.coop || run.mode === 'dojo' || run.mode === 'rush') return;
-    for (const o of run.obst) o.y += 120 * dt;   // 가까운 땅과 같은 빠르기로 내려온다
-    run.obst = run.obst.filter(o => o.y < H + 180);
-    if (run.phase === 'waves' && !boss && (run.obT = (run.obT === undefined ? 8 : run.obT) - dt) <= 0) { run.obT = rnd(6, 11); run.obst.push(makeObst(rnd(80, W - 80), -40)); }
+    if (run.coop || run.mode === 'dojo' || run.mode === 'rush' || run.mode === 'auto') { run.obst = []; return; }
+    groundObstSpawn();
+    for (const o of run.obst) { const g = groundPt(o.gx, o.k + bgY); o.x = g[0]; o.y = g[1]; o.s = g[2]; }   // 땅과 함께 다가온다
+    run.obst = run.obst.filter(o => o.y - o.h * o.s < H + 30);
   }
   for (const o of run.obst) {
     if (o.bump > 0) o.bump -= dt;
     if (P.down > 0) continue;
+    if (o.ground) {   // 비행기 높이에 닿는 윗부분(위 60%)에 부딪힌다
+      if (o.k + bgY < 90) continue;   // 아직 지평선 너머
+      const s = o.s, top = o.y - o.h * s, bot = o.y - o.h * s * 0.4, cy = clamp(P.y, top, bot), dx = P.x - o.x, dy = P.y - cy, d = Math.hypot(dx, dy), m = o.r * s * (o.kind === 'mill' && P.y < top + 40 * s ? 1.9 : 0.75) + st.hit + 8;
+      if (d < m) {
+        if (Math.abs(dy) < 1) P.x = o.x + (dx >= 0 ? 1 : -1) * m;
+        else { const k = d || 1; P.x = o.x + dx / k * m; P.y = cy + dy / k * m; }
+        if (o.bump <= 0) { o.bump = 0.5; shake = Math.max(shake, 4); A.sfx('hit'); }
+      }
+      continue;
+    }
     const dx = P.x - o.x, dy = P.y - o.y, d = Math.hypot(dx, dy), m = o.r + 20;
     if (d < m) {   // 부딪히면 밀려난다(다치지는 않는다)
-      if (run.arena || Math.abs(dy) < m * 0.6) { const k = d || 1; P.x = o.x + dx / k * m; P.y = o.y + dy / k * m; }
-      else P.x = o.x + (dx >= 0 ? 1 : -1) * Math.sqrt(Math.max(0, m * m - dy * dy));
+      const k = d || 1; P.x = o.x + dx / k * m; P.y = o.y + dy / k * m;
       if (o.bump <= 0) { o.bump = 0.5; shake = Math.max(shake, 4); A.sfx('hit'); }
     }
     if (run.arena) for (const e of foes) {
@@ -2666,36 +2714,213 @@ function obstTick(dt) {
 }
 function drawObst(front) {   // front: 로봇보다 앞(아래)에 있는 것만 / 뒤에 있는 것만
   if (!run.obst || !run.obst.length) return;
-  for (const o of run.obst) {
+  const list = run.arena ? run.obst : run.obst.slice().sort((a, b) => a.y - b.y);   // 먼 것부터
+  for (const o of list) {
     if ((o.y > P.y) !== front) continue;
     if (o.y - o.h > cam.y + H + 40 || o.y < cam.y - 60 || o.x < cam.x - 120 || o.x > cam.x + W + 120) continue;
-    const { x, y, r, h } = o;
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(x + h * 0.32, y + 6, r * 1.15 + h * 0.18, r * 0.5, -0.25, 0, TAU); ctx.fill();   // 그림자
-    if (o.kind === 'spire') {   // 바위 기둥
-      const gr = ctx.createLinearGradient(x - r, 0, x + r, 0); gr.addColorStop(0, '#5e5246'); gr.addColorStop(0.5, '#9a8a74'); gr.addColorStop(1, '#4a4036');
-      ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(x - r, y); ctx.lineTo(x - r * 0.62, y - h); ctx.lineTo(x + r * 0.55, y - h - 4); ctx.lineTo(x + r, y); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = 'rgba(40,30,20,.45)'; ctx.lineWidth = 2; for (const k of [0.3, 0.55, 0.8]) { ctx.beginPath(); ctx.moveTo(x - r * (1 - k * 0.4), y - h * k); ctx.lineTo(x + r * (0.9 - k * 0.4), y - h * k + 5); ctx.stroke(); }
-      ctx.fillStyle = '#5c9a4c'; ctx.beginPath(); ctx.ellipse(x - r * 0.03, y - h - 2, r * 0.66, r * 0.26, 0, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#7cc266'; ctx.beginPath(); ctx.ellipse(x - r * 0.12, y - h - 5, r * 0.4, r * 0.15, 0, 0, TAU); ctx.fill();
-    } else if (o.kind === 'mill') {   // 풍차
-      ctx.fillStyle = '#e8eef5'; ctx.beginPath(); ctx.moveTo(x - 8, y); ctx.lineTo(x - 3, y - h); ctx.lineTo(x + 3, y - h); ctx.lineTo(x + 8, y); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#b9c6d4'; ctx.fillRect(x + 1, y - h, 3, h);
-      ctx.translate(x, y - h); ctx.rotate(T * 1.6 + o.ph); ctx.fillStyle = '#f4f8fc';
-      for (let k = 0; k < 3; k++) { ctx.rotate(TAU / 3); ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(54, -6); ctx.lineTo(58, 0); ctx.lineTo(0, 4); ctx.closePath(); ctx.fill(); }
-      ctx.fillStyle = '#c8d2de'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, TAU); ctx.fill();
-    } else {   // 전파탑
-      ctx.strokeStyle = '#c9ced8'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(x - r, y); ctx.lineTo(x - 3, y - h); ctx.moveTo(x + r, y); ctx.lineTo(x + 3, y - h); ctx.stroke();
-      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(220,226,236,.8)';
-      for (let k = 0; k < 6; k++) { const a = k / 6, b = (k + 1) / 6, wa = r * (1 - a) + 3 * a, wb = r * (1 - b) + 3 * b; ctx.beginPath(); ctx.moveTo(x - wa, y - h * a); ctx.lineTo(x + wb, y - h * b); ctx.moveTo(x + wa, y - h * a); ctx.lineTo(x - wb, y - h * b); ctx.stroke(); }
-      ctx.fillStyle = '#e94b4b'; ctx.fillRect(x - r * 0.75, y - h * 0.3, r * 1.5, 4); ctx.fillRect(x - r * 0.45, y - h * 0.62, r * 0.9, 4);
-      const on = Math.sin(T * 4 + o.ph) > 0; ctx.fillStyle = on ? '#ff4040' : '#7a2020'; ctx.beginPath(); ctx.arc(x, y - h - 4, 5, 0, TAU); ctx.fill();
-      if (on) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,60,60,.35)'; ctx.beginPath(); ctx.arc(x, y - h - 4, 14, 0, TAU); ctx.fill(); }
+    if (o.ground) {
+      const a = clamp((o.k + bgY - GR_ROW) / 70, 0, 1);   // 지평선 안개에서 서서히 드러난다
+      if (a <= 0) { ctx.restore(); continue; }
+      ctx.globalAlpha = a; ctx.translate(o.x, o.y); ctx.scale(o.s, o.s);
+      obstShape(o, 0, 0);
+      ctx.restore();
+      if (o.bump > 0) { ctx.strokeStyle = `rgba(255,220,120,${o.bump})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(o.x, o.y - o.h * o.s * 0.75, o.r * o.s + 8, 0, TAU); ctx.stroke(); }
+      continue;
     }
+    obstShape(o, o.x, o.y);
     ctx.restore();
     if (o.bump > 0) { ctx.strokeStyle = `rgba(255,220,120,${o.bump})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(o.x, o.y, o.r + 6, 0, TAU); ctx.stroke(); }
   }
+}
+function obstShape(o, x, y) {
+  const { r, h } = o;
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(x + h * 0.32, y + 6, r * 1.15 + h * 0.18, r * 0.5, -0.25, 0, TAU); ctx.fill();   // 그림자
+  if (o.kind === 'bldg') {   // 밤 도시의 높은 빌딩
+    const w = r * 1.5, gr = ctx.createLinearGradient(x - w / 2, 0, x + w / 2, 0); gr.addColorStop(0, '#1b2740'); gr.addColorStop(0.55, '#33476b'); gr.addColorStop(1, '#141c2e');
+    ctx.fillStyle = gr; ctx.fillRect(x - w / 2, y - h, w, h);
+    ctx.fillStyle = '#0f1626'; ctx.beginPath(); ctx.moveTo(x - w / 2, y - h); ctx.lineTo(x - w / 2 + 6, y - h - 7); ctx.lineTo(x + w / 2 + 6, y - h - 7); ctx.lineTo(x + w / 2, y - h); ctx.fill();
+    let n = (o.ph * 1000) | 0;
+    for (let yy = y - h + 8; yy < y - 6; yy += 11) for (let xx = x - w / 2 + 5; xx < x + w / 2 - 5; xx += 9) {
+      n = (n * 1103515245 + 12345) & 0x7fffffff;
+      if (n % 5 < 2) continue;
+      ctx.fillStyle = n % 3 ? 'rgba(255,214,120,.85)' : 'rgba(140,210,255,.8)'; ctx.fillRect(xx, yy, 4, 5);
+    }
+    const on = Math.sin(T * 3 + o.ph) > 0; ctx.fillStyle = on ? '#ff4040' : '#5a1818'; ctx.fillRect(x - 1.5, y - h - 22, 3, 15); ctx.beginPath(); ctx.arc(x, y - h - 23, 4, 0, TAU); ctx.fill();
+  } else if (o.kind === 'spire') {   // 바위 기둥
+    const gr = ctx.createLinearGradient(x - r, 0, x + r, 0); gr.addColorStop(0, '#5e5246'); gr.addColorStop(0.5, '#9a8a74'); gr.addColorStop(1, '#4a4036');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(x - r, y); ctx.lineTo(x - r * 0.62, y - h); ctx.lineTo(x + r * 0.55, y - h - 4); ctx.lineTo(x + r, y); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,30,20,.45)'; ctx.lineWidth = 2; for (const k of [0.3, 0.55, 0.8]) { ctx.beginPath(); ctx.moveTo(x - r * (1 - k * 0.4), y - h * k); ctx.lineTo(x + r * (0.9 - k * 0.4), y - h * k + 5); ctx.stroke(); }
+    ctx.fillStyle = '#5c9a4c'; ctx.beginPath(); ctx.ellipse(x - r * 0.03, y - h - 2, r * 0.66, r * 0.26, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#7cc266'; ctx.beginPath(); ctx.ellipse(x - r * 0.12, y - h - 5, r * 0.4, r * 0.15, 0, 0, TAU); ctx.fill();
+  } else if (o.kind === 'mill') {   // 풍차
+    ctx.fillStyle = '#e8eef5'; ctx.beginPath(); ctx.moveTo(x - 8, y); ctx.lineTo(x - 3, y - h); ctx.lineTo(x + 3, y - h); ctx.lineTo(x + 8, y); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#b9c6d4'; ctx.fillRect(x + 1, y - h, 3, h);
+    ctx.translate(x, y - h); ctx.rotate(T * 1.6 + o.ph); ctx.fillStyle = '#f4f8fc';
+    for (let k = 0; k < 3; k++) { ctx.rotate(TAU / 3); ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(54, -6); ctx.lineTo(58, 0); ctx.lineTo(0, 4); ctx.closePath(); ctx.fill(); }
+    ctx.fillStyle = '#c8d2de'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, TAU); ctx.fill();
+  } else {   // 전파탑
+    ctx.strokeStyle = '#c9ced8'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x - r, y); ctx.lineTo(x - 3, y - h); ctx.moveTo(x + r, y); ctx.lineTo(x + 3, y - h); ctx.stroke();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(220,226,236,.8)';
+    for (let k = 0; k < 6; k++) { const a = k / 6, b = (k + 1) / 6, wa = r * (1 - a) + 3 * a, wb = r * (1 - b) + 3 * b; ctx.beginPath(); ctx.moveTo(x - wa, y - h * a); ctx.lineTo(x + wb, y - h * b); ctx.moveTo(x + wa, y - h * a); ctx.lineTo(x - wb, y - h * b); ctx.stroke(); }
+    ctx.fillStyle = '#e94b4b'; ctx.fillRect(x - r * 0.75, y - h * 0.3, r * 1.5, 4); ctx.fillRect(x - r * 0.45, y - h * 0.62, r * 0.9, 4);
+    const on = Math.sin(T * 4 + o.ph) > 0; ctx.fillStyle = on ? '#ff4040' : '#7a2020'; ctx.beginPath(); ctx.arc(x, y - h - 4, 5, 0, TAU); ctx.fill();
+    if (on) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,60,60,.35)'; ctx.beginPath(); ctx.arc(x, y - h - 4, 14, 0, TAU); ctx.fill(); }
+  }
+}
+// ---------- 하늘의 사건: 돌풍·토네이도(맵과 단계에 따라), 쏘면 안 되는 배달 드론·민간 여객기 ----------
+// 스테이지·무한에서만(협동·보스 러시·표창 공방 제외). 단계가 오를수록 종류가 늘고 자주 온다.
+const hzLv = () => run.stage + (run.loop || 0) * 5 + (run.mode === 'endless' ? run.wave >> 1 : 0);
+function hzKinds() {
+  const lv = hzLv(), th = run.theme, out = [];
+  if (th === 3) { if (lv >= 3) out.push('drone'); return out; }   // 우주: 바람이 없다
+  if (lv >= 2) out.push('gust', 'drone');
+  if ((th === 1 && lv >= 2) || lv >= 5) out.push('tornado');
+  if (lv >= 3) out.push('liner');
+  return out;
+}
+function hazardTick(dt) {
+  if (run.arena || run.coop || !(run.mode === 'stage' || run.mode === 'endless')) return;
+  if (!run.hz) run.hz = { t: /fast/.test(location.hash) ? 4 : 14, wind: null, tw: [], seen: {} };
+  const Z = run.hz;
+  if (run.phase === 'waves' && !boss && (Z.t -= dt) <= 0) {
+    const ks = hzKinds();
+    Z.t = rnd(12, 18) * Math.max(0.6, 1 - hzLv() * 0.04);
+    if (ks.length) hzStart(pick(ks));
+  }
+  const w = Z.wind;   // 돌풍: 경고 뒤 4초 동안 옆으로 민다
+  if (w) {
+    w.t += dt;
+    if (w.t > w.warn && w.t < w.warn + w.dur && run.phase !== 'dead') {
+      const k = Math.min(1, (w.t - w.warn) / 0.4, (w.warn + w.dur - w.t) / 0.4), push = w.dir * 165 * k * dt;
+      if (!(P.down > 0) && !P.trap) { P.tx += push; P.x += push * 0.6; if (drag) drag.ox += push; }
+      for (const b of ebul) b.x += push * 0.5;
+      for (const d of drops) d.x += push * 0.4;
+    }
+    if (w.t > w.warn + w.dur) Z.wind = null;
+  }
+  for (const o of Z.tw) {   // 토네이도: 천천히 내려오며 끌어당긴다
+    o.t += dt; o.y += o.vy * dt; o.x += Math.sin(o.t * 0.7 + o.ph) * 40 * dt;
+    if (o.hurtT > 0) o.hurtT -= dt;
+    const dx = o.x - P.x, dy = o.y - P.y, d = Math.hypot(dx, dy);
+    if (d < 260 && !(P.down > 0) && run.phase !== 'dead') {
+      const f = (1 - d / 260) * 240 * dt / (d || 1), sw = (1 - d / 260) * 120 * dt / (d || 1);
+      const mx = dx * f - dy * sw, my = dy * f + dx * sw;   // 빨아들이며 빙글 돈다
+      P.tx += mx; P.ty += my; P.x += mx * 0.6; P.y += my * 0.6; if (drag) { drag.ox += mx; drag.oy += my; }
+      if (d < 42 && !(o.hurtT > 0)) { o.hurtT = 0.9; hurtPlayer(run.d.dmg * 0.6); shake = Math.max(shake, 6); }
+    }
+    for (const b of ebul) { const bx = o.x - b.x, by = o.y - b.y, bd = Math.hypot(bx, by); if (bd < 200 && bd > 1) { b.vx += (bx / bd * 90 - by / bd * 160) * dt; b.vy += (by / bd * 90 + bx / bd * 160) * dt; } }
+  }
+  Z.tw = Z.tw.filter(o => o.y < H + 200);
+}
+function hzStart(kind) {
+  const Z = run.hz, first = !Z.seen[kind]; Z.seen[kind] = true;
+  if (kind === 'gust') {
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    Z.wind = { dir, t: 0, warn: 1.3, dur: 4 };
+    say(dir > 0 ? '💨 돌풍! 오른쪽으로 →' : '← 왼쪽으로 돌풍! 💨', W / 2, H * 0.36, '#cfeaff', 26, 1.6);
+  } else if (kind === 'tornado') {
+    Z.tw.push({ x: rnd(120, W - 120), y: -140, vy: 62, t: 0, ph: rnd(0, TAU), hurtT: 0 });
+    say('🌪️ 토네이도! 가운데로 빨려 들지 마세요', W / 2, H * 0.36, '#ffe0a8', 22, 2);
+  } else if (kind === 'drone') {
+    const n = hzLv() >= 6 ? 2 : 1;
+    for (let i = 0; i < n; i++) addFoe('ddrone', rnd(70, W - 70), -40 - i * 140, { civ: true, harmless: true, r: 20, hp: 1, maxHp: 1, vy: 105, vx: 0, ph: rnd(0, TAU), hits: 0 });
+    say(first ? '🚁 배달 드론! 쏘지 말고 비켜 주세요' : '🚁 배달 드론 지나갑니다', W / 2, H * 0.36, '#bff5c8', 22, 1.8);
+  } else if (kind === 'liner') {
+    addFoe('liner', rnd(110, W - 110), -120, { civ: true, harmless: true, r: 50, hp: 1, maxHp: 1, vy: 95, vx: 0, hits: 0, warnT: 0 });
+    say('✈️ 민간 여객기 통과 중! 쏘면 안 돼요', W / 2, H * 0.36, '#ffffff', 24, 2);
+    A.sfx('warning');
+  }
+}
+function civAI(e, dt) {
+  e.t += dt;
+  if (e.type === 'ddrone') { e.y += e.vy * dt; e.x += Math.sin(e.t * 1.8 + e.ph) * 50 * dt; }
+  else { e.y += e.vy * dt; if (e.warnT > 0) e.warnT -= dt; }
+  if (e.y > H + 90) {   // 무사히 지나갔다
+    e.gone = true;
+    if (e.type === 'ddrone' && !e.broke) { say('📦 배달 완료! 고철 +2', clamp(e.x, 90, W - 90), H - 120, '#9dffcf', 18, 1.4); gainScrap(2); }
+    if (e.type === 'liner') {
+      if (e.hits <= 3) { say('✈️ 승객 모두 무사! 고철 +5', W / 2, H * 0.4, '#9dffcf', 22, 1.8); gainScrap(5); run.score += 500 * run.stage; }
+      else say('✈️ 여객기가 겨우 빠져나갔다…', W / 2, H * 0.4, '#c9d2dc', 20, 1.6);
+    }
+  }
+}
+function civHit(e, dmg) {   // 쏘면 벌점(점수 깎이고 콤보가 끊긴다)
+  run.combo = 0; e.flash = 0.08; e.hits++;
+  if (e.type === 'ddrone') {
+    e.broke = true; e.dead = true; run.score = Math.max(0, run.score - 300 * run.stage);
+    spark(e.x, e.y, 12, '#ffd166', 180, 0.4, 3); A.sfx('boomS');
+    fx.push({ k: 'debris', x: e.x, y: e.y + 10, vx: rnd(-30, 30), vy: 160, t: 0, life: 0.9, size: 6, rot: 0, vr: 6 });
+    say('📦 배달 실패… 점수 -' + 300 * run.stage, e.x, e.y - 24, '#ff9a9a', 18, 1.4);
+  } else {
+    run.score = Math.max(0, run.score - 40 * run.stage); A.sfx('hit');
+    if (!(e.warnT > 0)) { e.warnT = 0.8; say('⚠️ 민간 여객기! 쏘지 마세요', clamp(e.x, 130, W - 130), e.y + 70, '#ff8080', 20, 0.9); }
+  }
+}
+function drawCiv(e) {
+  ctx.save(); ctx.translate(e.x, e.y);
+  if (hasGround()) { ctx.save(); ctx.translate(e.type === 'liner' ? 40 : 16, e.type === 'liner' ? 60 : 26); ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(0, 0, e.type === 'liner' ? 70 : 20, e.type === 'liner' ? 22 : 10, 0, 0, TAU); ctx.fill(); ctx.restore(); }
+  if (e.type === 'ddrone') {   // 네 날개 배달 드론과 매달린 상자
+    ctx.rotate(Math.sin(e.t * 1.8 + e.ph) * 0.15);
+    ctx.strokeStyle = '#3c4656'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-16, -16); ctx.lineTo(16, 16); ctx.moveTo(16, -16); ctx.lineTo(-16, 16); ctx.stroke();
+    for (const [x, y] of [[-16, -16], [16, -16], [-16, 16], [16, 16]]) { ctx.fillStyle = 'rgba(220,235,255,.45)'; ctx.beginPath(); ctx.ellipse(x, y, 11, 3 + Math.abs(Math.sin(T * 40 + x)) * 4, T * 30, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = e.flash > 0 ? '#fff' : '#eef3f8'; ctx.beginPath(); ctx.arc(0, 0, 9, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#35d07f'; ctx.fillRect(-3, -3, 6, 6);
+    ctx.strokeStyle = 'rgba(80,60,40,.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, 8); ctx.lineTo(0, 18); ctx.stroke();
+    ctx.fillStyle = '#c8955a'; ctx.fillRect(-9, 18, 18, 14); ctx.strokeStyle = '#8a5f30'; ctx.strokeRect(-9, 18, 18, 14); ctx.beginPath(); ctx.moveTo(0, 18); ctx.lineTo(0, 32); ctx.stroke();
+    if (Math.sin(T * 6) > 0) { ctx.fillStyle = '#4dff9e'; ctx.beginPath(); ctx.arc(0, -10, 2.5, 0, TAU); ctx.fill(); }
+  } else {   // 민간 여객기(아래로 날아간다)
+    const hit = e.flash > 0;
+    ctx.fillStyle = hit ? '#ffd0d0' : '#dfe6ee';   // 날개
+    ctx.beginPath(); ctx.moveTo(-6, -8); ctx.lineTo(-72, -26); ctx.lineTo(-72, -16); ctx.lineTo(-8, 18); ctx.lineTo(8, 18); ctx.lineTo(72, -16); ctx.lineTo(72, -26); ctx.lineTo(6, -8); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-5, -54); ctx.lineTo(-26, -66); ctx.lineTo(-26, -60); ctx.lineTo(-4, -44); ctx.lineTo(4, -44); ctx.lineTo(26, -60); ctx.lineTo(26, -66); ctx.lineTo(5, -54); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#9aa6b4'; for (const s of [-1, 1]) { ctx.fillRect(s * 32 - 5, -14, 10, 20); ctx.fillRect(s * 52 - 4, -20, 8, 16); }   // 엔진
+    const gr = ctx.createLinearGradient(-12, 0, 12, 0); gr.addColorStop(0, '#c9d2dc'); gr.addColorStop(0.5, hit ? '#fff' : '#ffffff'); gr.addColorStop(1, '#b6c0cc');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(0, -4, 11, 66, 0, 0, TAU); ctx.fill();   // 몸통
+    ctx.fillStyle = '#2a7de1'; ctx.fillRect(-11, 6, 22, 5);
+    ctx.fillStyle = '#e84a5f'; ctx.beginPath(); ctx.moveTo(-2, -60); ctx.lineTo(0, -74); ctx.lineTo(2, -60); ctx.fill();   // 꼬리 날개
+    ctx.fillStyle = '#2b3a52'; for (let k = -44; k < 50; k += 9) { ctx.fillRect(-7, k, 3, 4); ctx.fillRect(4, k, 3, 4); }   // 창문
+    ctx.fillStyle = '#1d2a3c'; ctx.beginPath(); ctx.ellipse(0, 56, 6, 5, 0, 0, Math.PI); ctx.fill();   // 조종석
+    const on = Math.sin(T * 5) > 0;
+    if (on) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,60,60,.9)'; ctx.beginPath(); ctx.arc(-72, -21, 3.5, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(60,255,120,.9)'; ctx.beginPath(); ctx.arc(72, -21, 3.5, 0, TAU); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
+    ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText('🚫 민간기', 0, -86);
+  }
+  ctx.restore();
+}
+function drawHazards(top) {   // top=false: 땅 위 토네이도 / top=true: 화면 위 바람 줄기
+  const Z = run.hz;
+  if (!Z) return;
+  if (!top) {
+    for (const o of Z.tw) {
+      const dust = run.theme === 1 ? [200, 160, 110] : run.theme === 2 ? [120, 140, 180] : [190, 200, 210];
+      ctx.save(); ctx.translate(o.x, o.y);
+      ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(10, 30, 70, 22, 0, 0, TAU); ctx.fill();
+      for (let i = 0; i < 9; i++) {   // 아래(땅)는 좁고 위로 갈수록 넓은 깔때기
+        const k = i / 8, y = 30 - k * 190, rx = 18 + k * 78, sway = Math.sin(T * 3 + k * 4 + o.ph) * 14 * k;
+        ctx.strokeStyle = `rgba(${dust[0]},${dust[1]},${dust[2]},${0.55 - k * 0.25})`; ctx.lineWidth = 7 - k * 3;
+        ctx.beginPath(); ctx.ellipse(sway, y, rx, rx * 0.3, 0, T * 6 + i, T * 6 + i + Math.PI * 1.4); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    return;
+  }
+  const w = Z.wind;
+  if (!w) return;
+  ctx.save();
+  if (w.t < w.warn) {   // 경고 화살표
+    const a = 0.5 + 0.5 * Math.sin(w.t * 14);
+    ctx.globalAlpha = a; ctx.fillStyle = '#cfeaff'; ctx.font = 'bold 54px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(w.dir > 0 ? '➜➜' : '⬅⬅', w.dir > 0 ? W - 90 : 90, H * 0.5);
+  } else {
+    const k = Math.min(1, (w.t - w.warn) / 0.4, (w.warn + w.dur - w.t) / 0.4);
+    ctx.strokeStyle = `rgba(230,245,255,${0.35 * k})`; ctx.lineWidth = 2;
+    for (let i = 0; i < 18; i++) {
+      const y = (i * 61 + 23) % H, len = 60 + (i * 37) % 90, x = ((w.t * 900 + i * 173) % (W + 300)) - 150, xx = w.dir > 0 ? x : W - x;
+      ctx.beginPath(); ctx.moveTo(xx, y); ctx.quadraticCurveTo(xx - w.dir * len / 2, y - 6, xx - w.dir * len, y); ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 function arenaStart() {
   run.arena = true; run.keeper = null; run.spawnT = 1.2; run.waveDur = /fast/.test(location.hash) ? 12 : 40;
