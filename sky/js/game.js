@@ -26,7 +26,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.33';
+const VERSION = '0.34';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -2899,6 +2899,7 @@ function startEscape(o) {   // 탈출 작전(js/escape.js)
     img: k => IMG[k] || null, frame: S.frame,
     best: () => S.records.escape || 0,
     gain: (sc, dist, stars) => { S.records.escapeStars = Math.max(S.records.escapeStars || 0, stars || 0); S.scrap += sc; S.records.escape = Math.max(S.records.escape || 0, dist); S.plays++; dcount('runs'); weekRoll(); S.week.pts += 1 + (stars || 0); save(); Rank.league(S.week.pts); },
+    easy: () => (S.escEasy !== undefined ? S.escEasy : (S.records.escape || 0) < 500), setEasy: v => { S.escEasy = v; save(); },   // 🐢 연습 모드: 처음(최고 500m 전)엔 켜짐
     home: () => showHangar(), saveGhost, loadGhost,
   }, o);
 }
