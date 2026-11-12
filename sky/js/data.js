@@ -78,12 +78,17 @@ const BOSSES = [
   { id: 'core', name: '코어 요새', hp: 6600, par: 60, tip: '네 갈래 소용돌이 → 조준 광선 → 여섯 갈래가 거꾸로 돈다' },
 ];
 
-// 스테이지 배경: 네 가지가 돌아가며 나온다
+// 스테이지 배경(맵) 9가지. 스테이지마다 나오는 순서는 game.js의 THEME_ORDER
 const THEMES = [
-  { name: '푸른 하늘', sky: ['#1b5fbf', '#4a9ae8', '#a8d8ff'], cloud: 'rgba(255,255,255,', stars: false },
-  { name: '노을 구름', sky: ['#2a1650', '#8a3a6a', '#ff8a5c'], cloud: 'rgba(255,200,190,', stars: false },
-  { name: '밤바다', sky: ['#040c1f', '#0b2a4a', '#13506e'], cloud: 'rgba(160,200,255,', stars: true, sea: true },
+  { name: '푸른 바다 섬', sky: ['#1b5fbf', '#4a9ae8', '#a8d8ff'], cloud: 'rgba(255,255,255,', stars: false },
+  { name: '노을 사막', sky: ['#2a1650', '#8a3a6a', '#ff8a5c'], cloud: 'rgba(255,200,190,', stars: false },
+  { name: '밤바다 도시', sky: ['#040c1f', '#0b2a4a', '#13506e'], cloud: 'rgba(160,200,255,', stars: true, sea: true },
   { name: '우주', sky: ['#02030a', '#0a0b24', '#1a0f33'], cloud: 'rgba(150,120,255,', stars: true, space: true },
+  { name: '녹슨 공장', sky: ['#1a1d22', '#4a4a48', '#8a8070'], cloud: 'rgba(120,120,120,', stars: false },
+  { name: '얼음 설원', sky: ['#6f8fb0', '#c8dcea', '#eef6fb'], cloud: 'rgba(240,248,255,', stars: false },
+  { name: '용암 화산', sky: ['#120806', '#3a1a10', '#7a3018'], cloud: 'rgba(90,60,50,', stars: false },
+  { name: '밀림 유적', sky: ['#24402a', '#6f9a6a', '#c9e0b8'], cloud: 'rgba(220,240,220,', stars: false },
+  { name: '구름 위 성', sky: ['#f2b8a0', '#f6d8d0', '#e8e0f4'], cloud: 'rgba(255,240,245,', stars: false },
 ];
 
 return { FRAMES, WEAPONS, SLOTS, PARTS, PART_COST, WEAPON_COST, MAX_LV, CARDS, ENEMIES, BOSSES, THEMES };

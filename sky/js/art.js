@@ -47,7 +47,7 @@ function blobPath(g, x, y, r, R, n = 20, rough = 0.32, sx = 1, sy = 1) {
 const wrap = (fn, y, span) => { fn(0); if (y < span) fn(TH); if (y > TH - span) fn(-TH); };
 
 // ---------- 배경 먼 층(땅·바다·우주) ----------
-const LANDS = [[], null, [], []];   // 테마별 섬(땅) 자리. 1번 사막은 어디나 땅
+const LANDS = [[], null, [], [], null, [], [], [], []];   // 테마별 섬(땅) 자리. 1번 사막은 어디나 땅
 function far(theme) {
   return once('far' + theme, () => mk(W, TH, (g, w, h) => {
     const R = rng(theme * 977 + 13);
@@ -200,6 +200,12 @@ function near(theme) {
       { n: 7, col: [255, 255, 255], a: 0.85, shade: 'rgba(15,40,80,.18)', sy: 0.7 },
       { n: 8, col: [255, 196, 170], a: 0.6, shade: 'rgba(60,20,10,.18)', sy: 0.45 },
       { n: 6, col: [120, 150, 200], a: 0.18, shade: null, sy: 0.6 },
+      null,
+      { n: 6, col: [95, 92, 90], a: 0.4, shade: null, sy: 0.6 },   // 공장 연기
+      { n: 7, col: [240, 248, 255], a: 0.55, shade: 'rgba(60,80,110,.12)', sy: 0.6 },   // 설원 눈구름
+      { n: 6, col: [70, 50, 45], a: 0.42, shade: null, sy: 0.5 },   // 화산재
+      { n: 6, col: [220, 240, 220], a: 0.3, shade: null, sy: 0.6 },   // 밀림 안개
+      { n: 9, col: [255, 240, 245], a: 0.8, shade: 'rgba(120,80,120,.15)', sy: 0.6 },   // 구름 위 성
     ][theme];
     for (let k = 0; k < cfg.n; k++) {
       const x = R() * w, y = R() * h, r = 50 + R() * 70, seed = R() * 1e6;

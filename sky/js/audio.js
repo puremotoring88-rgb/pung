@@ -118,7 +118,7 @@ const SONGS = [
   { id: 'dnb', name: '번개 브레이크', genre: '드럼앤베이스', k: 1.1, root: 50, prog: [[0, 3, 7], [0, 3, 7], [8, 12, 15], [7, 10, 14]], lead: 'sawtooth', bass: 'sine', bassPat: 'x.......x.x.....',
     pat: { k: 'x.........x.....', S: '....x.......x...', h: 'oooooooooooooooo' } },
 ];
-const ROOTS = [45, 48, 43, 50];   // 스테이지 배경마다 다른 조(A, C, G, D)
+const ROOTS = [45, 48, 43, 50, 41, 52, 40, 47, 53];   // 스테이지 배경마다 다른 조(A, C, G, D)
 function music(m, th) {
   if (!ac) return;
   if (m === mood && (th || 0) === theme) return;
@@ -153,7 +153,7 @@ function tick() {
   while (nextT < ac.currentTime + 0.12) { playStep(M, step, nextT, sp); nextT += sp; step++; }
 }
 function playStep(M, s, t, sp) {
-  const bar = Math.floor(s / 16) % 4, i = s % 16, ch = M.prog[bar], root = M.root ? M.root - 12 : mood === 'hangar' ? 50 : ROOTS[theme % 4];
+  const bar = Math.floor(s / 16) % 4, i = s % 16, ch = M.prog[bar], root = M.root ? M.root - 12 : mood === 'hangar' ? 50 : ROOTS[theme % ROOTS.length];
   if (M.pat) {   // 리듬 곡의 북 무늬
     const P = M.pat, on = (p, ...c) => p && c.includes(p[i]), sv = M.soft ? 0.55 : 1;
     if (on(P.k, 'x')) osc(musicBus, 'sine', M.soft ? 110 : 150, 40, t, 0.18, 0.5 * sv);
