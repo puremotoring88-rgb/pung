@@ -11,7 +11,7 @@ const AK = 'boltwing.acct';   // 로그인 정보(아이디·접속표). 기록(
 const OWN = 'boltwing.owner';   // 이 기기 기록의 주인 { uid, at, dirty }
 // 📴 혼자 하기(인터넷 없이): 주인이 LOCAL인 기록. 서버에 없는 유일한 사본이라, 계정이 이 기기를 쓰는 동안에는 SLOT에 따로 넣어 둔다.
 const LOCAL = '@local', OFF = 'boltwing.offline', SLOT = 'boltwing.slot.' + LOCAL;
-let offline = false;
+let offline = false, form = 'login';   // form: 로그인 칸 / 새로 만들기 칸
 let leaving = false, lastId = '', getS, saveKey, canReload, sfx, onUi, acct = null, timer = null, busy = false, msg = '', choose = null;
 
 const read = () => { try { return JSON.parse(localStorage.getItem(AK) || sessionStorage.getItem(AK) || 'null'); } catch (e) { return null; } };
@@ -192,19 +192,30 @@ function render(el) {
     const r = add('', 'acRow'); r.append(btn('👤 아이디로 들어가기', leaveOffline, 'main'));
     add('기록은 이 기기에만 쌓여요. 기기를 바꾸거나 브라우저 기록을 지우면 사라질 수 있어요. 아이디를 새로 만들면 혼자 하던 기록이 계정으로 올라가요. 랭킹·친구와 함께는 인터넷과 아이디가 필요해요.', 'acNote');
   } else if (!acct) {
-    add('<b>👤 로그인</b> <small>아이디로 들어와서 해요</small>', 'acHead');
+    // 0.54: 로그인 화면과 새로 만들기 화면을 나눈다(아이디를 안 쓰고 「새로 만들기」를 눌러 안 된다고 느끼던 문제)
+    const su = form === 'signup';
+    add(su ? '<b>✨ 새 아이디 만들기</b> <small>처음 오셨나요?</small>' : '<b>👤 로그인</b> <small>아이디로 들어와서 해요</small>', 'acHead');
     const f = add('', 'acForm');
-    const id = document.createElement('input'); id.placeholder = '아이디 (영어 소문자·숫자 4~16)'; id.maxLength = 16; id.autocapitalize = 'none'; id.autocomplete = 'username'; id.spellcheck = false; id.value = lastId;
-    const pw = document.createElement('input'); pw.type = 'password'; pw.placeholder = '비밀번호 (6글자 이상)'; pw.maxLength = 64; pw.autocomplete = 'current-password';
-    f.append(id, pw);
+    const lab = t => { const s = document.createElement('small'); s.className = 'acLab'; s.textContent = t; f.append(s); };
+    const id = document.createElement('input'); id.placeholder = su ? '만들 아이디 (영어 소문자·숫자 4~16글자)' : '아이디'; id.maxLength = 16; id.autocapitalize = 'none'; id.autocomplete = 'username'; id.spellcheck = false; id.value = lastId;
+    const pw = document.createElement('input'); pw.type = 'password'; pw.placeholder = su ? '비밀번호 (6글자 이상, 아무 글자)' : '비밀번호'; pw.maxLength = 64; pw.autocomplete = su ? 'new-password' : 'current-password';
+    const pw2 = document.createElement('input'); pw2.type = 'password'; pw2.placeholder = '비밀번호 한 번 더'; pw2.maxLength = 64; pw2.autocomplete = 'new-password';
+    if (su) { lab('① 아이디'); f.append(id); lab('② 비밀번호'); f.append(pw); lab('③ 비밀번호 확인'); f.append(pw2); } else f.append(id, pw);
     const kp = add('', 'acKeep', 'label'), keep = document.createElement('input'); keep.type = 'checkbox';
     kp.append(keep, document.createTextNode(' 이 기기에서 로그인 유지 (내 기기일 때만)'));
-    const go = kind => enter(kind, id.value, pw.value, keep.checked);
+    const go = () => {
+      if (su && pw.value !== pw2.value) { lastId = id.value; msg = '비밀번호와 확인이 서로 달라요. 똑같이 두 번 써 주세요.'; ui(); return; }
+      enter(su ? 'signup' : 'login', id.value, pw.value, keep.checked);
+    };
     const calm = () => { if (msg && !busy) { msg = ''; const m = el.querySelector('.acMsg'); if (m) m.remove(); } };   // 다시 쓰기 시작하면 앞 안내는 지운다
-    id.addEventListener('input', calm); pw.addEventListener('input', calm);
-    pw.addEventListener('keydown', e => { if (e.key === 'Enter') go('login'); });
+    [id, pw, pw2].forEach(x => x.addEventListener('input', calm));
+    (su ? pw2 : pw).addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
     const r = add('', 'acRow');
-    r.append(btn('로그인', () => go('login'), 'main'), btn('처음이면 새로 만들기', () => go('signup')));
+    if (su) r.append(btn('✨ 만들고 시작하기', go, 'main'), btn('← 로그인으로', () => { lastId = id.value; form = 'login'; msg = ''; ui(); }));
+    else {
+      r.append(btn('로그인', go, 'main'));
+      const r2 = add('<span>처음 오셨나요?</span>', 'acRow acNew'); r2.append(btn('✨ 새 아이디 만들기', () => { lastId = id.value; form = 'signup'; msg = ''; ui(); }, 'main'));
+    }
     add('이메일·실명은 받지 않아요. 비밀번호를 잊으면 되찾을 수 없으니 잘 기억해 두세요. 유지를 고르지 않으면 창을 닫을 때 로그아웃돼요.', 'acNote');
     const r2 = add('', 'acRow acSolo'); r2.append(btn('📴 인터넷 없이 혼자 하기', () => goOffline(keep.checked), 'wide'));
     add('혼자 하기 기록은 이 기기에만 쌓여요. 아이디 기록과는 따로라서 섞이지 않아요(새 아이디는 늘 처음부터).', 'acNote');
