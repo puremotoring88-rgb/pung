@@ -35,12 +35,19 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.41';
+const VERSION = '0.42';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
   S = Object.assign(fresh(), old);
   if (old.plays > 0 && !old.openV) S.openAll = true;   // 0.17 전부터 하던 사람은 모두 열린 것으로
+  if (old.plays > 0 && !old.growV) {   // 0.42: 열림 순서를 챕터에 맞춰 늦췄다. 이미 열려 있던 것은 그대로 둔다
+    const c = old.cleared || 0, got = {}, keep = {};
+    for (const [id, n] of [['turtle', 0], ['hornet', 0], ['phoenix', 5], ['spread', 0], ['laser', 2], ['missile', 4]]) if (c >= n) got[id] = 1;
+    for (const [k, n] of [['tab:parts', 1], ['tab:look', 1], ['tab:book', 1], ['mode:endless', 2], ['tab:ship', 2], ['mode:coop', 2], ['tab:research', 3], ['mode:dojo', 3], ['tab:rank', 3], ['mode:escape', 3], ['mode:auto', 4], ['mode:rush', 5]]) if (c >= n) keep[k] = 1;
+    S.got = got; S.openKeep = keep;
+  }
+  S.growV = 1;
   S.stats = Object.assign(fresh().stats, old.stats || {});
   S.records = Object.assign(fresh().records, old.records || {});
   S.idle = Object.assign(fresh().idle, old.idle || {});
@@ -53,7 +60,7 @@ const buzz = ms => { if (S.vib && navigator.vibrate) { try { navigator.vibrate(m
 
 const frameOf = id => D.FRAMES.find(f => f.id === id);
 const weaponOf = id => D.WEAPONS.find(w => w.id === id);
-const unlocked = o => !o.unlock || S.cleared >= o.unlock;
+const unlocked = o => !o.unlock || S.cleared >= o.unlock || !!(S.got && S.got[o.id]);   // S.got = 0.42 전에 이미 열려 있던 기체·무기
 const eqLv = id => (Object.values(S.equip).includes(id) ? S.parts[id] || 1 : 0);
 const starCount = () => Object.values(S.stars).reduce((a, s) => a + s.filter(Boolean).length, 0);
 
@@ -76,14 +83,16 @@ const GOALS = [
 const RANKS = ['훈련병', '이등 조종사', '일등 조종사', '편대원', '편대장', '교관', '에이스', '더블 에이스', '하늘의 별', '전설'];
 const rankName = lv => (lv <= RANKS.length ? RANKS[lv - 1] : `전설 ${lv - RANKS.length + 1}`);
 // 성장 속도(사용자 2026-11-13: 너무 빠르다): 조종사 레벨 곡선, 고철 수입, 레벨에 따라 열리는 판 안 아이템, 도감에 올리려면 잡아야 하는 수
-const GROW = { scrap: 0.7, foeBook: 10, multiLv: 4, itemLv: { orb: 1, bomb: 1, magnet: 1, slow: 3, rapid: 5, gold: 7, twin: 9, clover: 12 } };
+const GROW = { scrap: 0.7, foeBook: 10, multiLv: 4, partLv: { turbo: 1, plate: 1, power: 2, blink: 3, rapid: 3, regen: 4, gun: 5, magnet: 6, ultchip: 7, guard: 8, seeker: 10 }, itemLv: { orb: 1, bomb: 1, magnet: 1, slow: 3, rapid: 5, gold: 7, twin: 9, clover: 12 } };
 const pilotNeed = lv => 120 + 60 * lv + 6 * lv * lv;
+const partsAvail = () => D.PARTS.filter(p => !S.parts[p.id] && (GROW.partLv[p.id] || 1) <= S.pilot.lv);   // 부품도 조종사 레벨에 따라 하나씩
+const nextPartLv = () => Math.min(...D.PARTS.filter(p => !S.parts[p.id]).map(p => GROW.partLv[p.id] || 1), 99);
 function gainPilotXp(x) {   // 판이 끝날 때마다 조종사 경험치. 계급이 오르면 고철을 받는다
   let ups = 0, reward = 0; const lv0 = S.pilot.lv;
   S.pilot.xp += x;
   while (S.pilot.xp >= pilotNeed(S.pilot.lv)) { S.pilot.xp -= pilotNeed(S.pilot.lv); S.pilot.lv++; ups++; reward += 20 + 10 * S.pilot.lv; }
   S.scrap += reward;
-  const opened = Object.keys(GROW.itemLv).filter(k => GROW.itemLv[k] > lv0 && GROW.itemLv[k] <= S.pilot.lv).map(k => ITEMS[k].icon + ' ' + ITEMS[k].name).concat(GROW.multiLv > lv0 && GROW.multiLv <= S.pilot.lv ? ['🔱 탄 +1 줍기'] : []);
+  const opened = Object.keys(GROW.itemLv).filter(k => GROW.itemLv[k] > lv0 && GROW.itemLv[k] <= S.pilot.lv).map(k => ITEMS[k].icon + ' ' + ITEMS[k].name).concat(GROW.multiLv > lv0 && GROW.multiLv <= S.pilot.lv ? ['🔱 탄 +1 줍기'] : [], D.PARTS.filter(p => (GROW.partLv[p.id] || 1) > lv0 && (GROW.partLv[p.id] || 1) <= S.pilot.lv).map(p => '⚙️ 부품 ' + p.name));
   return { ups, reward, opened };
 }
 // 연구: 고철로 사는 영구 강화(모든 기체에 적용)
@@ -166,8 +175,8 @@ function weekGive(i) {
   if (r.k === 'scrap') { S.scrap += r.v; return `🔩 고철 ${r.v}`; }
   if (r.k === 'title') { S.weekDone = (S.weekDone || 0) + 1; S.scrap += r.v; return `🏆 「주간 완주자」 + 고철 ${r.v}`; }
   if (r.k === 'part') {
-    const cand = D.PARTS.filter(p => !S.parts[p.id]);
-    if (!cand.length) { S.scrap += 60; return '🔩 고철 60(부품을 다 모았어요)'; }
+    const cand = partsAvail();
+    if (!cand.length) { S.scrap += 60; return '🔩 고철 60(지금 받을 수 있는 부품을 다 모았어요)'; }
     const p = pick(cand); S.parts[p.id] = 1; if (!S.equip[p.slot]) S.equip[p.slot] = p.id; return `${p.icon} 새 부품 ${p.name}`;
   }
   S.owned = S.owned || {};   // 꾸미기: 아직 없는 것 중 하나(값이 높은 것부터 가능성 크게)
@@ -233,7 +242,7 @@ let selMode = 'stage', dojoLv = 1;
 const STAR_RULES = ['클리어', '체력 절반 이상 남기고 클리어', '콤보 30 이상 만들기'];
 const STAR_REWARD = 15;
 // 손맛 숫자(해 보고 조정): 큰 적·정예를 부술 때 잠깐 멈춤(초), 보스 처치 느린 화면(초·빠르기), 피해 숫자 간격(초)
-const FEEL = { ultInv: 2, ultLock: 5, ultBoss: 0.4, stopBig: 0.065, stopElite: 0.045, stopBoss: 0.14, slowBoss: 1.5, slowK: 0.3, numGap: 0.16 };
+const FEEL = { ultInv: 2, ultLock: 5, ultBoss: 0.4, ultK: 0.8, stopBig: 0.065, stopElite: 0.045, stopBoss: 0.14, slowBoss: 1.5, slowK: 0.3, numGap: 0.16 };
 let hitStop = 0, slowT = 0, dnums = [];
 
 // ---------- 그림 파일(있으면 쓰고 없으면 코드로 그린 그림) ----------
@@ -441,21 +450,21 @@ function showPhoto() {
 const OPENS = [
   { k: 'tab:arms', icon: '🔫', name: '무기 강화', need: { plays: 1 }, tip: '모은 고철로 무기를 강하게 만들어요.' },
   { k: 'tab:goals', icon: '🏅', name: '임무', need: { plays: 1 }, tip: '오늘의 임무와 도전 과제로 고철을 받아요.' },
-  { k: 'tab:parts', icon: '⚙️', name: '부품', need: { cleared: 1 }, tip: '보스가 떨어뜨린 부품을 끼우면 더 강해져요.' },
-  { k: 'tab:look', icon: '🎨', name: '꾸미기', need: { cleared: 1 }, tip: '도색·불꽃·꼬리·스티커로 내 기체를 꾸며요.' },
-  { k: 'tab:book', icon: '📖', name: '도감·칭호', need: { cleared: 1 }, tip: '만난 맵·적·보스 무훈을 모으고 칭호를 달아요.' },
-  { k: 'mode:endless', icon: '♾️', name: '무한 생존', need: { cleared: 2 }, tip: '끝없이 몰려오는 적을 얼마나 버틸까요?' },
-  { k: 'tab:ship', icon: '✈️', name: '기체 고르기', need: { cleared: 2 }, tip: '새 기체가 열렸어요. 기체마다 궁극기가 달라요.' },
-  { k: 'mode:coop', icon: '🤝', name: '친구와 함께', need: { cleared: 2 }, tip: '친구 1~2명과 같은 하늘에서 싸워요.' },
-  { k: 'tab:research', icon: '🔬', name: '연구', need: { cleared: 3 }, tip: '오래 쌓이는 강화. 고철을 더 벌게도 해 줘요.' },
-  { k: 'mode:dojo', icon: '🎵', name: '리듬 도장', need: { cleared: 3 }, tip: '비행은 쉬고 리듬 게임만! 곡 8개.' },
-  { k: 'tab:rank', icon: '🏆', name: '랭킹', need: { cleared: 3 }, tip: '다른 조종사들과 점수를 겨뤄요.' },
-  { k: 'mode:auto', icon: '⭐', name: '표창 공방', need: { cleared: 4 }, tip: '로봇을 직접 몰아 표창으로 베는 넓은 들판.' },
-  { k: 'mode:escape', icon: '🪂', name: '탈출 작전(시험판)', need: { cleared: 3 }, tip: '누르기 하나로 로프를 걸어 흔들며 나아가는 새 모드!' },
-  { k: 'mode:rush', icon: '👑', name: '보스 러시', need: { cleared: 5 }, tip: '보스 다섯을 쉬지 않고 연달아!' },
+  { k: 'tab:parts', icon: '⚙️', name: '부품', need: { cleared: 2 }, tip: '보스가 떨어뜨린 부품을 끼우면 더 강해져요.' },
+  { k: 'tab:look', icon: '🎨', name: '꾸미기', need: { cleared: 3 }, tip: '도색·불꽃·꼬리·스티커로 내 기체를 꾸며요.' },
+  { k: 'tab:book', icon: '📖', name: '도감·칭호', need: { cleared: 3 }, tip: '만난 맵·적·보스 무훈을 모으고 칭호를 달아요.' },
+  { k: 'mode:endless', icon: '♾️', name: '무한 생존', need: { cleared: 5 }, tip: '끝없이 몰려오는 적을 얼마나 버틸까요?' },
+  { k: 'tab:ship', icon: '✈️', name: '기체 고르기', need: { cleared: 5 }, tip: '새 기체가 열렸어요. 기체마다 궁극기가 달라요.' },
+  { k: 'mode:coop', icon: '🤝', name: '친구와 함께', need: { cleared: 5 }, tip: '친구 1~2명과 같은 하늘에서 싸워요.' },
+  { k: 'tab:research', icon: '🔬', name: '연구', need: { cleared: 7 }, tip: '오래 쌓이는 강화. 고철을 더 벌게도 해 줘요.' },
+  { k: 'mode:dojo', icon: '🎵', name: '리듬 도장', need: { cleared: 8 }, tip: '비행은 쉬고 리듬 게임만! 곡 8개.' },
+  { k: 'tab:rank', icon: '🏆', name: '랭킹', need: { cleared: 7 }, tip: '다른 조종사들과 점수를 겨뤄요.' },
+  { k: 'mode:auto', icon: '⭐', name: '표창 공방', need: { cleared: 13 }, tip: '로봇을 직접 몰아 표창으로 베는 넓은 들판.' },
+  { k: 'mode:escape', icon: '🪂', name: '탈출 작전(시험판)', need: { cleared: 10 }, tip: '누르기 하나로 로프를 걸어 흔들며 나아가는 새 모드!' },
+  { k: 'mode:rush', icon: '👑', name: '보스 러시', need: { cleared: 20 }, tip: '보스 다섯을 쉬지 않고 연달아!' },
 ];
 const openCond = o => S.plays >= (o.need.plays || 0) && S.cleared >= (o.need.cleared || 0);
-const isOpen = k => { if (S.openAll || k === 'tab:sortie' || k === 'tab:settings' || k === 'mode:stage') return true; if (k === 'mode:coop' && joinCode) return true; const o = OPENS.find(x => x.k === k); return !o || openCond(o); };
+const isOpen = k => { if (S.openAll || (S.openKeep && S.openKeep[k]) || k === 'tab:sortie' || k === 'tab:settings' || k === 'mode:stage') return true; if (k === 'mode:coop' && joinCode) return true; const o = OPENS.find(x => x.k === k); return !o || openCond(o); };
 function nextOpenTip() {   // 다음에 열릴 것 한 줄
   const n = OPENS.find(o => !isOpen(o.k)); if (!n) return '';
   const grp = OPENS.filter(o => !isOpen(o.k) && JSON.stringify(o.need) === JSON.stringify(n.need)).map(o => o.icon + ' ' + o.name).join(' · ');
@@ -598,7 +607,7 @@ function startRun(stage, md = 'stage') {
   if (md === 'auto') { run.d.hp = Math.pow(1.22, stage - 1); run.goldStart = S.forge.earned; run.rushDone = true; run.waveDur = 45; run.rushAt = rnd(15, 30); run.banner = { kind: 'stage', title: `ZONE ${stage}`, sub: '사방에서 온다! 피하면서 싸우자', t: 0, life: 2.6 }; S.idle.on = true; S.idle.lastSeen = Date.now(); keepAwake(true); }
   if (/fast/.test(location.hash)) { run.waveDur = md === 'endless' ? Infinity : 26; run.rushAt = 8; run.nextBoss = 30; if (md === 'auto') run.waveDur = 14; if (run.gateAt) { run.gateAt = 4; run.treasureAt = 14; } }   // 점검용: 빨리 보기
   P = { x: W / 2, y: H - 190, tx: W / 2, ty: H - 190, lx: W / 2, bank: 0, hp: st.maxHp, maxHp: st.maxHp, inv: 2, ult: 0, fireT: 0, droneT: 0, seekT: 2,
-    barrierReady: false, barrierT: 0, ultKind: null, ultT: 0, swarmQ: 0, swarmT: 0, ga: 0, novaR: 0, trap: null };
+    barrierReady: false, barrierT: 0, ultKind: null, ultT: 0, swarmQ: 0, swarmT: 0, ga: 0, novaR: 0, trap: null, bombs: SKILL.start, skCd: 0 };
   if (md === 'auto') arenaStart();
   run.tut = S.plays === 0 && md === 'stage';   // 첫 판 안내
   if (S.comeback > 0 && !run.coop) { run.comeback = true; S.comeback--; run.banner.sub += ` · 🎁 고철 1.5배(${S.comeback}판 남음)`; }
@@ -961,7 +970,7 @@ function leaderDown(e) {
   ebul.forEach(b => spark(b.x, b.y, 3, b.color, 80, 0.3, 2)); ebul = []; lasers = [];
   for (const f of foes) if (!f.dead && !f.civ) { f.dead = true; explode(f.x, f.y, 18, '#ffb06b'); }
   if (P.trap) freeTrap(true);
-  if (Math.random() < 0.5) drops.push({ kind: 'part', x: e.x, y: e.y, vy: 40, v: 1 });
+  if (Math.random() < 0.3) drops.push({ kind: 'part', x: e.x, y: e.y, vy: 40, v: 1 });
   for (let i = 0; i < 8 + L(); i++) drops.push({ kind: 'scrap', x: e.x + rnd(-70, 70), y: e.y + rnd(-40, 40), vy: rnd(20, 90), v: 3 });
   run.score += 2500 * L();
   say('🛡️ 정예 편대 격파!', W / 2, H * 0.36, '#ffd166', 32, 2.4); A.sfx('boomL');
@@ -1376,7 +1385,7 @@ function hitFoe(e, dmg, own) {
     if (!(e.dT > T)) { e.dT = T + FEEL.numGap; if (dnums.length < 40) dnums.push({ x: e.x + rnd(-12, 12), y: e.y - (e.r || 20) * 0.6, v: Math.max(1, Math.round(e.dAcc)), t0: T, big: !!e.isBoss || e.dAcc > 40 }); e.dAcc = 0; }
   }
   if (own && own !== P) own.ult = Math.min(100, own.ult + dmg / run.d.hp * 0.09 * run.m.ult);
-  else if (!(P.ultLock > 0)) P.ult = Math.min(100, P.ult + dmg / run.d.hp * 0.09 * st.ult * run.m.ult * (e.isBoss ? FEEL.ultBoss : 1));   // 보스를 때릴 때는 덜 찬다
+  else if (!(P.ultLock > 0)) P.ult = Math.min(100, P.ult + dmg / run.d.hp * 0.09 * st.ult * run.m.ult * FEEL.ultK * (e.isBoss ? FEEL.ultBoss : 1));   // 보스를 때릴 때는 덜 찬다
   if (e.hp <= 0) killFoe(e);
   else A.sfx('hit');
 }
@@ -1449,8 +1458,8 @@ function hurtPlayer(dmg) {
   }
 }
 function grantPart() {
-  const cand = D.PARTS.filter(p => !S.parts[p.id]);
-  if (!cand.length) { S.scrap += 25; run.scrapGot += 25; say('부품을 다 모았다! 고철 +25', P.x, P.y - 70, '#ffd166', 22, 1.6); A.sfx('scrap'); save(); return; }
+  const cand = partsAvail();
+  if (!cand.length) { const nl = nextPartLv(); S.scrap += 25; run.scrapGot += 25; say(nl < 99 ? `고철 +25 (다음 부품은 조종사 Lv ${nl}부터)` : '부품을 다 모았다! 고철 +25', P.x, P.y - 70, '#ffd166', 20, 1.8); A.sfx('scrap'); save(); return; }
   const p = pick(cand);
   S.parts[p.id] = 1;
   if (!S.equip[p.slot]) S.equip[p.slot] = p.id;   // 빈 칸이면 다음 판부터 바로 끼워진다
@@ -1627,10 +1636,10 @@ function update(dt) {
   if (run.arena) { cam.x = clamp(P.x - W / 2, 0, AW - W); cam.y = clamp(P.y - H * 0.55, 0, AH - H); bgY = -cam.y * 0.5; nearY = -cam.y; }   // 화면이 로봇을 따라간다
   if (P.inv > 0) P.inv -= dt;
   if (run.phase !== 'dead' && !run.gambler) P.hp = Math.min(P.maxHp, P.hp + st.regen * dt);
-  if (P.ultLock > 0) P.ultLock -= dt; else P.ult = Math.min(100, P.ult + 0.5 * dt * st.ult);   // 궁극기를 쓴 뒤 잠깐은 다시 차지 않는다
+  if (P.ultLock > 0) P.ultLock -= dt; else P.ult = Math.min(100, P.ult + 0.5 * dt * st.ult * FEEL.ultK);   // 궁극기를 쓴 뒤 잠깐은 다시 차지 않는다
   if (run.m.barrier && !P.barrierReady && (P.barrierT -= dt) <= 0) P.barrierReady = true;
   P.ga += dt * 3;
-  tickItems(dt); tickGags(dt);
+  tickItems(dt); tickGags(dt); skillTick(dt);
   trailFx(P, myLook(), dt); for (const a of allies) trailFx(a, a.look, dt);
   if (net && net.mode === 'host') { updateAllies(dt); if (run.coop) coopTick(dt); }
   if (P.trap) {   // 그물: 조금씩 다시 조여 오고, 7초가 지나면 저절로 풀리지만 다친다
@@ -1725,6 +1734,7 @@ function update(dt) {
       if (!Q.low && Math.random() < 0.5) fx.push({ k: 'smoke', x: s.x, y: s.y, vx: 0, vy: 0, t: 0, life: 0.4, size: 10 });
     }
     s.x += s.vx * dt; s.y += s.vy * dt;
+    if (s.eraser) ebul = ebul.filter(b => b.net || Math.hypot(b.x - s.x, b.y - s.y) > s.r + 12);   // 중간 스킬 표창은 닿는 탄을 지운다
     if (offView(s.x, s.y, run.arena ? 160 : 40) || s.t > 4) { s.dead = true; continue; }
     for (const e of foes) {
       if (e.dead || e.inv || s.hits.includes(e)) continue;
@@ -1897,7 +1907,7 @@ function endOther(win) {   // 무한 생존·보스 러시·자동 출격의 결
     `<div>처치 <b>${run.kills}</b> · 최고 콤보 <b>${run.maxCombo}</b> · 레벨 <b>${run.level}</b></div>`,
     `<div>얻은 고철 🔩 <b>${run.scrapGot}</b></div>`,
     run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
-    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새 아이템이 나오기 시작해요: ${up.opened.join(', ')}</b>` : ''}</div>`,
+    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새로 열림: ${up.opened.join(', ')}</b>` : ''}</div>`,
   ].filter(Boolean).join('');
   const btns = $('rBtns'); btns.innerHTML = '';
   const mk = (label, cls, fn) => { const b = document.createElement('button'); b.className = 'btn ' + cls; b.textContent = label; b.addEventListener('click', () => { A.sfx('click'); fn(); }); btns.append(b); };
@@ -1938,6 +1948,7 @@ function endRun(win) {
   const newStars = now.filter((v, i) => v && !old[i]).length;
   if (now.some(Boolean)) S.stars[run.stage] = now;
   S.scrap += newStars * STAR_REWARD;
+  const newGear = win ? D.FRAMES.concat(D.WEAPONS).filter(o => o.unlock && before < o.unlock && run.stage >= o.unlock && !(S.got || {})[o.id]).map(o => (D.FRAMES.includes(o) ? '✈️ 기체 ' : '🔫 무기 ') + o.name) : [];   // 챕터를 넘을 때 새 기체·무기
   if (win) { S.cleared = Math.max(S.cleared, run.stage); S.maxStage = Math.max(S.maxStage, run.stage + 1); S.next = run.stage + 1; }
   S.lastRun = S.lastRun || {}; const prevScore = S.lastRun['stage' + run.stage]; S.lastRun['stage' + run.stage] = run.score;   // 지난번과 비교
   const newBest = run.score > S.best;
@@ -1959,9 +1970,10 @@ function endRun(win) {
     run.assist ? '<div>🛟 지원 출격으로 깼습니다(별 2·3과 S·A 랭크는 지원 없이 도전)</div>' : '',
     `<div>처치 <b>${run.kills}</b> · 최고 콤보 <b>${run.maxCombo}</b> · 레벨 <b>${run.level}</b></div>`,
     `<div>얻은 고철 🔩 <b>${run.scrapGot}</b>${newStars ? ` + 새 별 보상 🔩 <b>${newStars * STAR_REWARD}</b>` : ''}</div>`,
+    newGear.length ? `<div class="gold">🎉 새로 열림: ${newGear.join(', ')}</div>` : '',
     run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
     opened.length ? `<div class="gold">🔓 새로 열림: ${opened.join(', ')}</div>` : '',
-    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새 아이템이 나오기 시작해요: ${up.opened.join(', ')}</b>` : ''}</div>`,
+    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새로 열림: ${up.opened.join(', ')}</b>` : ''}</div>`,
     `<div class="rules">${STAR_RULES.map((r, i) => `${now[i] ? '★' : '☆'} ${r}`).join('<br>')}</div>`,
     win ? `<div>다음: 스테이지 ${stLabel(run.stage + 1)} · ${stageEnd(run.stage + 1) === 'leader' ? END_NM.leader : END_NM[stageEnd(run.stage + 1)] + ' ' + D.BOSSES[stageBossIdx(run.stage + 1)].name}${subOf(run.stage) === 5 ? ' · 🗺️ 새 맵 「' + D.THEMES[stageTheme(run.stage + 1)].name + '」' : ''}</div>` : '<div>격납고에서 부품과 무기를 강화하고 다시 도전해 보세요.</div>',
   ].filter(Boolean).join('');
@@ -2537,6 +2549,13 @@ function updateUltBtn() {
   b.classList.toggle('ready', p >= 100);
   const html = p >= 100 ? `<b>${st.F.ult.name}</b><small>누르기!</small>` : `<b>${p}%</b><small>궁극기</small>`;
   if (b.dataset.h !== html) { b.dataset.h = html; b.innerHTML = html; }
+  const kb = $('skillBtn'), showK = skillOn() && state === 'play';   // 💣 중간 스킬 버튼: 폭탄 수와 기체의 기술
+  if (kb.classList.contains('hidden') === showK) kb.classList.toggle('hidden', !showK);
+  if (showK) {
+    const K = SKILL[st.F.id] || SKILL.phoenix, kh = `<b>${K.icon}</b><small>${'●'.repeat(P.bombs)}${'○'.repeat(SKILL.max - P.bombs)}</small>`;
+    if (kb.dataset.h !== kh) { kb.dataset.h = kh; kb.innerHTML = kh; kb.title = `${K.name}: ${K.desc} (X·C 키)`; }
+    kb.classList.toggle('cd', P.bombs <= 0 || P.skCd > 0);
+  }
   const tb = $('throwBtn'), showT = !!(run.arena && run.phase !== 'rest');   // 표창 공방: 🌀 던지기
   if (tb.classList.contains('hidden') === showT) tb.classList.toggle('hidden', !showT);
   if (showT) { const cd = Math.max(0, run.throwCd || 0); tb.style.setProperty('--p', Math.round(100 - cd / THROW_CD * 100)); tb.classList.toggle('cd', cd > 0); }
@@ -2705,7 +2724,7 @@ function renderHangar() {
     const open = unlocked(f), d = document.createElement('button');
     d.className = 'card' + (S.frame === f.id ? ' on' : '') + (open ? '' : ' locked');
     d.append(shipCanvas(f.id));
-    d.insertAdjacentHTML('beforeend', `<b>${f.name}</b><small>${f.desc}</small>${statBar('체력', f.hp / 160, f.hp)}${statBar('속도', f.speed / 1.4, Math.round(f.speed * 100) + '%')}<small class="ult">🌟 ${f.ult.name}<br>${f.ult.desc}</small>` + (open ? '' : `<small class="lockTxt">🔒 스테이지 ${stLabel(f.unlock)} 클리어 시 열림</small>`));
+    d.insertAdjacentHTML('beforeend', `<b>${f.name}</b><small>${f.desc}</small>${statBar('체력', f.hp / 160, f.hp)}${statBar('속도', f.speed / 1.4, Math.round(f.speed * 100) + '%')}<small class="ult">🌟 ${f.ult.name}<br>${f.ult.desc}</small><small class="ult">${SKILL[f.id] ? `${SKILL[f.id].icon} 💣스킬 ${SKILL[f.id].name}<br>${SKILL[f.id].desc}` : ''}</small>` + (open ? '' : `<small class="lockTxt">🔒 스테이지 ${stLabel(f.unlock)} 클리어 시 열림</small>`));
     d.addEventListener('click', () => { if (!open) return; S.frame = f.id; save(); A.sfx('click'); renderHangar(); });
     fr.append(d);
   }
@@ -2901,7 +2920,7 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     if (state === 'play') { if (P.trap) tapTrap(); else if (run.rush) rushTap(); else useUlt(); }
   }
-  if ((e.key === 'x' || e.key === 'X') && state === 'play' && run && run.arena) throwBlades();
+  if ((e.key === 'x' || e.key === 'X' || e.key === 'c' || e.key === 'C') && state === 'play' && run && !e.repeat) { if (run.arena) throwBlades(); else useSkill(); }
   if (e.key === 'p' || e.key === 'Escape') { if (state === 'play') pauseGame(); else if (state === 'pause') resumeGame(); }
   if (state === 'cards' && ['1', '2', '3'].includes(e.key)) { const ids = $('cards').dataset.ids.split(','); if (ids[+e.key - 1]) takeCard(ids[+e.key - 1]); }
   if (state === 'hangar' && e.key === 'Enter' && document.activeElement.tagName !== 'INPUT' && $('gate').classList.contains('hidden')) startRun(hangarStage, selMode);
@@ -2940,6 +2959,7 @@ function goFullscreen() {
 $('emoBtn').addEventListener('pointerdown', e => { e.stopPropagation(); $('emoBar').classList.toggle('hidden'); });
 $('ultBtn').addEventListener('pointerdown', e => { e.stopPropagation(); if (P && P.trap) tapTrap(); else if (run && run.rush) rushTap(); else useUlt(); });
 $('throwBtn').addEventListener('pointerdown', e => { e.stopPropagation(); throwBlades(); });
+$('skillBtn').addEventListener('pointerdown', e => { e.stopPropagation(); useSkill(); });
 $('pauseBtn').addEventListener('click', pauseGame);
 $('resume').addEventListener('click', resumeGame);
 $('quit').addEventListener('click', () => { save(); $('pause').classList.add('hidden'); if (net && net.mode === 'guest') { leaveRoom(); showHangar(); return; } if (run && run.mode !== 'stage') endRun(false); else showHangar(); });
@@ -3049,9 +3069,12 @@ const ITEMS = {
 };
 const TIMED = ['magnet', 'slow', 'rapid', 'gold'];
 const itemsOpen = () => Object.keys(ITEMS).filter(k => (GROW.itemLv[k] || 1) <= S.pilot.lv);   // 조종사 레벨이 오를수록 아이템이 하나씩 열린다
-function dropItem(x, y, id) { drops.push({ kind: 'item', id: id || pick(itemsOpen()), x, y, vy: 55, v: 1 }); }
+function dropItem(x, y, id) { drops.push({ kind: 'item', id: id || (Math.random() < 0.3 ? 'bomb' : pick(itemsOpen())), x, y, vy: 55, v: 1 }); }   // 폭탄(중간 스킬 충전)은 조금 더 자주
 function useItem(id, who = P) {
   const it = ITEMS[id]; if (!it) return;
+  if (id === 'bomb' && who === P && skillOn() && P.bombs < SKILL.max) {   // 폭탄은 모아 두었다가 중간 스킬로 쓴다
+    P.bombs++; say(`💣 +1 (${P.bombs}/${SKILL.max})`, P.x, P.y - 64, it.c, 20, 1.2); A.sfx('part'); buzz(20); return;
+  }
   say(`${it.icon} ${it.name}!`, who.x, who.y - 64, it.c, 20, 1.3); A.sfx('part'); buzz(30);
   ringFx(who.x, who.y, 60, it.c);
   if (TIMED.includes(id)) run['it_' + id] = it.dur;
@@ -3065,6 +3088,47 @@ function useItem(id, who = P) {
     for (const e of foes.slice()) if (!e.harmless) hitFoe(e, 140 * ultPow() * (e.isBoss ? 0.4 : 1), who === P ? null : who);
     explode(who.x, who.y - 120, 90, '#ffb06b');
   }
+}
+// ---------- 💣 중간 스킬: 폭탄 아이템을 3개까지 모았다가, 기체마다 다른 기술로 쓴다(위급할 때 보조 수단) ----------
+const SKILL = {
+  max: 3, start: 1, cd: 1.2,
+  falcon: { icon: '🚀', name: '추적 미사일', desc: '적을 쫓는 큰 미사일 8발' },
+  turtle: { icon: '🛡️', name: '방패 파동', desc: '둘레의 탄을 모두 지우고 1.5초 무적' },
+  hornet: { icon: '🌀', name: '표창 회오리', desc: '탄을 지우며 꿰뚫는 표창 12개' },
+  phoenix: { icon: '💣', name: '불꽃 폭탄', desc: '앞으로 던진 폭탄이 크게 터짐' },
+};
+const skillOn = () => !!run && !run.arena && !(net && net.mode === 'guest');
+function useSkill() {
+  if (state !== 'play' || !skillOn() || run.phase === 'dead' || run.phase === 'clear' || P.down > 0) return;
+  if (P.trap) { tapTrap(); return; }
+  if (P.skCd > 0) return;
+  if (P.bombs <= 0) { say('💣 폭탄이 없어요 — 💣 아이템을 주우세요', P.x, P.y - 70, '#ff9a7a', 16, 1.2); return; }
+  P.bombs--; P.skCd = SKILL.cd; run.skills = (run.skills || 0) + 1;
+  const id = st.F.id, K = SKILL[id] || SKILL.phoenix, pw = ultPow();
+  say(`${K.icon} ${K.name}!`, P.x, P.y - 70, '#ffd166', 20, 1.1); A.sfx('ult_' + st.F.ult.id); buzz(40); shake = Math.max(shake, 0.4);
+  if (id === 'falcon') {
+    ebul = ebul.filter(b => b.net || Math.hypot(b.x - P.x, b.y - P.y) > 130);
+    for (let i = 0; i < 8; i++) addShot(P.x + (i - 3.5) * 10, P.y - 10, (i - 3.5) * 110, -260, 40 * pw, { homing: true, r: 9, color: '#9fd8ff' });
+  } else if (id === 'turtle') {
+    ebul = ebul.filter(b => { if (b.net || Math.hypot(b.x - P.x, b.y - P.y) > 300) return true; drops.push({ kind: 'scrap', x: b.x, y: b.y, vy: 30, v: 1, small: true }); return false; });
+    P.inv = Math.max(P.inv, 1.5); ringFx(P.x, P.y, 300, '#9dffcf'); ringFx(P.x, P.y, 200, '#7bdc6b');
+    for (const e of foes.slice()) if (!e.harmless && !e.civ && Math.hypot(e.x - P.x, e.y - P.y) < 300) hitFoe(e, 60 * pw * (e.isBoss ? 0.5 : 1));
+  } else if (id === 'hornet') {
+    for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; addShot(P.x, P.y, Math.cos(a) * 520, Math.sin(a) * 520, 30 * pw, { r: 13, pierce: 99, star: 3, eraser: true, color: '#ffe066' }); }
+  } else {
+    const tx = P.x, ty = Math.max(90, P.y - 300);
+    run.skBomb = { x: tx, y: ty, t: 0.45, pw };
+    fx.push({ k: 'glyph', ch: '💣', x: P.x, y: P.y - 30, vx: 0, vy: (ty - P.y + 30) / 0.45, t: 0, life: 0.45, size: 30, color: '#fff' });
+  }
+}
+function skillTick(dt) {
+  if (P.skCd > 0) P.skCd -= dt;
+  const b = run.skBomb; if (!b || (b.t -= dt) > 0) return;
+  run.skBomb = null;
+  flash = Math.max(flash, 0.45); shake = Math.max(shake, 0.8); A.sfx('boomL');
+  ebul = ebul.filter(q => q.net || Math.hypot(q.x - b.x, q.y - b.y) > 250);
+  explode(b.x, b.y, 110, '#ff8a3c'); ringFx(b.x, b.y, 250, '#ffb06b');
+  for (const e of foes.slice()) if (!e.harmless && !e.civ && Math.hypot(e.x - b.x, e.y - b.y) < 250 + (e.r || 20)) hitFoe(e, 150 * b.pw * (e.isBoss ? 0.5 : 1));
 }
 const itemOn = id => run && run['it_' + id] > 0;
 function tickItems(dt) {
@@ -4243,7 +4307,7 @@ function guestEnd(m) {
   $('rStars').innerHTML = '';
   $('rStats').innerHTML = [`<div class="big">${m.score.toLocaleString()}<small>점(팀)</small></div>`, `<div>팀 처치 <b>${m.kills}</b></div>`,
     `<div>받은 고철 🔩 <b>${m.scrap}</b> (팀이 모은 만큼 모두 받아요)</div>`, run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
-    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새 아이템이 나오기 시작해요: ${up.opened.join(', ')}</b>` : ''}</div>`,
+    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새로 열림: ${up.opened.join(', ')}</b>` : ''}</div>`,
     '<div class="rules">스테이지 별과 랭크는 혼자 할 때 기록됩니다. 방장이 다시 출격하면 자동으로 함께 시작해요.</div>'].filter(Boolean).join('');
   const btns = $('rBtns'); btns.innerHTML = '';
   const b = document.createElement('button'); b.className = 'btn big'; b.textContent = '방에서 기다리기';

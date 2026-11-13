@@ -2,24 +2,24 @@
 window.DATA = (() => {
 'use strict';
 
-// 기체: 체력·속도·맞는 범위(hit)와 궁극기가 다르다. unlock = 이 스테이지를 깨면 열림
+// 기체: 체력·속도·맞는 범위(hit)와 궁극기가 다르다. unlock = 이 스테이지(번호, 5 = 1-5)를 깨면 열림. 챕터 보스를 잡을 때 하나씩
 const FRAMES = [
   { id: 'falcon', name: '매', desc: '빠르고 균형 잡힌 기체', hp: 100, speed: 1.1, hit: 6, color: '#4cc9ff',
     ult: { id: 'laser', name: '천공 레이저', desc: '3초 동안 앞을 꿰뚫는 굵은 광선, 닿는 탄도 지움' } },
-  { id: 'turtle', name: '거북', desc: '튼튼하고 묵직한 기체', hp: 150, speed: 0.85, hit: 9, color: '#7bdc6b',
+  { id: 'turtle', name: '거북', desc: '튼튼하고 묵직한 기체', hp: 150, speed: 0.85, hit: 9, color: '#7bdc6b', unlock: 5,
     ult: { id: 'bulwark', name: '철벽 방패', desc: '5초 무적, 닿는 탄을 고철로 바꾸고 부딪힌 적을 부숨' } },
-  { id: 'hornet', name: '말벌', desc: '작고 날쌘 기체(맞는 범위가 작음)', hp: 80, speed: 1.3, hit: 4, color: '#ffc93c',
+  { id: 'hornet', name: '말벌', desc: '작고 날쌘 기체(맞는 범위가 작음)', hp: 80, speed: 1.3, hit: 4, color: '#ffc93c', unlock: 15,
     ult: { id: 'swarm', name: '벌떼 미사일', desc: '적을 쫓아가는 미사일 30발' } },
-  { id: 'phoenix', name: '불사조', desc: '불꽃 날개의 기체', hp: 95, speed: 1.05, hit: 6, color: '#ff6b5e', unlock: 5,
+  { id: 'phoenix', name: '불사조', desc: '불꽃 날개의 기체', hp: 95, speed: 1.05, hit: 6, color: '#ff6b5e', unlock: 25,
     ult: { id: 'nova', name: '불꽃 폭발', desc: '화면 전체를 태우고 체력 35% 회복' } },
 ];
 
 // 주무기: 쏘는 방식과 소리가 다르다
 const WEAPONS = [
   { id: 'vulcan', name: '발칸', desc: '빠르게 연사', rate: 10, dmg: 6, speed: 950, color: '#9ff3ff' },
-  { id: 'spread', name: '확산포', desc: '부채꼴로 퍼짐', rate: 3.4, dmg: 5.5, pellets: 5, arc: 0.6, speed: 820, color: '#ffd166' },
-  { id: 'laser', name: '레이저', desc: '적을 꿰뚫고 지나감', rate: 6, dmg: 9, pierce: 2, speed: 1300, color: '#ff7ad9', unlock: 2 },
-  { id: 'missile', name: '유도탄', desc: '알아서 적을 쫓아감', rate: 2.8, dmg: 15, homing: true, speed: 540, color: '#ffb86b', unlock: 4 },
+  { id: 'spread', name: '확산포', desc: '부채꼴로 퍼짐', rate: 3.4, dmg: 5.5, pellets: 5, arc: 0.6, speed: 820, color: '#ffd166', unlock: 3 },
+  { id: 'laser', name: '레이저', desc: '적을 꿰뚫고 지나감', rate: 6, dmg: 9, pierce: 2, speed: 1300, color: '#ff7ad9', unlock: 10 },
+  { id: 'missile', name: '유도탄', desc: '알아서 적을 쫓아감', rate: 2.8, dmg: 15, homing: true, speed: 540, color: '#ffb86b', unlock: 18 },
 ];
 
 // 부품: 보스를 잡거나 큰 적을 부수면 나오고, 격납고에서 고철로 강화한다(최대 5단계)

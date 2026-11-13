@@ -389,6 +389,9 @@
   #throwBtn { pointer-events: auto; position: absolute; right: calc(var(--u) * 7); bottom: calc(var(--u) * 30 + env(safe-area-inset-bottom)); width: calc(var(--u) * 15); height: calc(var(--u) * 15); border-radius: 50%; border: 3px solid #ffd166; background: radial-gradient(circle, rgba(60,40,10,.92) 58%, transparent 60%), conic-gradient(#ffd166 calc(var(--p, 100) * 1%), rgba(40,52,74,.9) 0); font-size: calc(var(--u) * 6); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; touch-action: none; color: #fff; }
   #throwBtn small { font-size: calc(var(--u) * 2.4); font-weight: 800; } #throwBtn.cd { opacity: .55; border-color: #5b6b85; }
   #stage.lefty #throwBtn { right: auto; left: calc(var(--u) * 7); }
+  #skillBtn { pointer-events: auto; position: absolute; right: calc(var(--u) * 7); bottom: calc(var(--u) * 30 + env(safe-area-inset-bottom)); width: calc(var(--u) * 15); height: calc(var(--u) * 15); border-radius: 50%; border: 3px solid #ff9a5e; background: radial-gradient(circle, rgba(40, 18, 10, .92) 60%, rgba(255, 140, 80, .35)); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; touch-action: none; }
+  #skillBtn b { font-size: calc(var(--u) * 5.5); } #skillBtn small { font-size: calc(var(--u) * 2.6); color: #ffb38a; letter-spacing: .1em; } #skillBtn.cd { opacity: .5; border-color: #5b6b85; }
+  #stage.lefty #skillBtn { right: auto; left: calc(var(--u) * 7); }
   #ultBtn.ready { border-color: #fff3b0; animation: pulse .7s infinite alternate; }
   #ultBtn.ready b { font-size: calc(var(--u) * 3.2); color: #ffe066; }
   @keyframes pulse { from { transform: scale(1); box-shadow: 0 0 0 rgba(255, 209, 102, 0); } to { transform: scale(1.07); box-shadow: 0 0 calc(var(--u) * 6) rgba(255, 209, 102, .85); } }
@@ -454,7 +457,7 @@
 
   <div id="hud" class="hidden">
     <button id="pauseBtn">⏸</button>
-    <button id="ultBtn">궁극기</button>
+    <button id="ultBtn">궁극기</button><button id="skillBtn" class="hidden">💣</button>
     <button id="throwBtn" class="hidden">🌀<small>던지기</small></button>
     <button id="emoBtn" class="hidden">💬</button>
     <div id="emoBar" class="hidden"></div>
