@@ -57,7 +57,7 @@ function init(o) {
 function dirty() { if (!acct) return; acct.dirty = true; store(); clearTimeout(timer); timer = setTimeout(() => push(), 15000); }
 
 async function push(keepalive) {
-  if (!acct || !acct.dirty || busy || choose) return;
+  if (!acct || !acct.dirty || busy || choose || leaving) return;   // 다른 기록으로 바꾸며 다시 여는 중에는 옛 기록을 올리지 않는다
   busy = true;
   try {
     const at = await rpc('acct_save', { p_token: acct.token, p_save: getS(), p_prev: acct.at || null }, keepalive);
@@ -106,8 +106,18 @@ async function enter(kind, id, pw, keep) {
     const token = await rpc(kind === 'signup' ? 'acct_signup' : 'acct_login', { p_uid: id, p_pw: pw });
     let own = owner(), legacy;
     const S = getS();
-    if (own && own.uid === LOCAL) {
-      if (kind === 'signup') { own = null; legacy = true; try { localStorage.removeItem(SLOT); } catch (e) { /* 무시 */ } }   // 혼자 하던 기록으로 계정을 만든다
+    if (kind === 'signup' && (!own || own.uid === LOCAL) && (S.plays || S.cleared)) {
+      // 새 아이디는 새 기록으로 시작하는 게 기본. 아이디 없이(혼자) 하던 기록을 옮길지는 직접 고른다.
+      const move = window.confirm(`이 기기에 아이디 없이 하던 기록이 있어요.\n(${summary(S)})\n\n이 기록을 새 아이디 「${id}」로 옮길까요?\n\n[확인] 옮기기 · [취소] 새 아이디는 처음부터 (하던 기록은 「인터넷 없이 혼자 하기」에 남아요)`);
+      if (move) { own = null; legacy = true; try { localStorage.removeItem(SLOT); } catch (e) { /* 무시 */ } }
+      else {
+        try { localStorage.setItem(SLOT, localStorage.getItem(saveKey) || ''); } catch (e) { /* 무시 */ }
+        acct = { uid: id, token, at: null, dirty: true, keep: !!keep };
+        offline = false; try { localStorage.removeItem(OFF); sessionStorage.removeItem(OFF); } catch (e) { /* 무시 */ }
+        startFresh(); return;
+      }
+    } else if (own && own.uid === LOCAL) {
+      if (kind === 'signup') { own = null; legacy = false; try { localStorage.removeItem(SLOT); } catch (e) { /* 무시 */ } }   // 혼자 기록이 비어 있음
       else try { localStorage.setItem(SLOT, localStorage.getItem(saveKey) || ''); } catch (e) { /* 무시 */ }   // 혼자 하던 기록은 따로 넣어 두고 계정 기록으로
     }
     const mine = !!own && own.uid === id;
@@ -209,5 +219,5 @@ function render(el) {
   if (msg) add(esc(msg), 'acMsg');
 }
 
-return { init, dirty, render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; }, get offline() { return offline; } };
+return { init, dirty, keep: () => !!(acct && acct.keep), render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; }, get offline() { return offline; } };
 })();

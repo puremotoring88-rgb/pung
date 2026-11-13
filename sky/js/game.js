@@ -35,7 +35,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.39';
+const VERSION = '0.40';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -230,7 +230,7 @@ let selMode = 'stage', dojoLv = 1;
 const STAR_RULES = ['클리어', '체력 절반 이상 남기고 클리어', '콤보 30 이상 만들기'];
 const STAR_REWARD = 15;
 // 손맛 숫자(해 보고 조정): 큰 적·정예를 부술 때 잠깐 멈춤(초), 보스 처치 느린 화면(초·빠르기), 피해 숫자 간격(초)
-const FEEL = { ultInv: 2, stopBig: 0.065, stopElite: 0.045, stopBoss: 0.14, slowBoss: 1.5, slowK: 0.3, numGap: 0.16 };
+const FEEL = { ultInv: 2, ultLock: 5, ultBoss: 0.4, stopBig: 0.065, stopElite: 0.045, stopBoss: 0.14, slowBoss: 1.5, slowK: 0.3, numGap: 0.16 };
 let hitStop = 0, slowT = 0, dnums = [];
 
 // ---------- 그림 파일(있으면 쓰고 없으면 코드로 그린 그림) ----------
@@ -1264,7 +1264,7 @@ const guardSpots = () => Array.from({ length: guardCount() }, (_, i) => ({ x: P.
 function useUlt() {
   if (net && net.mode === 'guest') { if (P.ult >= 100) { net.conn.send({ t: 'ult' }); P.ult = 0; } return; }   // 참가자: 방장에게 부탁
   if (state !== 'play' || run.phase === 'dead' || run.phase === 'clear' || P.ult < 100 || P.down > 0) return;
-  P.ult = 0; run.ults++; S.stats.ults++; dcount('ult'); teamUlt('host');
+  P.ult = 0; P.ultLock = FEEL.ultLock; run.ults++; S.stats.ults++; dcount('ult'); teamUlt('host');
   if (P.trap) freeTrap(true);   // 궁극기를 쓰면 그물도 터진다
   const u = st.F.ult;
   A.sfx('ult_' + u.id); buzz(60);
@@ -1372,7 +1372,7 @@ function hitFoe(e, dmg, own) {
     if (!(e.dT > T)) { e.dT = T + FEEL.numGap; if (dnums.length < 40) dnums.push({ x: e.x + rnd(-12, 12), y: e.y - (e.r || 20) * 0.6, v: Math.max(1, Math.round(e.dAcc)), t0: T, big: !!e.isBoss || e.dAcc > 40 }); e.dAcc = 0; }
   }
   if (own && own !== P) own.ult = Math.min(100, own.ult + dmg / run.d.hp * 0.09 * run.m.ult);
-  else P.ult = Math.min(100, P.ult + dmg / run.d.hp * 0.09 * st.ult * run.m.ult);
+  else if (!(P.ultLock > 0)) P.ult = Math.min(100, P.ult + dmg / run.d.hp * 0.09 * st.ult * run.m.ult * (e.isBoss ? FEEL.ultBoss : 1));   // 보스를 때릴 때는 덜 찬다
   if (e.hp <= 0) killFoe(e);
   else A.sfx('hit');
 }
@@ -1623,7 +1623,7 @@ function update(dt) {
   if (run.arena) { cam.x = clamp(P.x - W / 2, 0, AW - W); cam.y = clamp(P.y - H * 0.55, 0, AH - H); bgY = -cam.y * 0.5; nearY = -cam.y; }   // 화면이 로봇을 따라간다
   if (P.inv > 0) P.inv -= dt;
   if (run.phase !== 'dead' && !run.gambler) P.hp = Math.min(P.maxHp, P.hp + st.regen * dt);
-  P.ult = Math.min(100, P.ult + 0.5 * dt * st.ult);
+  if (P.ultLock > 0) P.ultLock -= dt; else P.ult = Math.min(100, P.ult + 0.5 * dt * st.ult);   // 궁극기를 쓴 뒤 잠깐은 다시 차지 않는다
   if (run.m.barrier && !P.barrierReady && (P.barrierT -= dt) <= 0) P.barrierReady = true;
   P.ga += dt * 3;
   tickItems(dt); tickGags(dt);
@@ -3020,7 +3020,7 @@ $('importBtn').addEventListener('click', () => {
   catch (e) { window.alert('저장 코드가 올바르지 않습니다.'); }
 });
 $('resetBtn').addEventListener('click', () => { if (window.confirm('모든 기록을 지우고 처음부터 시작할까요? 되돌릴 수 없습니다.')) { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 무시 */ } location.reload(); } });
-document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; openSlot = null; if (S.newDot && S.newDot['tab:' + tab]) { delete S.newDot['tab:' + tab]; save(); } A.sfx('click'); renderHangar(); }));
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; openSlot = null; lookTry = null; if (S.newDot && S.newDot['tab:' + tab]) { delete S.newDot['tab:' + tab]; save(); } A.sfx('click'); renderHangar(); }));
 $('musicBtn').addEventListener('click', () => { S.music = !S.music; A.setMusic(S.music); save(); renderHangar(); });
 $('sfxBtn').addEventListener('click', () => { S.sfx = !S.sfx; A.setSfx(S.sfx); save(); renderHangar(); });
 $('vibBtn').addEventListener('click', () => { S.vib = !S.vib; save(); buzz(40); renderHangar(); });
@@ -3187,32 +3187,42 @@ function trailFx(s, look, dt) {   // 기체 뒤로 꼬리를 남긴다
   else if (v === 'rainbow') for (const dx of [-6, 0, 6]) fx.push({ k: 'spark', x: s.x + dx, y, vx: 0, vy: 200, t: 0, life: 0.5, color: `hsl(${(T * 300 + dx * 20) % 360},100%,62%)`, size: 5 });
   else fx.push({ k: 'glyph', ch: v, x, y, vx: rnd(-30, 30), vy: rnd(110, 170), t: 0, life: 0.8, size: rnd(12, 18), color: { '✦': '#fff3a0', '♥': '#ff7ad9', '♪': '#9fd0ff', '❀': '#ffb3d9' }[v] || '#fff' });
 }
+let lookTry = null;   // 꾸미기 미리보기: 사지 않은 것을 눌러 보면 입혀 보기만 한다(사기는 「사기」 버튼으로만)
 function lookCanBuy(cat, item) { const lv = item[4] || 0; return S.pilot.lv >= lv; }
 function renderLook(el) {
   el.innerHTML = '';
-  const L = myLook();
+  const L = myLook(); if (lookTry) L[lookTry.cat] = lookTry.id;
   const pv = document.createElement('div'); pv.className = 'lkPreview';
   const c = document.createElement('canvas'); c.width = 300; c.height = 210; pv.append(c); el.append(pv);
   let t0 = 0; const g = c.getContext('2d');
   const anim = () => { if (!c.isConnected) return; t0 += 1 / 60; g.clearRect(0, 0, 300, 210); drawShipAt(g, S.frame, 150, 95, 2.3, Math.sin(t0) * 0.3, t0, false, L); requestAnimationFrame(anim); };
   anim();
+  if (lookTry) {   // 입혀 보기 중: 직접 「사기」를 눌러야 고철을 쓴다
+    const it = LOOKS[lookTry.cat].list.find(x => x[0] === lookTry.id), cost = it[3], can = lookCanBuy(lookTry.cat, it), enough = S.scrap >= cost;
+    const bar = document.createElement('div'); bar.className = 'lkTry';
+    bar.innerHTML = `<span>👀 입혀 보는 중: <b>${it[1]}</b></span><small>${!can ? `🔒 조종사 Lv ${it[4]}부터 살 수 있어요` : enough ? `사면 고철 🔩${S.scrap} → 🔩${S.scrap - cost}` : `고철이 🔩${cost - S.scrap} 모자라요`}</small>
+      <div><button class="lkBuy"${can && enough ? '' : ' disabled'}>🔩 ${cost}로 사기</button><button class="lkCancel">그만 보기</button></div>`;
+    bar.querySelector('.lkBuy').addEventListener('click', () => {
+      if (!can || S.scrap < cost) return;
+      S.scrap -= cost; S.owned[lookTry.cat + ':' + lookTry.id] = 1; S.look[lookTry.cat] = lookTry.id; lookTry = null; A.sfx('part'); save(); renderHangar();
+    });
+    bar.querySelector('.lkCancel').addEventListener('click', () => { lookTry = null; A.sfx('click'); renderHangar(); });
+    el.append(bar);
+  }
   S.owned = S.owned || {};
   for (const cat of Object.keys(LOOKS)) {
     const box = document.createElement('div'); box.className = 'lkCat';
     box.innerHTML = `<b>${LOOKS[cat].name}</b>`;
     const row = document.createElement('div'); row.className = 'lkRow';
     for (const it of LOOKS[cat].list) {
-      const [id, name, val, cost, lv] = it, key = cat + ':' + id, own = !cost || S.owned[key], on = L[cat] === id, can = lookCanBuy(cat, it);
-      const b = document.createElement('button'); b.className = 'lkItem' + (on ? ' on' : '') + (own ? '' : ' lock');
+      const [id, name, val, cost, lv] = it, key = cat + ':' + id, own = !cost || S.owned[key], on = (S.look[cat] || 'none') === id, can = lookCanBuy(cat, it), trying = !!lookTry && lookTry.cat === cat && lookTry.id === id;
+      const b = document.createElement('button'); b.className = 'lkItem' + (on ? ' on' : '') + (own ? '' : ' lock') + (trying ? ' try' : '');
       const sw = cat === 'paint' ? `<i style="background:${val || frameOf(S.frame).color}"></i>` : cat === 'flame' ? `<i style="background:${val === 'rainbow' ? 'linear-gradient(90deg,#f55,#fd5,#5f8,#5cf,#c5f)' : val || frameOf(S.frame).color}"></i>` : `<em>${val === 'smoke' ? '☁' : val === 'rainbow' ? '🌈' : val || '－'}</em>`;
-      b.innerHTML = `${sw}<span>${name}</span><small>${on ? '사용 중' : own ? '고르기' : !can ? `🔒 Lv ${lv}` : `🔩 ${cost}`}</small>`;
+      b.innerHTML = `${sw}<span>${name}</span><small>${trying ? '👀 보는 중' : on ? '사용 중' : own ? '고르기' : !can ? `🔒 Lv ${lv}` : `🔩 ${cost}`}</small>`;
       b.addEventListener('click', () => {
-        if (!own) {
-          if (!can) { window.alert(`조종사 Lv ${lv}부터 살 수 있어요.`); return; }
-          if (S.scrap < cost) { window.alert(`고철이 ${cost - S.scrap}개 모자라요.`); return; }
-          S.scrap -= cost; S.owned[key] = 1; A.sfx('part');
-        } else A.sfx('click');
-        S.look[cat] = id; save(); renderHangar();
+        A.sfx('click');
+        if (!own) { lookTry = { cat, id }; renderHangar(); return; }   // 안 산 것은 입혀 보기만
+        lookTry = null; S.look[cat] = id; save(); renderHangar();
       });
       row.append(b);
     }
@@ -4372,5 +4382,44 @@ function loop(now) {
 }
 SKY.start = startRun; SKY.ult = () => { P.ult = 100; useUlt(); }; SKY.tap = onTap; SKY.trap = () => catchInNet();
 SKY.rest = () => enterRest(true); SKY.item = id => useItem(id, P); SKY.gag = g => gagEvent(g); SKY.drop = id => dropItem(P.x, P.y - 120, id); SKY.foes = () => foes; SKY.drops = () => drops;
+// ---------- ⛶ 전체 화면 · 뒤로 가기로 실수로 꺼지지 않게 ----------
+const fsEl = document.documentElement, fsCan = !!(fsEl.requestFullscreen || fsEl.webkitRequestFullscreen);
+const fsOn = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+function toggleFull() {
+  try {
+    if (fsOn()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else { const p = (fsEl.requestFullscreen || fsEl.webkitRequestFullscreen).call(fsEl, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => {}); }
+  } catch (e) { /* 안 되는 기기 */ }
+  A.sfx('click');
+}
+{
+  const fb = $('fullBtn');
+  if (fb) {
+    if (!fsCan || window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) fb.classList.add('hidden');   // 홈 화면 앱은 이미 전체 화면
+    fb.addEventListener('click', toggleFull);
+    const mark = () => { fb.textContent = fsOn() ? '🗗' : '⛶'; fb.title = fsOn() ? '전체 화면 끄기' : '전체 화면'; };
+    document.addEventListener('fullscreenchange', mark); document.addEventListener('webkitfullscreenchange', mark); mark();
+  }
+}
+let exitOK = false, guardArmed = false;
+const armGuard = () => { if (guardArmed) return; try { history.pushState({ bw: 1 }, ''); guardArmed = true; } catch (e) { /* 무시 */ } };
+armGuard();
+window.addEventListener('pointerdown', () => { if (!guardArmed) armGuard(); }, true);   // 손가락으로 한 번 만진 뒤에 걸어야 휴대폰 뒤로 가기에 걸린다
+window.addEventListener('popstate', () => {
+  if (exitOK) return;
+  guardArmed = false; armGuard();
+  if (state === 'play') pauseGame();
+  if (document.getElementById('exitAsk')) return;
+  const bx = document.createElement('div'); bx.id = 'exitAsk';
+  bx.innerHTML = `<div class="exIn"><b>볼트윙을 끝낼까요?</b><small>${window.Cloud && Cloud.uid && !Cloud.keep() ? '「로그인 유지」를 켜지 않아서, 끝내면 다음에 다시 로그인해야 해요.' : '기록은 저장돼 있어요.'}</small>
+    <div><button class="exStay">계속하기</button><button class="exGo">끝내기</button></div></div>`;
+  bx.querySelector('.exStay').addEventListener('click', () => { bx.remove(); A.sfx('click'); });
+  bx.querySelector('.exGo').addEventListener('click', () => {
+    exitOK = true; bx.remove(); save();
+    history.go(-2);
+    setTimeout(() => { exitOK = false; guardArmed = false; armGuard(); try { window.close(); } catch (e) { /* 무시 */ } }, 600);   // 처음 연 페이지라 뒤로 갈 곳이 없으면 그대로 남는다
+  });
+  document.body.append(bx);
+});
 requestAnimationFrame(loop);
 })();
