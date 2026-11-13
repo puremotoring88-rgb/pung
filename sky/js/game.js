@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.52';
+const VERSION = '0.53';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -88,7 +88,7 @@ const GOALS = [
 const RANKS = ['훈련병', '이등 조종사', '일등 조종사', '편대원', '편대장', '교관', '에이스', '더블 에이스', '하늘의 별', '전설'];
 const rankName = lv => (lv <= RANKS.length ? RANKS[lv - 1] : `전설 ${lv - RANKS.length + 1}`);
 // 성장 속도(사용자 2026-11-13: 너무 빠르다): 조종사 레벨 곡선, 고철 수입, 레벨에 따라 열리는 판 안 아이템, 도감에 올리려면 잡아야 하는 수
-const GROW = { scrap: 0.7, foeBook: 10, multiLv: 4, partLv: { turbo: 1, plate: 1, power: 2, blink: 3, rapid: 3, regen: 4, gun: 5, magnet: 6, ultchip: 7, guard: 8, seeker: 10 }, itemLv: { orb: 1, bomb: 1, magnet: 1, slow: 3, rapid: 5, gold: 7, twin: 9, clover: 12 } };
+const GROW = { rc: 1.5, scrap: 0.7, foeBook: 10, multiLv: 4, partLv: { turbo: 1, plate: 1, power: 2, blink: 3, rapid: 3, regen: 4, gun: 5, magnet: 6, ultchip: 7, guard: 8, seeker: 10 }, itemLv: { orb: 1, bomb: 1, magnet: 1, slow: 3, rapid: 5, gold: 7, twin: 9, clover: 12 } };
 const pilotNeed = lv => 120 + 60 * lv + 6 * lv * lv;
 // 0.47 조종사 레벨 이정표: 큰 고철 + 보상으로만 얻는 꾸미기(사지 못함) + 칭호. 놓친 이정표는 다음 판 끝에 받는다
 const PILOT_MS = { 15: { scrap: 300, look: 'paint:gold', nm: '🎨 황금 도색' }, 20: { scrap: 500, look: 'flame:plasma', nm: '🔥 플라스마 불꽃' }, 25: { scrap: 700, look: 'trail:comet', nm: '☄️ 혜성 꼬리' }, 30: { scrap: 1000, look: 'decal:dragon', nm: '🐉 용 스티커' }, 40: { scrap: 1500, nm: '칭호 「하늘의 주인」' }, 50: { scrap: 2000, nm: '칭호 「살아 있는 전설」' } };
@@ -107,14 +107,14 @@ function gainPilotXp(x) {   // 판이 끝날 때마다 조종사 경험치. 계�
 }
 // 연구: 고철로 사는 영구 강화(모든 기체에 적용)
 const RESEARCH = [
-  { id: 'hull', icon: '🛡️', name: '선체 강화', max: 10, cost: l => 25 * (l + 1), desc: l => `최대 체력 +${5 * l}%` },
-  { id: 'fire', icon: '💥', name: '화력 연구', max: 10, cost: l => 30 * (l + 1), desc: l => `피해 +${3 * l}%` },
-  { id: 'cycle', icon: '⚡', name: '연사 연구', max: 10, cost: l => 30 * (l + 1), desc: l => `연사 +${2 * l}%` },
-  { id: 'pull', icon: '🧲', name: '자석 연구', max: 5, cost: l => 20 * (l + 1), desc: l => `줍는 범위 +${10 * l}%` },
-  { id: 'core', icon: '🌟', name: '궁극 연구', max: 5, cost: l => 35 * (l + 1), desc: l => `궁극기 충전 +${5 * l}%` },
-  { id: 'salvage', icon: '🔩', name: '고철 수집', max: 10, cost: l => 30 * (l + 1), desc: l => `얻는 고철 +${5 * l}%` },
-  { id: 'learn', icon: '📈', name: '전투 학습', max: 5, cost: l => 30 * (l + 1), desc: l => `판 중 경험치 +${6 * l}%` },
-  { id: 'revive', icon: '💖', name: '긴급 수리', max: 3, cost: l => 150 * (l + 1), desc: l => (l ? `판마다 한 번, 쓰러질 때 체력 ${20 + 10 * l}%로 다시 일어남` : '판마다 한 번, 쓰러질 때 다시 일어남') },
+  { id: 'hull', icon: '🛡️', name: '선체 강화', max: 10, cost: l => Math.round(GROW.rc * 25 * (l + 1)), desc: l => `최대 체력 +${5 * l}%` },
+  { id: 'fire', icon: '💥', name: '화력 연구', max: 10, cost: l => Math.round(GROW.rc * 30 * (l + 1)), desc: l => `피해 +${3 * l}%` },
+  { id: 'cycle', icon: '⚡', name: '연사 연구', max: 10, cost: l => Math.round(GROW.rc * 30 * (l + 1)), desc: l => `연사 +${2 * l}%` },
+  { id: 'pull', icon: '🧲', name: '자석 연구', max: 5, cost: l => Math.round(GROW.rc * 20 * (l + 1)), desc: l => `줍는 범위 +${10 * l}%` },
+  { id: 'core', icon: '🌟', name: '궁극 연구', max: 5, cost: l => Math.round(GROW.rc * 35 * (l + 1)), desc: l => `궁극기 충전 +${5 * l}%` },
+  { id: 'salvage', icon: '🔩', name: '고철 수집', max: 10, cost: l => Math.round(GROW.rc * 30 * (l + 1)), desc: l => `얻는 고철 +${5 * l}%` },
+  { id: 'learn', icon: '📈', name: '전투 학습', max: 5, cost: l => Math.round(GROW.rc * 30 * (l + 1)), desc: l => `판 중 경험치 +${6 * l}%` },
+  { id: 'revive', icon: '💖', name: '긴급 수리', max: 3, cost: l => Math.round(GROW.rc * 150 * (l + 1)), desc: l => (l ? `판마다 한 번, 쓰러질 때 체력 ${20 + 10 * l}%로 다시 일어남` : '판마다 한 번, 쓰러질 때 다시 일어남') },
 ];
 const rs = id => S.research[id] || 0;
 // 오늘의 임무: 날마다 셋이 뽑힌다. 출석: 들어온 날마다 하나씩(빠져도 끊기지 않는다)
@@ -250,7 +250,7 @@ MODES.push({ id: 'escape', icon: '🪂', name: '탈출 작전', go: '탈출 시�
 MODES.push({ id: 'coop', icon: '🤝', name: '친구와 함께', go: '함께 출격 ▶', desc: '친구 1~2명과 같은 하늘에서 함께 싸웁니다. 한 명이 방을 만들고 코드나 초대 링크를 보내면 됩니다. 휴대폰과 PC가 섞여도 됩니다.' });
 let selMode = 'stage', dojoLv = 1;
 const STAR_RULES = ['클리어', '체력 절반 이상 남기고 클리어', '콤보 30 이상 만들기'];
-const STAR_REWARD = 15;
+const STAR_REWARD = 10;
 // 손맛 숫자(해 보고 조정): 큰 적·정예를 부술 때 잠깐 멈춤(초), 보스 처치 느린 화면(초·빠르기), 피해 숫자 간격(초)
 const FEEL = { ultInv: 2, ultLock: 0, ultSec: 50, stopBig: 0.065, stopElite: 0.045, stopBoss: 0.14, slowBoss: 1.5, slowK: 0.3, numGap: 0.16 };
 let hitStop = 0, slowT = 0, dnums = [];
@@ -1916,7 +1916,7 @@ function endOther(win) {   // 무한 생존·보스 러시·자동 출격의 결
     rec = `켜 둔 시간 ${fmt((Date.now() - run.startedAt) / 1000)} · 번 금화 💰${Forge.fmt(S.forge.earned - run.goldStart)} · 최고 구역 ${S.idle.best} · 최고 표창 Lv ${S.forge.maxLv}`;
   }
   dcount('combo', run.maxCombo, true);
-  const pxp = Math.round(run.score / 60 + run.kills * (m === 'auto' ? 0.3 : 1) + (win ? 60 : 0)), up = gainPilotXp(pxp);
+  const pxp = Math.round(run.score / 600 + run.kills * (m === 'auto' ? 0.1 : 0.35) + (win ? 30 : 0)), up = gainPilotXp(pxp);
   save();
   A.sfx(good ? 'clear' : 'fail'); A.music('hangar', 0);
   $('rTitle').innerHTML = title; $('rTitle').className = good ? 'win' : 'lose';
@@ -1973,7 +1973,7 @@ function endRun(win) {
   const newBest = run.score > S.best;
   S.best = Math.max(S.best, run.score);
   dcount('combo', run.maxCombo, true);
-  const pxp = Math.round(run.score / 60 + run.kills + (win ? 40 : 0)), up = gainPilotXp(pxp);
+  const pxp = Math.round(run.score / 600 + run.kills * 0.35 + (win ? 25 : 0)), up = gainPilotXp(pxp);
   save();
   hangarStage = win ? run.stage + 1 : run.stage;
   A.sfx(win ? 'clear' : 'fail');
@@ -4453,7 +4453,7 @@ function guestEnd(m) {
   const mine = (m.parts.find(p => p[0] === net.myId) || [0, 0])[1];
   for (let i = 0; i < mine; i++) grantPart();
   S.scrap += m.scrap; S.coop = (S.coop || 0) + 1;
-  const pxp = Math.round(m.score / 60 + m.kills + (m.win ? 40 : 0)), up = gainPilotXp(pxp);
+  const pxp = Math.round(m.score / 600 + m.kills * 0.35 + (m.win ? 25 : 0)), up = gainPilotXp(pxp);
   save(); rawSfx(m.win ? 'clear' : 'fail'); rawMusic('hangar', 0);
   $('rTitle').innerHTML = m.mode === 'endless' ? `<small>함께 · 무한 생존</small>WAVE ${m.wave}` : `<small>함께 · STAGE ${stLabel(m.stage)}</small>${m.win ? '클리어!' : '모두 격추'}`;
   $('rTitle').className = m.win ? 'win' : 'lose';

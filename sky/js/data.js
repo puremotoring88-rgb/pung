@@ -37,8 +37,8 @@ const PARTS = [
   { id: 'guard', slot: 'drone', name: '방어 드론', icon: '🔰', desc: l => `둘레를 돌며 탄을 막는 드론 ${l >= 3 ? 2 : 1}대` },
   { id: 'seeker', slot: 'drone', name: '미사일 드론', icon: '🚀', desc: l => `${(3.2 - 0.3 * l).toFixed(1)}초마다 유도탄 2발` },
 ];
-const PART_COST = l => 30 * l;      // 부품 강화 값(지금 단계 × 30 고철)
-const WEAPON_COST = l => 40 * l;    // 무기 강화 값
+const PART_COST = l => 40 * l + 15 * l * l;   // 부품 강화 값(0.53: 55·140·255·400…, 단계가 오를수록 가파르게)
+const WEAPON_COST = l => 60 * l + 20 * l * l;   // 무기 강화 값(0.53: 80·200·360·560, 끝까지 1200)
 const MAX_LV = 5;
 
 // 판 안에서 레벨이 오르면 고르는 카드(이번 판에만 적용)
