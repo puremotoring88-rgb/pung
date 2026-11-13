@@ -6,7 +6,8 @@ window.Escape = (() => {
 const W = 540, H = 960, TAU = Math.PI * 2, GROUND = H - 70;
 const rnd = (a, b) => a + Math.random() * (b - a), clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // 손맛 숫자(해 보고 조정)
-const K = {
+const K = { spikeP: 0.2,   // 0.44: 가시 공 나올 확률(고리마다, 35%→20%, 나온 뒤 고리 3개는 쉼)
+ 
   g: 1500,              // 사람 중력
   ropeMin: 90,          // 로프 가장 짧은 길이
   ropeReach: 460,       // 로프가 닿는 거리
@@ -41,7 +42,7 @@ function start(callbacks, o) {
   t = 0; cam = 0; items = []; msgs = []; parts = []; others = []; netT = 0; pathT = 0; keys = {}; ptr = null;
   const seed = opt.seed != null ? opt.seed >>> 0 : (Math.random() * 4294967296) >>> 0;
   seedRng = mulberry(seed);
-  st = { phase: 'plane', segEnd: K.segPlane, loop: 0, hearts: 3, inv: 1.5, coins: 0, dist: 0, genX: 600, over: false, hintT: 0, seen: {}, stars: 0, slow: 0, shake: 0, flash: 0, rides: [], best: cb.best ? cb.best() : 0, passBest: false, seed, path: [], raceDone: false };
+  st = { phase: 'plane', segEnd: K.segPlane, loop: 0, hearts: 3, inv: 1.5, coins: 0, dist: 0, genX: 600, spGap: 0, over: false, hintT: 0, seen: {}, stars: 0, slow: 0, shake: 0, flash: 0, rides: [], best: cb.best ? cb.best() : 0, passBest: false, seed, path: [], raceDone: false };
   wrecks = [];
   st.easy = !opt.race && !opt.ghost && (opt.easy != null ? !!opt.easy : !!(cb.easy && cb.easy())); st.maxH = st.easy ? K.easy.hearts : 3; st.hearts = st.maxH;   // 🐢 연습 모드
   P = { x: 160, y: 420, vx: 300, vy: 0, rope: null, flapT: 0, tilt: 0 };
@@ -205,7 +206,8 @@ function gen() {
     if (ph === 'rope') {
       const y = srnd(130, 300); items.push({ k: 'anchor', x, y });
       for (let i = 1; i <= 3; i++) items.push({ k: 'coin', x: x + i * 60, y: y + 230 + Math.sin(i) * 30 });
-      if (lv + x / 40000 > 0.6 && seedRng() < 0.35) items.push({ k: 'spike', x: x + srnd(110, 170), y: srnd(430, 620), r: 26 });
+      if (st.spGap > 0) st.spGap--;   // 가시는 연달아 나오지 않게(최소 고리 3개 띄움)
+      else if (lv + x / 40000 > 0.6 && seedRng() < K.spikeP) { st.spGap = 3; if (!st.easy) items.push({ k: 'spike', x: x + srnd(120, 170), y: srnd(470, 600), r: 24, ph: x }); }
       st.genX += srnd(230, 320) + lv * 15;
     } else if (ph === 'spider') {   // 거미: 천장이나 바닥에서 솟은 반쪽 기둥 → 반대쪽으로 옮겨 붙어야 한다
       const fromTop = seedRng() < 0.5, len = srnd(330, 470);
@@ -383,7 +385,7 @@ function update(dt) {
       if (st.inv <= 0) hurt('기둥에 쾅!');
     }
     if (st.inv > 0) continue;
-    if (it.k === 'spike' && Math.hypot(it.x - P.x, it.y - P.y) < it.r + 16) hurt('가시 공!');
+    if (it.k === 'spike' && Math.hypot(it.x - P.x, it.y - P.y) < it.r * 0.8 + 12) { it.hit = 1; hurt('가시 공!'); }   // 보이는 것보다 조금 작게 맞는다
   }
   if (st.phase === 'core') { if (P.y < 50) { P.y = 50; P.vy = 0; } }
   if (P.y > GROUND - 14 && st.phase !== 'spider') {
@@ -504,10 +506,17 @@ function draw() {
       g.fillStyle = '#6b7484'; g.fillRect(it.x, it.top, 12, it.bot - it.top);
       g.fillStyle = '#ff5d5d'; g.fillRect(it.x - 4, it.top === 0 ? it.bot - 10 : it.top, it.w + 8, 10);
     } else if (it.k === 'spike') {
-      g.strokeStyle = '#5b6470'; g.lineWidth = 2; g.beginPath(); g.moveTo(it.x, 0); g.lineTo(it.x, it.y); g.stroke();
+      // 0.44: 잘 보이게 — 밝은 사슬, 붉게 빛나는 둘레, 흰 테두리 가시, 가까우면 ⚠️
+      const pul = 0.5 + 0.5 * Math.sin(t * 6 + (it.ph || 0)), near = Math.abs(it.x - P.x) < 320;
+      g.strokeStyle = '#c9d2de'; g.lineWidth = 3; g.setLineDash([8, 6]); g.beginPath(); g.moveTo(it.x, 0); g.lineTo(it.x, it.y - it.r); g.stroke(); g.setLineDash([]);
+      const gr = g.createRadialGradient(it.x, it.y, it.r * 0.6, it.x, it.y, it.r * 2.4); gr.addColorStop(0, `rgba(255,70,50,${0.45 + 0.3 * pul})`); gr.addColorStop(1, 'rgba(255,70,50,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(it.x, it.y, it.r * 2.4, 0, TAU); g.fill();
       g.save(); g.translate(it.x, it.y); g.rotate(t * 2);
-      g.fillStyle = '#3a3f48'; g.beginPath(); for (let i = 0; i < 16; i++) { const a = i * TAU / 16, r = i % 2 ? it.r * 0.7 : it.r * 1.25; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.fill();
+      g.beginPath(); for (let i = 0; i < 16; i++) { const a = i * TAU / 16, r = i % 2 ? it.r * 0.72 : it.r * 1.3; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath();
+      g.fillStyle = '#ff4a3a'; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 2.5; g.stroke();
+      g.fillStyle = '#7a1010'; g.beginPath(); g.arc(0, 0, it.r * 0.42, 0, TAU); g.fill();
       g.restore();
+      if (near && it.x > P.x) { g.font = '900 26px sans-serif'; g.textAlign = 'center'; g.fillStyle = `rgba(255,230,120,${0.6 + 0.4 * pul})`; g.fillText('⚠️', it.x, it.y - it.r * 1.6 - 8); }
     }
   }
   if (st.best > 50 && st.best * 10 > cam - 60 && st.best * 10 < cam + W + 60) {   // 🏁 내 최고 기록 자리
