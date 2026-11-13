@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.48';
+const VERSION = '0.49';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -4536,6 +4536,14 @@ const lobbyOpt = {
   nick: () => myNick(),
   room: () => net && net.mode === 'host' ? { pub: net.pub, code: net.code, n: 1 + allies.length, mode: coopMd, play: state !== 'hangar' } : null,
   join: code => { A.sfx('click'); joinRoom(code); },
+  lv: () => S.pilot.lv,
+  status: () => state !== 'hangar' ? 'play' : net ? 'room' : '',
+  onInvite: () => A.sfx('levelup'),
+  ensureRoom: () => new Promise(res => {   // 0.49 대기실 초대: 방이 없으면 비공개 방을 열고 코드를 돌려준다
+    if (net) return res(net.code || null);
+    hostRoom(false); const t0 = Date.now();
+    const iv = setInterval(() => { if (net && net.mode === 'host' && net.peer && net.peer.open) { clearInterval(iv); res(net.code); } else if (!net || Date.now() - t0 > 10000) { clearInterval(iv); res(null); } }, 200);
+  }),
 };
 setInterval(() => { if (Lobby.on) Lobby.sync(); }, 3000);
 

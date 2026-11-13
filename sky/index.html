@@ -102,6 +102,12 @@
   .lbLog { max-height: calc(var(--u) * 44); overflow-y: auto; background: rgba(5,10,20,.55); border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 1.6); margin: calc(var(--u) * 1.4) 0; font-size: calc(var(--u) * 2.9); line-height: 1.45; }
   .lbLog small { opacity: .6; } .lbMsg { display: flex; gap: calc(var(--u) * 1); align-items: baseline; word-break: break-all; } .lbMsg b { color: #9fd0ff; white-space: nowrap; } .lbMsg.me b { color: #ffd166; }
   .lbHide { margin-left: auto; font-size: calc(var(--u) * 2.2); opacity: .55; background: none; border: none; color: inherit; white-space: nowrap; }
+  .lbInv { margin: calc(var(--u) * 1) 0; padding: calc(var(--u) * 1.2); border-radius: calc(var(--u) * 1.2); background: rgba(255, 209, 102, .16); border: 1px solid rgba(255, 209, 102, .6); animation: lbInvIn .4s; } @keyframes lbInvIn { from { transform: scale(.92); opacity: 0; } }
+  .lbPeopleHead { display: flex; align-items: center; justify-content: space-between; margin-top: calc(var(--u) * 1.4); } .lbPeopleHead .cbtn { padding: calc(var(--u) * .5) calc(var(--u) * 1.2); font-size: calc(var(--u) * 2.2); }
+  .lbPeople { max-height: calc(var(--u) * 28); overflow-y: auto; display: flex; flex-direction: column; gap: calc(var(--u) * .6); margin: calc(var(--u) * 1) 0; } .lbPeople small { opacity: .6; }
+  .lbP { display: flex; align-items: center; gap: calc(var(--u) * 1); padding: calc(var(--u) * .6) calc(var(--u) * 1); border-radius: calc(var(--u) * 1); background: rgba(255, 255, 255, .06); } .lbP b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lbP .lv { font-size: .78em; color: #ffd166; white-space: nowrap; } .lbP .st { font-size: .78em; white-space: nowrap; opacity: .8; } .lbP .st.play { color: #ff9a7a; } .lbP .st.room { color: #7fffd4; }
+  .lbP .cbtn.mini { margin-left: auto; padding: calc(var(--u) * .5) calc(var(--u) * 1.2); font-size: calc(var(--u) * 2.2); } .lbP .cbtn.mini + .lbHide { margin-left: 0; }
   .lbQuick { display: flex; flex-wrap: wrap; gap: calc(var(--u) * .8); margin-bottom: calc(var(--u) * 1); } .lbQuick .cbtn { padding: calc(var(--u) * 1) calc(var(--u) * 1.6); font-size: calc(var(--u) * 2.6); }
   .lbIn input { flex: 1; min-width: 0; }
   .acct { margin-bottom: calc(var(--u) * 3); padding: calc(var(--u) * 2.6); border-radius: calc(var(--u) * 2.4); background: rgba(10,20,40,.6); border: 1px solid rgba(127,216,255,.35); text-align: left; }
