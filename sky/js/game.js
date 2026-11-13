@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.54';
+const VERSION = '0.55';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -2674,6 +2674,14 @@ function renderHangar() {
     rush: `최고 ${S.records.rush} / 5${S.records.rushTime ? ` · 최단 ${fmt(S.records.rushTime)}` : ''}`, auto: `구역 ${S.idle.zone} · 최고 ${S.idle.best} · 💰${Forge.fmt(S.forge.gold)} · 최고 표창 Lv ${S.forge.maxLv} · ✨ 별조각 ${S.forge.shards}` }[selMode];
   $('modeInfo').innerHTML = `<b>${M.icon} ${M.name}</b><br>${M.desc}<br><small>📊 ${rec || `열린 단계 ${S.dojo.open} / 8`}</small>`;
   { const nt = nextOpenTip(); if (nt) $('modeInfo').insertAdjacentHTML('beforeend', `<div class="nextOpen">${nt}</div>`); }
+  if (Cloud.guest && S.plays >= 1 && (S.guestAskAt || 0) <= S.plays) {   // 0.55: 손님으로 한 판 이상 했으면 아이디 만들기 권유(나중에 = 3판 뒤 다시)
+    const gc = document.createElement('div'); gc.className = 'guestAsk';
+    gc.innerHTML = `<b>💾 기록을 지키세요</b><br><small>아이디를 만들면 지금 기록을 그대로 가져가고, 다른 기기에서도 이어 하고, 랭킹·친구·주간 리그를 쓸 수 있어요.</small>`;
+    const r = document.createElement('div'); r.className = 'gaRow';
+    const b1 = document.createElement('button'); b1.className = 'main'; b1.textContent = '✨ 아이디 만들기'; b1.onclick = () => { A.sfx('click'); Cloud.toSignup(); };
+    const b2 = document.createElement('button'); b2.textContent = '나중에'; b2.onclick = () => { S.guestAskAt = S.plays + 3; save(); A.sfx('click'); renderHangar(); };
+    r.append(b1, b2); gc.append(r); $('modeInfo').append(gc);
+  }
   if (selMode === 'dojo') {
     dojoLv = Math.min(dojoLv, S.dojo.open);
     const row = document.createElement('div'); row.className = 'dojoLv';
@@ -4589,6 +4597,7 @@ const gateUi = () => {
   const open = (!Cloud.uid && !Cloud.offline) || Cloud.choosing;
   $('gate').classList.toggle('hidden', !open);
   if (open) { Cloud.render($('gateBox')); return; }
+  if (state === 'hangar' && document.querySelector('.guestAsk') && !Cloud.guest) renderHangar();   // 아이디를 만들면 「기록을 지키세요」 칸을 치운다
   if (gateJoin) { gateJoin = false; joinRoom(joinCode); }
 };
 Cloud.init({ getS: () => S, saveKey: SAVE_KEY, canReload: () => state === 'hangar', sfx: n => A.sfx(n), onUi: () => { Cloud.render($('acctBox')); gateUi(); } });

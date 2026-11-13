@@ -11,7 +11,8 @@ const AK = 'boltwing.acct';   // 로그인 정보(아이디·접속표). 기록(
 const OWN = 'boltwing.owner';   // 이 기기 기록의 주인 { uid, at, dirty }
 // 📴 혼자 하기(인터넷 없이): 주인이 LOCAL인 기록. 서버에 없는 유일한 사본이라, 계정이 이 기기를 쓰는 동안에는 SLOT에 따로 넣어 둔다.
 const LOCAL = '@local', OFF = 'boltwing.offline', SLOT = 'boltwing.slot.' + LOCAL;
-let offline = false, form = 'login';   // form: 로그인 칸 / 새로 만들기 칸
+let offline = false, form = 'login', carryDef = false;   // form: 로그인 칸 / 새로 만들기 칸, carryDef: 새로 만들 때 지금 기록 가져가기 기본값
+const GUEST = 'boltwing.guest', HAD = 'boltwing.hadAcct';   // 0.55: 처음 온 기기는 로그인 없이 바로(손님), 이 기기에서 로그인한 적이 있으면 로그인 문부터
 let leaving = false, lastId = '', getS, saveKey, canReload, sfx, onUi, acct = null, timer = null, busy = false, msg = '', choose = null;
 
 const read = () => { try { return JSON.parse(localStorage.getItem(AK) || sessionStorage.getItem(AK) || 'null'); } catch (e) { return null; } };
@@ -22,6 +23,7 @@ const store = () => {
     if (!acct) return;
     (acct.keep ? localStorage : sessionStorage).setItem(AK, JSON.stringify(acct));
     localStorage.setItem(OWN, JSON.stringify({ uid: acct.uid, at: acct.at || null, dirty: !!acct.dirty }));
+    localStorage.setItem(HAD, '1'); localStorage.removeItem(GUEST);
   } catch (e) { /* 무시 */ }
 };
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -48,6 +50,9 @@ function init(o) {
     const own = owner();
     offline = !acct && !!(localStorage.getItem(OFF) || sessionStorage.getItem(OFF)) && !!own && own.uid === LOCAL;
     if (!offline) { localStorage.removeItem(OFF); sessionStorage.removeItem(OFF); }
+    if (!acct && !offline && (!own || (own.uid === LOCAL && localStorage.getItem(GUEST) === '1')) && !localStorage.getItem(HAD)) {   // 0.55: 처음 온 사람은 아이디 없이 바로 첫 판(판이 끝나면 아이디 만들기를 권한다)
+      localStorage.setItem(OFF, '1'); localStorage.setItem(OWN, JSON.stringify({ uid: LOCAL })); localStorage.setItem(GUEST, '1'); offline = true;
+    }
   } catch (e) { offline = false; }
   if (acct) check(!!acct.dirty);   // 앱을 열 때 저절로 하는 저장보다 먼저, 이 기기에 안 올린 기록이 있었는지를 기준으로
   document.addEventListener('visibilitychange', () => { if (!acct) return; if (document.hidden) push(true); else if (canReload()) check(); });
@@ -97,7 +102,7 @@ function startFresh() {   // 이 기기 기록을 비우고 새로 시작(다시
   acct.at = null; acct.dirty = true; store();
   leaving = true; location.reload();
 }
-async function enter(kind, id, pw, keep) {
+async function enter(kind, id, pw, keep, carry) {
   if (busy) return;
   id = String(id || '').replace(/[\s​-‏﻿]/g, '').toLowerCase(); lastId = id;   // 보이지 않는 글자·띄어쓰기는 뺀다
   if (!/^[a-z0-9_]{4,16}$/.test(id)) { msg = '아이디(위 칸)는 영어 소문자·숫자·_ 로 4~16글자예요. 한글 자판이면 영어로 바꿔 주세요.'; ui(); return; }
@@ -108,7 +113,8 @@ async function enter(kind, id, pw, keep) {
     let own = owner(), legacy;
     const S = getS();
     if (kind === 'signup' && (!own || own.uid === LOCAL) && (S.plays || S.cleared)) {
-      // 0.47: 새 아이디는 묻지 않고 늘 처음부터(사용자 요청). 아이디 없이 하던 기록은 「인터넷 없이 혼자 하기」에 그대로 남는다.
+      // 0.47: 새 아이디는 기본이 처음부터. 0.55: 「지금까지 한 기록 가져가기」를 체크하면(손님으로 하던 사람은 기본 체크) 이 기록을 새 아이디로 올린다.
+      if (carry) { own = null; legacy = true; try { localStorage.removeItem(SLOT); } catch (e) { /* 무시 */ } } else
       {
         try { localStorage.setItem(SLOT, localStorage.getItem(saveKey) || ''); } catch (e) { /* 무시 */ }
         acct = { uid: id, token, at: null, dirty: true, keep: !!keep };
@@ -151,6 +157,11 @@ function goOffline(keep) {
   } catch (e) { /* 무시 */ }
   leaving = true; location.reload();
 }
+function toSignup() {   // 0.55: 손님·혼자 하기에서 아이디 만들기 화면으로(지금 기록 가져가기가 기본)
+  offline = false; msg = ''; form = 'signup'; carryDef = true;
+  try { localStorage.removeItem(OFF); sessionStorage.removeItem(OFF); } catch (e) { /* 무시 */ }
+  ui();
+}
 function leaveOffline() {   // 아이디로 들어가는 화면으로(혼자 하던 기록은 남는다)
   offline = false; msg = '';
   try { localStorage.removeItem(OFF); sessionStorage.removeItem(OFF); } catch (e) { /* 무시 */ }
@@ -189,8 +200,8 @@ function render(el) {
   }
   if (!acct && offline) {   // 혼자 하기 중(설정 칸)
     add('<b>📴 혼자 하기 중</b> <small>인터넷 없이</small>', 'acHead');
-    const r = add('', 'acRow'); r.append(btn('👤 아이디로 들어가기', leaveOffline, 'main'));
-    add('기록은 이 기기에만 쌓여요. 기기를 바꾸거나 브라우저 기록을 지우면 사라질 수 있어요. 아이디를 새로 만들면 혼자 하던 기록이 계정으로 올라가요. 랭킹·친구와 함께는 인터넷과 아이디가 필요해요.', 'acNote');
+    const r = add('', 'acRow'); r.append(btn('✨ 아이디 만들기', toSignup, 'main'), btn('👤 로그인', leaveOffline));
+    add('기록은 이 기기에만 쌓여요. 기기를 바꾸거나 브라우저 기록을 지우면 사라질 수 있어요. 아이디를 만들면 지금 기록을 가져갈 수 있어요. 랭킹·친구와 함께는 인터넷과 아이디가 필요해요.', 'acNote');
   } else if (!acct) {
     // 0.54: 로그인 화면과 새로 만들기 화면을 나눈다(아이디를 안 쓰고 「새로 만들기」를 눌러 안 된다고 느끼던 문제)
     const su = form === 'signup';
@@ -201,24 +212,32 @@ function render(el) {
     const pw = document.createElement('input'); pw.type = 'password'; pw.placeholder = su ? '비밀번호 (6글자 이상, 아무 글자)' : '비밀번호'; pw.maxLength = 64; pw.autocomplete = su ? 'new-password' : 'current-password';
     const pw2 = document.createElement('input'); pw2.type = 'password'; pw2.placeholder = '비밀번호 한 번 더'; pw2.maxLength = 64; pw2.autocomplete = 'new-password';
     if (su) { lab('① 아이디'); f.append(id); lab('② 비밀번호'); f.append(pw); lab('③ 비밀번호 확인'); f.append(pw2); } else f.append(id, pw);
+    const S0 = getS(), own0 = owner(), canCarry = su && (!own0 || own0.uid === LOCAL) && !!(S0.plays || S0.cleared);
+    let carry = null;
+    if (canCarry) { const cl = add('', 'acKeep acCarry', 'label'); carry = document.createElement('input'); carry.type = 'checkbox'; carry.checked = carryDef; cl.append(carry, document.createTextNode(` 📦 지금까지 한 기록 가져가기 (${summary(S0)})`)); }
     const kp = add('', 'acKeep', 'label'), keep = document.createElement('input'); keep.type = 'checkbox';
     kp.append(keep, document.createTextNode(' 이 기기에서 로그인 유지 (내 기기일 때만)'));
     const go = () => {
       if (su && pw.value !== pw2.value) { lastId = id.value; msg = '비밀번호와 확인이 서로 달라요. 똑같이 두 번 써 주세요.'; ui(); return; }
-      enter(su ? 'signup' : 'login', id.value, pw.value, keep.checked);
+      enter(su ? 'signup' : 'login', id.value, pw.value, keep.checked, !!(carry && carry.checked));
     };
     const calm = () => { if (msg && !busy) { msg = ''; const m = el.querySelector('.acMsg'); if (m) m.remove(); } };   // 다시 쓰기 시작하면 앞 안내는 지운다
     [id, pw, pw2].forEach(x => x.addEventListener('input', calm));
     (su ? pw2 : pw).addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
     const r = add('', 'acRow');
-    if (su) r.append(btn('✨ 만들고 시작하기', go, 'main'), btn('← 로그인으로', () => { lastId = id.value; form = 'login'; msg = ''; ui(); }));
+    if (su) {
+      r.append(btn('✨ 만들고 시작하기', go, 'main'), btn('← 로그인으로', () => { lastId = id.value; form = 'login'; msg = ''; ui(); }));
+      if (own0 && own0.uid === LOCAL) { const rb = add('', 'acRow'); rb.append(btn('↩ 아이디 없이 계속 하기', () => { form = 'login'; msg = ''; goOffline(true); })); }
+    }
     else {
       r.append(btn('로그인', go, 'main'));
       const r2 = add('<span>처음 오셨나요?</span>', 'acRow acNew'); r2.append(btn('✨ 새 아이디 만들기', () => { lastId = id.value; form = 'signup'; msg = ''; ui(); }, 'main'));
     }
     add('이메일·실명은 받지 않아요. 비밀번호를 잊으면 되찾을 수 없으니 잘 기억해 두세요. 유지를 고르지 않으면 창을 닫을 때 로그아웃돼요.', 'acNote');
-    const r2 = add('', 'acRow acSolo'); r2.append(btn('📴 인터넷 없이 혼자 하기', () => goOffline(keep.checked), 'wide'));
-    add('혼자 하기 기록은 이 기기에만 쌓여요. 아이디 기록과는 따로라서 섞이지 않아요(새 아이디는 늘 처음부터).', 'acNote');
+    if (!(su && own0 && own0.uid === LOCAL)) {
+      const r2 = add('', 'acRow acSolo'); r2.append(btn('📴 인터넷 없이 혼자 하기', () => goOffline(keep.checked), 'wide'));
+      add('혼자 하기 기록은 이 기기에만 쌓여요. 나중에 아이디를 만들 때 그 기록을 가져갈 수 있어요.', 'acNote');
+    }
   } else {
     const when = acct.last ? new Date(acct.last).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
     add(`<b>👤 ${esc(acct.uid)}</b> <small>로그인됨 · ${acct.dirty ? '저장 대기 중' : when ? `☁️ ${when} 저장됨` : '☁️ 저장됨'}</small>`, 'acHead');
@@ -229,5 +248,5 @@ function render(el) {
   if (msg) add(esc(msg), 'acMsg');
 }
 
-return { init, dirty, call: (fn, b) => (acct ? rpc(fn, Object.assign({ p_token: acct.token }, b)) : Promise.reject(new Error('session'))), keep: () => !!(acct && acct.keep), render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; }, get offline() { return offline; } };
+return { init, dirty, call: (fn, b) => (acct ? rpc(fn, Object.assign({ p_token: acct.token }, b)) : Promise.reject(new Error('session'))), keep: () => !!(acct && acct.keep), render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; }, get offline() { return offline; }, get guest() { try { return offline && localStorage.getItem(GUEST) === '1'; } catch (e) { return false; } }, toSignup };
 })();
