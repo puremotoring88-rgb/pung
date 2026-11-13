@@ -22,6 +22,11 @@ const stageEnd = s => (subOf(s) === 5 ? 'boss' : subOf(s) === 3 ? 'scout' : 'lea
 const stageBossIdx = s => (subOf(s) === 5 ? (chOf(s) - 1) % 5 : chOf(s) % 5);
 const END_NM = { boss: '👑 챕터 보스', scout: '⚔️ 보스 선발대', leader: '🛡️ 정예 편대' };
 const recPow = s => Math.min(1620, 560 + 24 * (s - 1));   // 스테이지 권장 전투력(새 기체 약 575, 다 강화하면 약 1600)
+// 0.47 다음 챕터 문: 챕터 c의 첫 스테이지는 지금까지 모은 별이 (c-1)×STAR_GATE개 이상이어야 열린다(한 챕터 별 15개 중 7개꼴). 이미 깬 곳은 그대로
+const STAR_GATE = 7;
+const totalStars = () => Object.values(S.stars || {}).reduce((n, a) => n + (a || []).filter(Boolean).length, 0);
+const chNeed = s => (chOf(s) - 1) * STAR_GATE;
+const gateOk = s => subOf(s) !== 1 || chOf(s) === 1 || S.cleared >= s || totalStars() >= chNeed(s);
 let skyTheme = -1;
 const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -35,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.46';
+const VERSION = '0.47';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -85,14 +90,19 @@ const rankName = lv => (lv <= RANKS.length ? RANKS[lv - 1] : `전설 ${lv - RANK
 // 성장 속도(사용자 2026-11-13: 너무 빠르다): 조종사 레벨 곡선, 고철 수입, 레벨에 따라 열리는 판 안 아이템, 도감에 올리려면 잡아야 하는 수
 const GROW = { scrap: 0.7, foeBook: 10, multiLv: 4, partLv: { turbo: 1, plate: 1, power: 2, blink: 3, rapid: 3, regen: 4, gun: 5, magnet: 6, ultchip: 7, guard: 8, seeker: 10 }, itemLv: { orb: 1, bomb: 1, magnet: 1, slow: 3, rapid: 5, gold: 7, twin: 9, clover: 12 } };
 const pilotNeed = lv => 120 + 60 * lv + 6 * lv * lv;
+// 0.47 조종사 레벨 이정표: 큰 고철 + 보상으로만 얻는 꾸미기(사지 못함) + 칭호. 놓친 이정표는 다음 판 끝에 받는다
+const PILOT_MS = { 15: { scrap: 300, look: 'paint:gold', nm: '🎨 황금 도색' }, 20: { scrap: 500, look: 'flame:plasma', nm: '🔥 플라스마 불꽃' }, 25: { scrap: 700, look: 'trail:comet', nm: '☄️ 혜성 꼬리' }, 30: { scrap: 1000, look: 'decal:dragon', nm: '🐉 용 스티커' }, 40: { scrap: 1500, nm: '칭호 「하늘의 주인」' }, 50: { scrap: 2000, nm: '칭호 「살아 있는 전설」' } };
+const nextMs = () => Object.keys(PILOT_MS).map(Number).find(l => l > S.pilot.lv);
 const partsAvail = () => D.PARTS.filter(p => !S.parts[p.id] && (GROW.partLv[p.id] || 1) <= S.pilot.lv);   // 부품도 조종사 레벨에 따라 하나씩
 const nextPartLv = () => Math.min(...D.PARTS.filter(p => !S.parts[p.id]).map(p => GROW.partLv[p.id] || 1), 99);
 function gainPilotXp(x) {   // 판이 끝날 때마다 조종사 경험치. 계급이 오르면 고철을 받는다
   let ups = 0, reward = 0; const lv0 = S.pilot.lv;
   S.pilot.xp += x;
   while (S.pilot.xp >= pilotNeed(S.pilot.lv)) { S.pilot.xp -= pilotNeed(S.pilot.lv); S.pilot.lv++; ups++; reward += 20 + 10 * S.pilot.lv; }
+  const ms = []; S.msGot = S.msGot || {};
+  for (const l of Object.keys(PILOT_MS).map(Number)) if (l <= S.pilot.lv && !S.msGot[l]) { const m = PILOT_MS[l]; S.msGot[l] = 1; reward += m.scrap; if (m.look) { S.owned = S.owned || {}; S.owned[m.look] = 1; } ms.push(`🎁 Lv ${l} 보상: ${m.nm} · 🔩${m.scrap}`); }
   S.scrap += reward;
-  const opened = Object.keys(GROW.itemLv).filter(k => GROW.itemLv[k] > lv0 && GROW.itemLv[k] <= S.pilot.lv).map(k => ITEMS[k].icon + ' ' + ITEMS[k].name).concat(GROW.multiLv > lv0 && GROW.multiLv <= S.pilot.lv ? ['🔱 탄 +1 줍기'] : [], D.PARTS.filter(p => (GROW.partLv[p.id] || 1) > lv0 && (GROW.partLv[p.id] || 1) <= S.pilot.lv).map(p => '⚙️ 부품 ' + p.name));
+  const opened = Object.keys(GROW.itemLv).filter(k => GROW.itemLv[k] > lv0 && GROW.itemLv[k] <= S.pilot.lv).map(k => ITEMS[k].icon + ' ' + ITEMS[k].name).concat(GROW.multiLv > lv0 && GROW.multiLv <= S.pilot.lv ? ['🔱 탄 +1 줍기'] : [], D.PARTS.filter(p => (GROW.partLv[p.id] || 1) > lv0 && (GROW.partLv[p.id] || 1) <= S.pilot.lv).map(p => '⚙️ 부품 ' + p.name), ms);
   return { ups, reward, opened };
 }
 // 연구: 고철로 사는 영구 강화(모든 기체에 적용)
@@ -348,6 +358,11 @@ const TITLES = [
   { id: 'myth', name: '신화의 조종사', hint: '성장 단계 「신화」', ok: () => myTierV >= 6 },
   { id: 'half', name: '도감 수집가', hint: '도감 50%', ok: () => bookCount().pct >= 50 },
   { id: 'full', name: '도감 박사', hint: '도감 100%', ok: () => bookCount().pct >= 100 },
+  { id: 'vet', name: '베테랑 조종사', hint: '조종사 Lv 15', ok: () => S.pilot.lv >= 15 },
+  { id: 'guard', name: '하늘의 수호자', hint: '조종사 Lv 20', ok: () => S.pilot.lv >= 20 },
+  { id: 'legend', name: '전설의 조종사', hint: '조종사 Lv 30', ok: () => S.pilot.lv >= 30 },
+  { id: 'sky40', name: '하늘의 주인', hint: '조종사 Lv 40', ok: () => S.pilot.lv >= 40 },
+  { id: 'sky50', name: '살아 있는 전설', hint: '조종사 Lv 50', ok: () => S.pilot.lv >= 50 },
 ];
 const titleName = () => (TITLES.find(t => t.id === S.title && t.ok()) || TITLES[0]).name;
 function titleCheck() {   // 새로 얻은 칭호 알림
@@ -588,6 +603,7 @@ function startRun(stage, md = 'stage') {
   if (md === 'rush' || md === 'endless') stage = 1;
   if (md === 'dojo') { dojoLv = Math.min(dojoLv, S.dojo.open); stage = dojoLv; }
   if (md === 'coop') { if (!(net && net.mode === 'host' && allies.length)) { coopMsg = net && net.mode === 'guest' ? '방장이 출격을 누르면 함께 시작해요' : '먼저 방을 만들고 친구가 들어올 때까지 기다려 주세요'; renderHangar(); return; } md = coopMd; if (md === 'escape') { escRaceHost(); return; } }
+  if (md === 'stage' && !gateOk(stage)) { A.sfx('click'); hangarStage = stage; renderHangar(); const tp = $('stTip'); if (tp) { tp.classList.remove('gateShake'); void tp.offsetWidth; tp.classList.add('gateShake'); } return; }   // 별이 모자라면 출격 대신 안내
   st = buildStats();
   const assist = md === 'stage' && assistOn && (S.fails || {})[stage] >= 2;
   if (assist) { st.maxHp = Math.round(st.maxHp * 1.25); st.dmg *= 1.25; }
@@ -2703,14 +2719,16 @@ function renderHangar() {
     const open = s <= S.maxStage, en = stageEnd(s), bd = D.BOSSES[stageBossIdx(s)], stars = S.stars[s] || [], loop = (chOf(s) - 1) / 9 | 0;
     if (subOf(s) === 1) map.insertAdjacentHTML('beforeend', `<div class="chHead">챕터 ${chOf(s)} · ${D.THEMES[stageTheme(s)].name}${loop ? ` · ${loop + 1}회차` : ''}</div>`);
     const n = document.createElement('button');
-    n.className = 'node' + (s === hangarStage ? ' on' : '') + (open ? '' : ' locked') + (S.cleared >= s ? ' done' : '');
+    const gated = open && !gateOk(s);
+    n.className = 'node' + (s === hangarStage ? ' on' : '') + (open && !gated ? '' : ' locked') + (S.cleared >= s ? ' done' : '');
     const rk = (S.ranks || {})[s];
-    n.innerHTML = `<span class="num ch">${stLabel(s)}</span><span class="nm"><b>${en === 'leader' ? END_NM.leader : END_NM[en] + ' ' + bd.name}</b><small>${en === 'boss' ? '챕터 마지막 · 진짜 보스' : en === 'scout' ? '다음 챕터 보스의 선발대(체력 절반)' : '커다란 대장 전차와 호위'} · <span class="rp${pw < recPow(s) ? ' low' : ''}">⚡${recPow(s)}</span></small></span>${rk ? `<span class="rank r${rk}">${rk}</span>` : ''}<span class="st">${[0, 1, 2].map(i => `<em class="${stars[i] ? 'on' : ''}">★</em>`).join('')}</span>${open ? '' : '<span class="lock">🔒</span>'}`;
+    n.innerHTML = `<span class="num ch">${stLabel(s)}</span><span class="nm"><b>${en === 'leader' ? END_NM.leader : END_NM[en] + ' ' + bd.name}</b><small>${en === 'boss' ? '챕터 마지막 · 진짜 보스' : en === 'scout' ? '다음 챕터 보스의 선발대(체력 절반)' : '커다란 대장 전차와 호위'} · <span class="rp${pw < recPow(s) ? ' low' : ''}">⚡${recPow(s)}</span></small></span>${rk ? `<span class="rank r${rk}">${rk}</span>` : ''}<span class="st">${[0, 1, 2].map(i => `<em class="${stars[i] ? 'on' : ''}">★</em>`).join('')}</span>${gated ? `<span class="lock gateNeed">⭐${totalStars()}/${chNeed(s)}</span>` : open ? '' : '<span class="lock">🔒</span>'}`;
     if (open) n.addEventListener('click', () => { hangarStage = s; A.sfx('click'); renderHangar(); });
     map.append(n);
   }
   const hEn = stageEnd(hangarStage), bd = D.BOSSES[stageBossIdx(hangarStage)];
   $('stTip').innerHTML = `<b>스테이지 ${stLabel(hangarStage)}</b> · ${D.THEMES[stageTheme(hangarStage)].name} · 끝에 <b>${hEn === 'leader' ? END_NM.leader : END_NM[hEn] + ' ' + bd.name}</b><br><small>${hEn === 'leader' ? '대장 전차가 둥근 탄과 조준 탄을 쏘고 호위를 부릅니다. 대장을 부수면 클리어!' : bd.tip}</small><br><small class="rules">${STAR_RULES.map((r, i) => `${(S.stars[hangarStage] || [])[i] ? '★' : '☆'} ${r}`).join(' · ')}</small>`;
+  if (!gateOk(hangarStage)) $('stTip').insertAdjacentHTML('afterbegin', `<div class="gateLine">🚪 챕터 ${chOf(hangarStage)}의 문을 열려면 별 <b>⭐${chNeed(hangarStage)}개</b>가 필요해요 (지금 ⭐${totalStars()}개 · ${chNeed(hangarStage) - totalStars()}개 더)<br><small>앞 스테이지를 다시 해서 ★ 체력 절반 이상 남기기 · ★ 콤보 30을 채워 보세요.</small></div>`);
   {   // 권장 전투력: 모자라면 강화하러 가는 길을 알려 준다
     const rp = recPow(hangarStage), gap = rp - pw, up = ['arms', 'parts', 'research'].find(t => isOpen('tab:' + t));
     $('stTip').insertAdjacentHTML('beforeend', `<div class="recLine${gap > 0 ? ' low' : ''}">⚡ 권장 전투력 <b>${rp.toLocaleString()}</b> · 내 전투력 <b>${pw.toLocaleString()}</b> ${gap > 0 ? `<em>(${gap.toLocaleString()} 모자라요)</em>` : '✅'}</div>`
@@ -2773,7 +2791,7 @@ function renderHangar() {
       pl.append(row);
     }
   } else pl.innerHTML = `<p class="note">칸을 누르면 가진 부품이 나옵니다. 모은 부품 ${Object.keys(S.parts).length} / ${D.PARTS.length}종</p>`;
-  $('pilot').innerHTML = `<span class="lv">Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}</span><i><b style="width:${S.pilot.xp / pilotNeed(S.pilot.lv) * 100}%"></b></i><em>${Math.floor(S.pilot.xp)} / ${pilotNeed(S.pilot.lv)}</em>${(() => { const nx = Object.keys(GROW.itemLv).filter(k => GROW.itemLv[k] > S.pilot.lv).sort((a, b) => GROW.itemLv[a] - GROW.itemLv[b])[0]; return nx ? `<small class="pNext">Lv ${GROW.itemLv[nx]}에 ${ITEMS[nx].icon} ${ITEMS[nx].name} 열림</small>` : ''; })()}`;
+  $('pilot').innerHTML = `<span class="lv">Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}</span><i><b style="width:${S.pilot.xp / pilotNeed(S.pilot.lv) * 100}%"></b></i><em>${Math.floor(S.pilot.xp)} / ${pilotNeed(S.pilot.lv)}</em>${(() => { const nx = Object.keys(GROW.itemLv).filter(k => GROW.itemLv[k] > S.pilot.lv).sort((a, b) => GROW.itemLv[a] - GROW.itemLv[b])[0]; const ml = nextMs(); return nx ? `<small class="pNext">Lv ${GROW.itemLv[nx]}에 ${ITEMS[nx].icon} ${ITEMS[nx].name} 열림</small>` : ml ? `<small class="pNext">Lv ${ml} 🎁 ${PILOT_MS[ml].nm} + 🔩${PILOT_MS[ml].scrap}</small>` : ''; })()}`;
   const rl = $('research'); rl.innerHTML = '';
   for (const r of RESEARCH) {
     const lv = rs(r.id), row = document.createElement('div');
@@ -3241,10 +3259,10 @@ function drawBalloon(e) {
 
 // ---------- 격납고 꾸미기: 도색·엔진 불꽃·꼬리·스티커 ----------
 const LOOKS = {
-  paint: { name: '🎨 도색', list: [['none', '기본', null, 0], ['red', '빨강', '#ff4d4d', 40], ['orange', '주황', '#ff9a3c', 40], ['yellow', '노랑', '#ffd93c', 40], ['green', '초록', '#3fe37a', 40], ['sky', '하늘', '#4cc9ff', 40], ['navy', '남색', '#4c6bff', 60], ['violet', '보라', '#b46bff', 60], ['pink', '분홍', '#ff7ad9', 60], ['silver', '은빛', '#9aa6b4', 80], ['night', '먹물', '#2a2f3a', 100, 8]] },
-  flame: { name: '🔥 엔진 불꽃', list: [['none', '기본', null, 0], ['blue', '파랑', '#4cc9ff', 30], ['green', '초록', '#4dff9e', 30], ['violet', '보라', '#c58bff', 40], ['pink', '분홍', '#ff7ad9', 40], ['white', '하양', '#ffffff', 50], ['rainbow', '무지개', 'rainbow', 150, 10]] },
-  trail: { name: '✨ 꼬리', list: [['none', '없음', null, 0], ['smoke', '연기', 'smoke', 40], ['star', '별가루', '✦', 60], ['heart', '하트', '♥', 60], ['note', '음표', '♪', 60], ['petal', '꽃잎', '❀', 80, 5], ['rainbow', '무지개', 'rainbow', 160, 12]] },
-  decal: { name: '🏷️ 스티커', list: [['none', '없음', null, 0], ['star', '별', '⭐', 30], ['bolt', '번개', '⚡', 30], ['heart', '하트', '❤️', 30], ['fire', '불꽃', '🔥', 40], ['flower', '꽃', '🌸', 40], ['cat', '고양이', '🐱', 60], ['crown', '왕관', '👑', 120, 15]] },
+  paint: { name: '🎨 도색', list: [['none', '기본', null, 0], ['red', '빨강', '#ff4d4d', 40], ['orange', '주황', '#ff9a3c', 40], ['yellow', '노랑', '#ffd93c', 40], ['green', '초록', '#3fe37a', 40], ['sky', '하늘', '#4cc9ff', 40], ['navy', '남색', '#4c6bff', 60], ['violet', '보라', '#b46bff', 60], ['pink', '분홍', '#ff7ad9', 60], ['silver', '은빛', '#9aa6b4', 80], ['night', '먹물', '#2a2f3a', 100, 8], ['gold', '황금', '#ffc83a', -1, 15]] },
+  flame: { name: '🔥 엔진 불꽃', list: [['none', '기본', null, 0], ['blue', '파랑', '#4cc9ff', 30], ['green', '초록', '#4dff9e', 30], ['violet', '보라', '#c58bff', 40], ['pink', '분홍', '#ff7ad9', 40], ['white', '하양', '#ffffff', 50], ['rainbow', '무지개', 'rainbow', 150, 10], ['plasma', '플라스마', '#38ffe0', -1, 20]] },
+  trail: { name: '✨ 꼬리', list: [['none', '없음', null, 0], ['smoke', '연기', 'smoke', 40], ['star', '별가루', '✦', 60], ['heart', '하트', '♥', 60], ['note', '음표', '♪', 60], ['petal', '꽃잎', '❀', 80, 5], ['rainbow', '무지개', 'rainbow', 160, 12], ['comet', '혜성', '☄', -1, 25]] },
+  decal: { name: '🏷️ 스티커', list: [['none', '없음', null, 0], ['star', '별', '⭐', 30], ['bolt', '번개', '⚡', 30], ['heart', '하트', '❤️', 30], ['fire', '불꽃', '🔥', 40], ['flower', '꽃', '🌸', 40], ['cat', '고양이', '🐱', 60], ['crown', '왕관', '👑', 120, 15], ['dragon', '용', '🐉', -1, 30]] },
 };
 const lookOf = (cat, id) => LOOKS[cat].list.find(x => x[0] === id) || LOOKS[cat].list[0];
 function myLook() { S.look = S.look || {}; return { paint: S.look.paint || 'none', flame: S.look.flame || 'none', trail: S.look.trail || 'none', decal: S.look.decal || 'none', tier: myTierV }; }
@@ -3272,7 +3290,7 @@ function trailFx(s, look, dt) {   // 기체 뒤로 꼬리를 남긴다
   if (!v) return;
   if (v === 'smoke') fx.push({ k: 'smoke', x, y, vx: rnd(-10, 10), vy: 120, t: 0, life: 0.7, size: 9 });
   else if (v === 'rainbow') for (const dx of [-6, 0, 6]) fx.push({ k: 'spark', x: s.x + dx, y, vx: 0, vy: 200, t: 0, life: 0.5, color: `hsl(${(T * 300 + dx * 20) % 360},100%,62%)`, size: 5 });
-  else fx.push({ k: 'glyph', ch: v, x, y, vx: rnd(-30, 30), vy: rnd(110, 170), t: 0, life: 0.8, size: rnd(12, 18), color: { '✦': '#fff3a0', '♥': '#ff7ad9', '♪': '#9fd0ff', '❀': '#ffb3d9' }[v] || '#fff' });
+  else fx.push({ k: 'glyph', ch: v, x, y, vx: rnd(-30, 30), vy: rnd(110, 170), t: 0, life: 0.8, size: rnd(12, 18), color: { '✦': '#fff3a0', '♥': '#ff7ad9', '♪': '#9fd0ff', '❀': '#ffb3d9', '☄': '#7af0ff' }[v] || '#fff' });
 }
 let lookTry = null;   // 꾸미기 미리보기: 사지 않은 것을 눌러 보면 입혀 보기만 한다(사기는 「사기」 버튼으로만)
 function lookCanBuy(cat, item) { const lv = item[4] || 0; return S.pilot.lv >= lv; }
@@ -3285,11 +3303,11 @@ function renderLook(el) {
   const anim = () => { if (!c.isConnected) return; t0 += 1 / 60; g.clearRect(0, 0, 300, 210); drawShipAt(g, S.frame, 150, 95, 2.3, Math.sin(t0) * 0.3, t0, false, L); requestAnimationFrame(anim); };
   anim();
   if (lookTry) {   // 입혀 보기 중: 직접 「사기」를 눌러야 고철을 쓴다
-    const it = LOOKS[lookTry.cat].list.find(x => x[0] === lookTry.id), cost = it[3], can = lookCanBuy(lookTry.cat, it), enough = S.scrap >= cost;
+    const it = LOOKS[lookTry.cat].list.find(x => x[0] === lookTry.id), cost = it[3], gift = cost < 0, can = !gift && lookCanBuy(lookTry.cat, it), enough = S.scrap >= cost;
     const bar = document.createElement('div'); bar.className = 'lkTry';
-    bar.innerHTML = `<span>👀 입혀 보는 중: <b>${it[1]}</b></span><small>${!can ? `🔒 조종사 Lv ${it[4]}부터 살 수 있어요` : enough ? `사면 고철 🔩${S.scrap} → 🔩${S.scrap - cost}` : `고철이 🔩${cost - S.scrap} 모자라요`}</small>
-      <div><button class="lkBuy"${can && enough ? '' : ' disabled'}>🔩 ${cost}로 사기</button><button class="lkCancel">그만 보기</button></div>`;
-    bar.querySelector('.lkBuy').addEventListener('click', () => {
+    bar.innerHTML = `<span>👀 입혀 보는 중: <b>${it[1]}</b></span><small>${gift ? `🎁 조종사 Lv ${it[4]}에 닿으면 선물로 받아요(살 수 없음)` : !can ? `🔒 조종사 Lv ${it[4]}부터 살 수 있어요` : enough ? `사면 고철 🔩${S.scrap} → 🔩${S.scrap - cost}` : `고철이 🔩${cost - S.scrap} 모자라요`}</small>
+      <div>${gift ? '' : `<button class="lkBuy"${can && enough ? '' : ' disabled'}>🔩 ${cost}로 사기</button>`}<button class="lkCancel">그만 보기</button></div>`;
+    if (!gift) bar.querySelector('.lkBuy').addEventListener('click', () => {
       if (!can || S.scrap < cost) return;
       S.scrap -= cost; S.owned[lookTry.cat + ':' + lookTry.id] = 1; S.look[lookTry.cat] = lookTry.id; lookTry = null; A.sfx('part'); save(); renderHangar();
     });
@@ -3305,7 +3323,7 @@ function renderLook(el) {
       const [id, name, val, cost, lv] = it, key = cat + ':' + id, own = !cost || S.owned[key], on = (S.look[cat] || 'none') === id, can = lookCanBuy(cat, it), trying = !!lookTry && lookTry.cat === cat && lookTry.id === id;
       const b = document.createElement('button'); b.className = 'lkItem' + (on ? ' on' : '') + (own ? '' : ' lock') + (trying ? ' try' : '');
       const sw = cat === 'paint' ? `<i style="background:${val || frameOf(S.frame).color}"></i>` : cat === 'flame' ? `<i style="background:${val === 'rainbow' ? 'linear-gradient(90deg,#f55,#fd5,#5f8,#5cf,#c5f)' : val || frameOf(S.frame).color}"></i>` : `<em>${val === 'smoke' ? '☁' : val === 'rainbow' ? '🌈' : val || '－'}</em>`;
-      b.innerHTML = `${sw}<span>${name}</span><small>${trying ? '👀 보는 중' : on ? '사용 중' : own ? '고르기' : !can ? `🔒 Lv ${lv}` : `🔩 ${cost}`}</small>`;
+      b.innerHTML = `${sw}<span>${name}</span><small>${trying ? '👀 보는 중' : on ? '사용 중' : own ? '고르기' : cost < 0 ? `🎁 Lv ${lv}` : !can ? `🔒 Lv ${lv}` : `🔩 ${cost}`}</small>`;
       b.addEventListener('click', () => {
         A.sfx('click');
         if (!own) { lookTry = { cat, id }; renderHangar(); return; }   // 안 산 것은 입혀 보기만

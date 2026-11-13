@@ -290,6 +290,8 @@
   #stTip { padding: calc(var(--u) * 2.4); text-align: left; font-size: calc(var(--u) * 3.2); line-height: 1.5; }
   #stTip small { opacity: .8; } #stTip .rules { color: #ffe7a3; }
   #stTip .recLine { margin-top: calc(var(--u) * 1.2); color: #9fe8b0; } #stTip .recLine.low { color: #ffb38a; } #stTip .recLine em { font-style: normal; font-size: .9em; }
+  #stTip .gateLine { margin-bottom: calc(var(--u) * 1.2); padding: calc(var(--u) * 1) calc(var(--u) * 1.4); border-radius: calc(var(--u) * 1.2); background: rgba(255, 209, 102, .14); border: 1px solid rgba(255, 209, 102, .5); color: #ffe7a3; } .node .gateNeed { font-size: .8em; color: #ffd166; white-space: nowrap; }
+  #stTip.gateShake { animation: gateShake .45s; } @keyframes gateShake { 0%, 100% { transform: none; } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
   #stTip .recHelp { display: block; margin-top: calc(var(--u) * .8); } #stTip .recGo { margin-left: calc(var(--u) * 1); padding: calc(var(--u) * .6) calc(var(--u) * 2); border-radius: calc(var(--u) * 2); border: 1px solid #ffb38a; background: rgba(255, 140, 90, .18); color: #ffd9c4; font: inherit; font-weight: 800; }
   .node .rp { color: #9fe8b0; } .node .rp.low { color: #ff9a7a; }
   #assistBtn { display: block; margin: 0 auto calc(var(--u) * 2); font-size: calc(var(--u) * 3.2); border-color: #6ee37a; } #assistBtn small { opacity: .7; }

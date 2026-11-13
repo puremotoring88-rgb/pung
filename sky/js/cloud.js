@@ -52,6 +52,7 @@ function init(o) {
   if (acct) check(!!acct.dirty);   // 앱을 열 때 저절로 하는 저장보다 먼저, 이 기기에 안 올린 기록이 있었는지를 기준으로
   document.addEventListener('visibilitychange', () => { if (!acct) return; if (document.hidden) push(true); else if (canReload()) check(); });
   window.addEventListener('pagehide', () => { if (acct) push(true); });
+  setInterval(() => { if (acct && !document.hidden && !busy && !choose && !leaving) check(); }, 60000);   // 0.47: 1분마다 확인 — 다른 기기에서 같은 아이디로 들어오면 여기는 곧 로그아웃
 }
 // 게임이 저장할 때마다 불린다: 잠시 모았다가 올린다(자주 올리지 않게)
 function dirty() { if (!acct) return; acct.dirty = true; store(); clearTimeout(timer); timer = setTimeout(() => push(), 15000); }
@@ -107,10 +108,8 @@ async function enter(kind, id, pw, keep) {
     let own = owner(), legacy;
     const S = getS();
     if (kind === 'signup' && (!own || own.uid === LOCAL) && (S.plays || S.cleared)) {
-      // 새 아이디는 새 기록으로 시작하는 게 기본. 아이디 없이(혼자) 하던 기록을 옮길지는 직접 고른다.
-      const move = window.confirm(`이 기기에 아이디 없이 하던 기록이 있어요.\n(${summary(S)})\n\n이 기록을 새 아이디 「${id}」로 옮길까요?\n\n[확인] 옮기기 · [취소] 새 아이디는 처음부터 (하던 기록은 「인터넷 없이 혼자 하기」에 남아요)`);
-      if (move) { own = null; legacy = true; try { localStorage.removeItem(SLOT); } catch (e) { /* 무시 */ } }
-      else {
+      // 0.47: 새 아이디는 묻지 않고 늘 처음부터(사용자 요청). 아이디 없이 하던 기록은 「인터넷 없이 혼자 하기」에 그대로 남는다.
+      {
         try { localStorage.setItem(SLOT, localStorage.getItem(saveKey) || ''); } catch (e) { /* 무시 */ }
         acct = { uid: id, token, at: null, dirty: true, keep: !!keep };
         offline = false; try { localStorage.removeItem(OFF); sessionStorage.removeItem(OFF); } catch (e) { /* 무시 */ }
@@ -208,7 +207,7 @@ function render(el) {
     r.append(btn('로그인', () => go('login'), 'main'), btn('처음이면 새로 만들기', () => go('signup')));
     add('이메일·실명은 받지 않아요. 비밀번호를 잊으면 되찾을 수 없으니 잘 기억해 두세요. 유지를 고르지 않으면 창을 닫을 때 로그아웃돼요.', 'acNote');
     const r2 = add('', 'acRow acSolo'); r2.append(btn('📴 인터넷 없이 혼자 하기', () => goOffline(keep.checked), 'wide'));
-    add('혼자 하기 기록은 이 기기에만 쌓여요. 나중에 아이디를 만들면 계정으로 올릴 수 있어요.', 'acNote');
+    add('혼자 하기 기록은 이 기기에만 쌓여요. 아이디 기록과는 따로라서 섞이지 않아요(새 아이디는 늘 처음부터).', 'acNote');
   } else {
     const when = acct.last ? new Date(acct.last).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
     add(`<b>👤 ${esc(acct.uid)}</b> <small>로그인됨 · ${acct.dirty ? '저장 대기 중' : when ? `☁️ ${when} 저장됨` : '☁️ 저장됨'}</small>`, 'acHead');
