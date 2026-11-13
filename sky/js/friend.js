@@ -3,7 +3,7 @@
 // 귓속말은 친구끼리만, 서버를 거쳐 받는 사람만 가져가고(가져가면 지움) 이 기기에도 저장하지 않는다. 대기실 채팅과 같은 말 거르기.
 window.Friend = (() => {
 'use strict';
-let opt = null, code = null, whisper = true, reqs = 0, list = [], ready = null, note = '', el = null, busy = false, chat = null, inp = null, addInp = null;
+let pc = 0, opt = null, code = null, whisper = true, reqs = 0, list = [], ready = null, note = '', el = null, busy = false, chat = null, inp = null, addInp = null;
 const chats = {}, unread = {}, pops = [];
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const call = (fn, b) => window.Cloud.call(fn, b || {});
@@ -24,7 +24,7 @@ async function poll(force) {
     const before = reqs; reqs = r.reqs | 0;
     if (reqs > before) push({ kind: 'req', text: `📨 친구 신청이 왔어요 (${reqs})` });
     for (const m of r.box || []) receive(m);
-    if (el && el.isConnected) await refresh(); else badge();
+    if (el && el.isConnected) await refresh(); else { if (++pc % 3 === 1) { try { list = (await call('fr_list')) || []; } catch (e) { /* 무시 */ } } badge(); }   // 0.57: 창이 닫혀 있어도 1분에 한 번 목록(격납고 친구 수)
   } catch (e) { if (missing(e)) { ready = false; draw(); } }
 }
 async function refresh() {
@@ -44,7 +44,7 @@ function receive(m) {
     opt.sfx('levelup');
   }
 }
-const badge = () => { if (opt.badge) opt.badge(reqs + Object.values(unread).reduce((a, b) => a + b, 0)); };
+const badge = () => { if (opt.badge) opt.badge(reqs + Object.values(unread).reduce((a, b) => a + b, 0), list.filter(f => f.rel === 'ok').length, list.filter(f => f.rel === 'ok' && f.online).length); };
 
 // 알림 띠: 격납고에 있을 때만 보여 준다(게임 중엔 모아 두었다가)
 function push(p) { p.at = Date.now(); pops.push(p); if (pops.length > 5) pops.shift(); badge(); }

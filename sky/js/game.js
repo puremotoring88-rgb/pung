@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.56';
+const VERSION = '0.57';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -2680,9 +2680,44 @@ function showHangar() {
   renderHangar();
 }
 const statBar = (label, k, val) => `<div class="stat"><span>${label}</span><i><b style="width:${Math.round(clamp(k, 0.04, 1) * 100)}%"></b></i><em>${val}</em></div>`;
+// ---------- 0.57 내 정보 줄(별명·칭호·전투력·아이디)과 어디서나 여는 친구 창 ----------
+let frStat = { alert: 0, n: 0, on: 0 };
+function frBtnHtml() { return `👥 친구${frStat.n ? ` <small>${frStat.on}/${frStat.n}</small>` : ''}${frStat.alert ? `<em class="frUn">${frStat.alert}</em>` : ''}`; }
+function renderMe() {
+  const me = $('me'); if (!me) return;
+  const T = TIERS[myTierV];
+  me.innerHTML = `<div class="meL">${Rank.gem(S.pilot.lv)}<b class="meNick">${esc(myNick())}</b><button class="meEdit" title="별명 바꾸기">${/^조종사\d+$/.test(myNick()) ? "✏️ 별명 정하기" : "✏️"}</button><small class="meTitle" style="color:${T.c}">「${esc(titleName())}」</small></div>`
+    + `<button class="meFr">${frBtnHtml()}</button>`
+    + `<div class="meSub">⚡ ${powerOf(buildStats()).toLocaleString()} · ${T.name} · ${Cloud.uid ? `👤 ${esc(Cloud.uid)} <i>(아이디는 나만 보여요)</i>` : Cloud.guest ? '👤 손님 <i>(아이디 없이 하는 중)</i>' : '📴 혼자 하기'}</div>`;
+  me.querySelector('.meEdit').addEventListener('click', editNick);
+  me.querySelector('.meFr').addEventListener('click', openFriends);
+}
+function editNick() {
+  A.sfx('click');
+  const n = (window.prompt('새 별명 (한글·영어·숫자 2~10글자, 실명·학교 이름은 쓰지 마세요)', myNick()) || '').trim();
+  if (!n || n === S.nick) return;
+  const p = Rank.nickProblem(n); if (p) { window.alert(p); return; }
+  S.nick = n; save(); A.sfx('part'); renderHangar();
+  if (window.Friend) Friend.poll(true);   // 친구들에게도 바로 새 별명
+}
+function openFriends() {
+  A.sfx('click');
+  let w = $('frWin');
+  if (!w) { w = document.createElement('div'); w.id = 'frWin'; w.innerHTML = '<div class="fwIn glass"><div class="fwHead"><b>👥 친구</b><button class="fwX">닫기</button></div><div class="fwBody"></div></div>'; document.body.append(w); w.querySelector('.fwX').addEventListener('click', () => { w.classList.add('hidden'); renderHangar(); }); w.addEventListener('click', e => { if (e.target === w) { w.classList.add('hidden'); renderHangar(); } }); }
+  w.classList.remove('hidden');
+  const body = w.querySelector('.fwBody'); body.innerHTML = '';
+  if (!Cloud.uid) {
+    body.innerHTML = '<p class="note">친구 목록·친구 신청·귓속말은 아이디가 있어야 써요. 아이디를 만들면 지금 기록을 그대로 가져갈 수 있어요.</p>';
+    const b = document.createElement('button'); b.className = 'btn'; b.textContent = '✨ 아이디 만들기'; b.addEventListener('click', () => { w.classList.add('hidden'); Cloud.toSignup(); }); body.append(b);
+    return;
+  }
+  body.insertAdjacentHTML('beforeend', '<p class="note">친구 코드를 서로 알려 주고 신청하면 친구가 돼요. 친구가 접속하면 초록 점, 💬로 귓속말, 🎮로 같이 하기 초대.</p>');
+  const box = document.createElement('div'); box.className = 'friends'; body.append(box); Friend.render(box);
+}
 function renderHangar() {
   $('scrap').textContent = `🔩 ${S.scrap}`;
   unlockCheck(); titleCheck(); Rank.leagueCheck(); refTick();
+  renderMe();
   $('bestTxt').textContent = `최고 ${S.best.toLocaleString()} · ★${starCount()}`;
   if (!isOpen('tab:' + tab)) tab = 'sortie'; if (!isOpen('mode:' + selMode)) selMode = 'stage';
   S.newDot = S.newDot || {};
@@ -4580,7 +4615,7 @@ function coopPanel() {
   }
   if (coopMsg) add(esc(coopMsg), 'div', 'cMsg');
   add('함께 하면: 사람 수만큼 적이 튼튼해지고 고철은 20% 더 · 둘이 가까이 날면 <b>연결 빔</b>(적을 지지고 탄을 막음) · 격추된 친구 곁에 가면 <b>구출</b> · 3초 안에 같이 궁극기를 쓰면 <b>합동 궁극기</b> · 💬로 짧은 말 · 카드는 방장이 고름 · 리듬 결투는 쉼', 'div', 'cNote');
-  box.append(friendEl); Friend.render(friendEl);
+  box.append(friendEl); if (!($('frWin') && !$('frWin').classList.contains('hidden'))) Friend.render(friendEl);   // 친구 창이 열려 있으면 그쪽을 그대로
   box.append(lobbyEl);
   if (!Lobby.on) Lobby.open(lobbyOpt); else Lobby.sync();
   Lobby.render(lobbyEl);
@@ -4607,6 +4642,7 @@ const friendEl = document.createElement('div'); friendEl.className = 'friends';
 Friend.init({
   nick: () => myNick(), lv: () => S.pilot.lv, st: lobbyOpt.status, room: () => (net && net.mode === 'host' ? net.code : ''),
   sfx: n => A.sfx(n), join: lobbyOpt.join, ensureRoom: lobbyOpt.ensureRoom, share: shareInvite,
+  badge: (alert, n, on) => { frStat = { alert, n, on }; const b = document.querySelector('#me .meFr'); if (b) b.innerHTML = frBtnHtml(); },
   canPop: () => state === 'hangar' && $('gate').classList.contains('hidden'),
   openPanel: () => { selMode = 'coop'; if (tab !== 'sortie') { const b = document.querySelector('.tabs button[data-tab="sortie"]'); if (b) b.click(); } renderHangar(); },
 });
@@ -4633,14 +4669,17 @@ Forge.init({
 });
 { const q = new URLSearchParams(location.search).get('room'); if (q) { selMode = 'coop'; joinCode = q.toUpperCase().slice(0, 5); } }   // 초대 링크로 들어오면
 Notice.init();   // 첫 화면의 한 줄·공지·편지
+try { const nn = localStorage.getItem('boltwing.newNick'); if (nn) { S.nick = nn; localStorage.removeItem('boltwing.newNick'); save(); } } catch (e) { /* 무시 */ }   // 0.57: 새 아이디를 만들 때 쓴 별명
 Rank.init({ S, save, sfx: n => A.sfx(n), ver: VERSION, gift: leagueGift });
 // 로그인 문: 로그인하지 않았거나 어느 기록을 쓸지 고르는 중이면 첫 화면을 덮는다
 let gateJoin = !!(joinCode && selMode === 'coop');   // 초대 링크로 왔으면 로그인한 뒤에 방에 들어간다
+let gateWas = false;
 const gateUi = () => {
   const open = (!Cloud.uid && !Cloud.offline) || Cloud.choosing;
   $('gate').classList.toggle('hidden', !open);
-  if (open) { Cloud.render($('gateBox')); return; }
-  if (state === 'hangar' && document.querySelector('.guestAsk') && !Cloud.guest) renderHangar();   // 아이디를 만들면 「기록을 지키세요」 칸을 치운다
+  if (open) { gateWas = true; Cloud.render($('gateBox')); return; }
+  if (state === 'hangar' && (gateWas || (document.querySelector('.guestAsk') && !Cloud.guest))) renderHangar();   // 로그인 문이 닫히면 내 정보 줄·안내를 새로
+  gateWas = false;
   if (gateJoin) { gateJoin = false; joinRoom(joinCode); }
 };
 Cloud.init({ getS: () => S, saveKey: SAVE_KEY, canReload: () => state === 'hangar', sfx: n => A.sfx(n), onUi: () => { Cloud.render($('acctBox')); gateUi(); } });

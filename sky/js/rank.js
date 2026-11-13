@@ -161,5 +161,5 @@ function render(el) {
     .catch(e => { if (list.isConnected) { list.innerHTML = `<p class="note">${why(e)}</p>`; stat.textContent = ''; } });
 }
 
-return { init, after, render, gem, gemOf, league, leagueCheck, LEAGUE, get lg() { return lg; } };
+return { init, after, render, gem, gemOf, league, leagueCheck, LEAGUE, nickProblem, get lg() { return lg; } };
 })();

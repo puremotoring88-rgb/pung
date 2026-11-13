@@ -370,6 +370,21 @@
   .pilot i b { display: block; height: 100%; background: linear-gradient(90deg, #4cc9ff, #9dffcf); }
   .pilot em { font-style: normal; opacity: .75; white-space: nowrap; }
   .pilot { flex-wrap: wrap; } .pilot .pNext { flex-basis: 100%; text-align: right; font-size: calc(var(--u) * 2.6); color: #9fe8b0; margin-top: calc(var(--u) * -.6); }
+  .meBar { width: 100%; padding: 0 calc(var(--u) * 4) calc(var(--u) * 1.2); display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--u) * 1.5); font-size: calc(var(--u) * 3.2); }
+  .meBar .meL { flex: 1; min-width: 0; display: flex; align-items: center; gap: calc(var(--u) * 1.2); white-space: nowrap; overflow: hidden; }
+  .meBar .meNick { font-size: 1.15em; font-weight: 900; overflow: hidden; text-overflow: ellipsis; }
+  .meBar .meEdit { background: rgba(255,255,255,.1); border: 0; border-radius: 99px; padding: calc(var(--u) * .5) calc(var(--u) * 1.4); font-size: .8em; color: #fff; }
+  .meBar .meTitle { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+  .meBar .meFr { position: relative; background: linear-gradient(135deg, #2f8cff, #6a5cff); color: #fff; border: 0; border-radius: 99px; padding: calc(var(--u) * 1) calc(var(--u) * 2.6); font: inherit; font-weight: 800; white-space: nowrap; }
+  .meBar .meFr small { opacity: .8; font-weight: 600; }
+  .meBar .meFr .frUn { position: absolute; top: calc(var(--u) * -1); right: calc(var(--u) * -1); }
+  .meBar .meSub { flex-basis: 100%; font-size: .82em; color: #b9c8dc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meBar .meSub i { font-style: normal; opacity: .6; }
+  #frWin { position: fixed; inset: 0; z-index: 35; background: rgba(2,5,12,.72); display: flex; align-items: flex-start; justify-content: center; padding: calc(var(--u) * 6) calc(var(--u) * 3); overflow-y: auto; }
+  #frWin.hidden { display: none; }
+  #frWin .fwIn { width: 100%; max-width: 560px; padding: calc(var(--u) * 3); border-radius: calc(var(--u) * 3); background: #0b1324; }
+  #frWin .fwHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: calc(var(--u) * 2); font-size: 1.15em; }
+  #frWin .fwX { background: rgba(255,255,255,.12); color: #fff; border: 0; border-radius: 99px; padding: calc(var(--u) * 1) calc(var(--u) * 3); font: inherit; }
   .tabs { overflow-x: auto; scrollbar-width: none; } .tabs::-webkit-scrollbar { display: none; }
   .tabs button { flex: 0 0 auto !important; padding-left: calc(var(--u) * 2.6) !important; padding-right: calc(var(--u) * 2.6) !important; white-space: nowrap; }
   #research, #daily { width: 100%; display: flex; flex-direction: column; gap: calc(var(--u) * 1.6); }
@@ -512,6 +527,7 @@
       <div class="logo"><b>BOLT<i>WING</i></b><small>볼트윙</small></div>
       <div class="hgR"><div class="wallet"><span id="scrap">🔩 0</span><span id="bestTxt"></span></div><button id="fullBtn" title="전체 화면">⛶</button></div>
     </header>
+    <div id="me" class="meBar"></div>
     <div id="pilot" class="pilot"></div>
     <div id="notice" class="notice hidden"></div>
     <nav class="tabs">

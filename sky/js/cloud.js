@@ -11,7 +11,7 @@ const AK = 'boltwing.acct';   // 로그인 정보(아이디·접속표). 기록(
 const OWN = 'boltwing.owner';   // 이 기기 기록의 주인 { uid, at, dirty }
 // 📴 혼자 하기(인터넷 없이): 주인이 LOCAL인 기록. 서버에 없는 유일한 사본이라, 계정이 이 기기를 쓰는 동안에는 SLOT에 따로 넣어 둔다.
 const LOCAL = '@local', OFF = 'boltwing.offline', SLOT = 'boltwing.slot.' + LOCAL;
-let offline = false, form = 'login', carryDef = false;   // form: 로그인 칸 / 새로 만들기 칸, carryDef: 새로 만들 때 지금 기록 가져가기 기본값
+let offline = false, form = 'login', carryDef = false, lastNick = '';   // form: 로그인 칸 / 새로 만들기 칸, carryDef: 새로 만들 때 지금 기록 가져가기 기본값
 const GUEST = 'boltwing.guest', HAD = 'boltwing.hadAcct';   // 0.55: 처음 온 기기는 로그인 없이 바로(손님), 이 기기에서 로그인한 적이 있으면 로그인 문부터
 let leaving = false, lastId = '', getS, saveKey, canReload, sfx, onUi, acct = null, timer = null, busy = false, msg = '', choose = null;
 
@@ -102,7 +102,7 @@ function startFresh() {   // 이 기기 기록을 비우고 새로 시작(다시
   acct.at = null; acct.dirty = true; store();
   leaving = true; location.reload();
 }
-async function enter(kind, id, pw, keep, carry) {
+async function enter(kind, id, pw, keep, carry, nick) {
   if (busy) return;
   id = String(id || '').replace(/[\s​-‏﻿]/g, '').toLowerCase(); lastId = id;   // 보이지 않는 글자·띄어쓰기는 뺀다
   if (!/^[a-z0-9_]{4,16}$/.test(id)) { msg = '아이디(위 칸)는 영어 소문자·숫자·_ 로 4~16글자예요. 한글 자판이면 영어로 바꿔 주세요.'; ui(); return; }
@@ -110,6 +110,7 @@ async function enter(kind, id, pw, keep, carry) {
   msg = kind === 'signup' ? '만드는 중…' : '로그인하는 중…'; ui();
   try {
     const token = await rpc(kind === 'signup' ? 'acct_signup' : 'acct_login', { p_uid: id, p_pw: pw });
+    if (kind === 'signup' && nick) { getS().nick = nick; try { localStorage.setItem('boltwing.newNick', nick); } catch (e) { /* 무시 */ } }   // 0.57: 새로 시작하며 다시 열려도 별명이 남게
     let own = owner(), legacy;
     const S = getS();
     if (kind === 'signup' && (!own || own.uid === LOCAL) && (S.plays || S.cleared)) {
@@ -211,7 +212,8 @@ function render(el) {
     const id = document.createElement('input'); id.placeholder = su ? '만들 아이디 (영어 소문자·숫자 4~16글자)' : '아이디'; id.maxLength = 16; id.autocapitalize = 'none'; id.autocomplete = 'username'; id.spellcheck = false; id.value = lastId;
     const pw = document.createElement('input'); pw.type = 'password'; pw.placeholder = su ? '비밀번호 (6글자 이상, 아무 글자)' : '비밀번호'; pw.maxLength = 64; pw.autocomplete = su ? 'new-password' : 'current-password';
     const pw2 = document.createElement('input'); pw2.type = 'password'; pw2.placeholder = '비밀번호 한 번 더'; pw2.maxLength = 64; pw2.autocomplete = 'new-password';
-    if (su) { lab('① 아이디'); f.append(id); lab('② 비밀번호'); f.append(pw); lab('③ 비밀번호 확인'); f.append(pw2); } else f.append(id, pw);
+    const nk = document.createElement('input'); nk.placeholder = '친구에게 보이는 이름 (한글·영어·숫자 2~10글자)'; nk.maxLength = 10; nk.spellcheck = false; nk.value = lastNick || (/^조종사\d+$/.test(getS().nick || '') ? '' : getS().nick || '');
+    if (su) { lab('① 아이디 (로그인할 때만 써요, 남에게 안 보여요)'); f.append(id); lab('② 비밀번호'); f.append(pw); lab('③ 비밀번호 확인'); f.append(pw2); lab('④ 별명 (친구·랭킹·대화에서 불리는 이름)'); f.append(nk); } else f.append(id, pw);
     const S0 = getS(), own0 = owner(), canCarry = su && (!own0 || own0.uid === LOCAL) && !!(S0.plays || S0.cleared);
     let carry = null;
     if (canCarry) { const cl = add('', 'acKeep acCarry', 'label'); carry = document.createElement('input'); carry.type = 'checkbox'; carry.checked = carryDef; cl.append(carry, document.createTextNode(` 📦 지금까지 한 기록 가져가기 (${summary(S0)})`)); }
@@ -219,10 +221,13 @@ function render(el) {
     kp.append(keep, document.createTextNode(' 이 기기에서 로그인 유지 (내 기기일 때만)'));
     const go = () => {
       if (su && pw.value !== pw2.value) { lastId = id.value; msg = '비밀번호와 확인이 서로 달라요. 똑같이 두 번 써 주세요.'; ui(); return; }
-      enter(su ? 'signup' : 'login', id.value, pw.value, keep.checked, !!(carry && carry.checked));
+      const nn = nk.value.trim(); lastNick = nn;
+      if (su) { const p = !nn ? '④ 별명을 써 주세요. 친구와 랭킹에 보이는 이름이에요(실명·학교 이름 말고).' : window.Rank && Rank.nickProblem ? Rank.nickProblem(nn) : ''; if (p) { lastId = id.value; msg = p; ui(); return; } }
+      enter(su ? 'signup' : 'login', id.value, pw.value, keep.checked, !!(carry && carry.checked), su ? nn : '');
     };
     const calm = () => { if (msg && !busy) { msg = ''; const m = el.querySelector('.acMsg'); if (m) m.remove(); } };   // 다시 쓰기 시작하면 앞 안내는 지운다
-    [id, pw, pw2].forEach(x => x.addEventListener('input', calm));
+    [id, pw, pw2, nk].forEach(x => x.addEventListener('input', calm));
+    nk.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
     (su ? pw2 : pw).addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
     const r = add('', 'acRow');
     if (su) {
