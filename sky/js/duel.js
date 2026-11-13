@@ -26,17 +26,18 @@ function makeChart(level, beats) {
   const put = (b, ln, len) => { if (busy(ln, b) || (len && notes.some(n => n.lane === ln && n.b > b && n.b < b + len + 0.3))) return false; notes.push(len ? { b, lane: ln, len } : { b, lane: ln }); return true; };
   const step = () => { lane = (lane + [1, -1, 2, 1, -1, 3][R(6)] + 4) % 4; return lane; };
   const other = ln => (ln + 1 + R(3)) % 4;
+  const opp = ln => (ln < 2 ? 2 : 0) + R(2);   // 0.45: 반대 손의 줄(길게 누르는 동안 같은 손이 꼬이지 않게)
   const fill = {
     quarters: B => { for (let i = 0; i < 4; i++) put(B + i, step()); },
     eighths: B => { for (let i = 0; i < 8; i++) if (level > 1 || i % 4 !== 3) put(B + i * 0.5, step()); },
     offbeat: B => { put(B, step()); for (let i = 0; i < 4; i++) put(B + i + 0.5, step()); if (level >= 3) put(B + 2, step()); },
     chord: B => { for (let i = 0; i < 4; i++) { const a = step(); put(B + i, a); if (i % 2 === 0 || level >= 5) put(B + i, (a + 2) % 4); if (level >= 3 && i % 2) put(B + i + 0.5, step()); } },
-    hold: B => { const h = step(), len = level >= 5 ? 3 : 2; put(B, h, len); for (let i = 1; i < (level >= 4 ? 8 : 4); i++) { const b = B + i * (level >= 4 ? 0.5 : 1); if (b < B + len + 0.5) put(b, other(h)); } },
+    hold: B => { const h = step(), len = level >= 5 ? 3 : 2; put(B, h, len); for (let i = 1; i < (level >= 4 ? 8 : 4); i++) { const b = B + i * (level >= 4 ? 0.5 : 1); if (b < B + len + 0.5) put(b, b < B + len ? opp(h) : other(h)); } },
     jack: B => { const j = step(); for (let i = 0; i < 3; i++) put(B + i * 0.5, j); for (let i = 3; i < 8; i++) put(B + i * 0.5, step()); },
     gallop: B => { for (let i = 0; i < 4; i++) { put(B + i, step()); put(B + i + 0.75, step()); } },
     trill: B => { const a = step(), b = (a + (R(2) ? 1 : 2)) % 4, k = level >= 6 ? 12 : 8; for (let i = 0; i < k; i++) put(B + i * 0.25, i % 2 ? b : a); for (let b2 = B + k * 0.25; b2 < B + 4; b2 += 0.5) put(b2, step()); },
     stairs: B => { for (let s = 0; s < 2; s++) { const dir = R(2) ? 1 : -1, st = R(4); for (let k = 0; k < 4; k++) put(B + s * 2 + k * 0.25, (st + dir * k + 8) % 4); put(B + s * 2 + 1.5, step()); } },
-    holdRun: B => { const h = step(); put(B, h, 3.5); for (let i = 1; i < 14; i++) if (i % 4 !== 3 || level >= 7) put(B + i * 0.25 + 0.25, other(h)); },
+    holdRun: B => { const h = step(); put(B, h, 3.5); for (let i = 1; i < 14; i++) if (i % 4 !== 3 || level >= 7) put(B + i * 0.25 + 0.25, opp(h)); },
     chordRun: B => { for (let i = 0; i < 8; i++) { const a = step(); put(B + i * 0.5, a); if (i % 2 === 0) put(B + i * 0.5, (a + 2) % 4); } },
   };
   const pool = PATTERNS.filter(p => p.lv <= level).map(p => ({ id: p.id, w: p.w * (p.lv >= level - 1 ? 2 : 1) }));   // 새로 열린 무늬가 더 자주
@@ -51,19 +52,25 @@ function makeChart(level, beats) {
 
 function start(opt) {
   A = window.AudioKit; Art = window.Art;
-  const level = Math.max(1, Math.min(8, opt.level | 0)), beats = 40, countIn = 4;
+  const level = Math.max(1, Math.min(8, opt.level | 0)), beats = 40, countIn = 2;   // 3·2·1(PRE) 뒤에 두 박 준비
   const song = (A.SONGS || []).find(s => s.id === opt.song) || (A.SONGS || [])[R((A.SONGS || [1]).length)] || null;
   const bpm = Math.round(Math.min(168, 112 + level * 6) * (song ? song.k : 1)), beat = 60 / bpm;
   APPROACH = Math.max(1.0, 1.45 - 0.05 * (level - 1)) / (opt.speed || 1);   // 내려오는 빠르기(설정)
   const chart = makeChart(level, beats);
-  const t0 = A.duel(chart, bpm, countIn, song);   // 0번째 박이 울리는 시각
   d = {
-    level, bpm, beat, t0, countIn, name: song ? song.name : NAMES[(level - 1) % NAMES.length], genre: song ? song.genre : '', song: song && song.id, sync: (opt.sync || 0) / 1000, dev: [], title: opt.title || 'RHYTHM DUEL',
-    notes: chart.map(n => ({ t: t0 + n.b * beat, lane: n.lane, j: null, half: n.b % 1 !== 0, end: n.len ? t0 + (n.b + n.len) * beat : 0, tail: null })),
-    end: t0 + beats * beat + 0.6, cnt: { p: 0, g: 0, o: 0, m: 0, x: 0 }, combo: 0, maxCombo: 0, down: [false, false, false, false],
+    level, bpm, beat, t0: Infinity, countIn, name: song ? song.name : NAMES[(level - 1) % NAMES.length], genre: song ? song.genre : '', song: song && song.id, sync: (opt.sync || 0) / 1000, dev: [], title: opt.title || 'RHYTHM DUEL',
+    notes: [], end: Infinity, cnt: { p: 0, g: 0, o: 0, m: 0, x: 0 }, combo: 0, maxCombo: 0, down: [false, false, false, false],
     judge: null, judgeT: 0, judgeLane: 0, flash: [0, 0, 0, 0], hits: [], done: false, resT: 0, onEnd: opt.onEnd, res: null,
     fog: level >= 7,   // 7단계부터 '구름 구간': 음표가 중간에 잠깐 흐려진다
+    pre: PRE, preN: 3, chart, beats,   // 0.45: 음악 전에 3, 2, 1 — 휴대폰을 내려놓고 양손 검지·중지를 올릴 시간
   };
+}
+const PRE = 3.2;
+function begin() {   // 카운트다운이 끝나면 음악과 음표를 시작한다
+  const t0 = A.duel(d.chart, d.bpm, d.countIn, (A.SONGS || []).find(s => s.id === d.song) || null);   // 0번째 박이 울리는 시각
+  d.t0 = t0; d.pre = 0;
+  d.notes = d.chart.map(n => ({ t: t0 + n.b * d.beat, lane: n.lane, j: null, half: n.b % 1 !== 0, end: n.len ? t0 + (n.b + n.len) * d.beat : 0, tail: null }));
+  d.end = t0 + d.beats * d.beat + 0.6;
   d.total = d.notes.length + d.notes.filter(n => n.end).length;   // 길게 누르기는 끝까지 버텨야 1점 더
 }
 
@@ -109,6 +116,7 @@ function result() {
 
 function update(dt) {
   if (!d) return;
+  if (d.pre > 0) { d.pre -= dt; if (d.pre <= 0) begin(); return; }
   const t = now() - (d.sync || 0);
   for (const n of d.notes) {
     if (!n.j && t - n.t > WIN.o) { n.j = 'm'; d.cnt.m++; d.combo = 0; d.judge = 'MISS'; d.judgeT = 0.4; d.judgeLane = n.lane; if (n.end) { n.tail = 'm'; d.cnt.m++; } }
@@ -147,8 +155,31 @@ function drawDJ(g, x, y, T, k) {
   for (const sx of [-1, 1]) { rr(g, sx * 34 - 8, -60, 16, 24, 6); g.fillStyle = '#ffd166'; g.fill(); }
   g.restore();
 }
+function drawPre(g, T) {   // 0.45: 시작 전 3, 2, 1 — 휴대폰을 내려놓고 양손 검지·중지(또는 D F J K)를 올려 두는 시간
+  g.fillStyle = 'rgba(5,2,18,.92)'; g.fillRect(0, 0, W, H);
+  text(g, `${d.title} · 🎵 「${d.name}」 · Lv ${d.level}`, W / 2, 150, 17, '#ffd6f5', 800);
+  const n = Math.max(1, Math.ceil(d.pre - 0.2)), k = (d.pre - 0.2) % 1, sc = 1 + Math.max(0, k - 0.6) * 1.2;
+  g.save(); g.translate(W / 2, H * 0.36); g.scale(sc, sc); text(g, String(n), 0, 0, 150, '#ffffff'); g.restore();
+  text(g, '📱 휴대폰을 책상에 내려놓고', W / 2, H * 0.36 + 110, 24, '#ffe7a3', 900);
+  text(g, '양손 검지·중지를 한 줄씩 올려 두세요', W / 2, H * 0.36 + 146, 21, '#e8d8ff', 800);
+  // 네 줄 자리와 손가락 안내(지금 눌러 보며 자리를 맞춰도 된다)
+  const y = JUDGE_Y, lw = W_BOT / LANES;
+  for (let i = 0; i < LANES; i++) {
+    const x = W / 2 - W_BOT / 2 + lw * (i + 0.5), on = d.flash[i] > 0 || d.down[i];
+    g.fillStyle = on ? COLORS[i] : 'rgba(255,255,255,.08)'; g.globalAlpha = on ? 0.55 : 1;
+    rr(g, x - lw / 2 + 6, y - 70, lw - 12, 150, 18); g.fill(); g.globalAlpha = 1;
+    g.strokeStyle = COLORS[i]; g.lineWidth = 3; rr(g, x - lw / 2 + 6, y - 70, lw - 12, 150, 18); g.stroke();
+    text(g, ['중지', '검지', '검지', '중지'][i], x, y - 14, 20, '#ffffff', 900);   // 바깥 줄 = 중지, 안쪽 줄 = 검지
+    text(g, KEYS[i], x, y + 24, 18, COLORS[i], 900);
+  }
+  text(g, '✋ 왼손', W / 2 - W_BOT / 4, y + 110, 20, '#ffd6f5', 900);
+  text(g, '오른손 ✋', W / 2 + W_BOT / 4, y + 110, 20, '#ffd6f5', 900);
+  for (let i = 0; i < 4; i++) d.flash[i] = Math.max(0, d.flash[i] - 0.03);
+  void T;
+}
 function draw(g, T) {
   if (!d) return;
+  if (d.pre > 0) { drawPre(g, T); return; }
   const t = now(), bp = ((t - d.t0) / d.beat % 1 + 1) % 1, kick = Math.max(0, 1 - bp * 3);
   g.fillStyle = 'rgba(5,2,18,.88)'; g.fillRect(0, 0, W, H);
   // 무대 불빛
@@ -245,7 +276,7 @@ function draw(g, T) {
   // 카운트다운
   if (t < d.t0) {
     const left = Math.ceil((d.t0 - t) / d.beat);
-    text(g, left > 3 ? 'READY' : String(left), W / 2, H * 0.48, left > 3 ? 54 : 96, '#ffffff');
+    text(g, left > 1 ? 'READY' : 'GO!', W / 2, H * 0.48, 72, '#ffffff');
     text(g, '음표가 흰 선에 닿을 때 그 줄을 누르세요', W / 2, H * 0.48 + 56, 18, '#e8d8ff', 700);
     text(g, d.fog ? '긴 음표는 끝까지 누르고 · 구름 속 음표는 소리로!' : d.level >= 2 ? '긴 음표는 꼬리까지 누르고 있기 · 소리를 들으며 편하게' : '소리를 들으며 편하게 즐겨요', W / 2, H * 0.48 + 86, 15, '#ffd6f5', 700);
   }

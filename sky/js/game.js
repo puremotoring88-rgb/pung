@@ -35,7 +35,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.44';
+const VERSION = '0.45';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -2858,7 +2858,7 @@ cv.addEventListener('pointermove', e => {
 const ABOVE = 150;
 // 🕹️ 조종판: 화면 아래 판 안에서 누른 자리를 중심으로, 민 방향·거리만큼 그쪽으로 날아간다. 손을 떼면 멈춘다.
 const PAD_Y = H * 0.68, PAD_R = 70;
-const padMode = () => touchDevice && (S.touch || 'pad') === 'pad';
+const padMode = () => touchDevice && (S.touch || 'rel') === 'pad';
 function padSteer(dt) {   // update에서 부른다: 민 거리만큼의 속도로
   if (!drag || !drag.pad || P.trap) return;
   let jx = drag.fx - drag.px, jy = drag.fy - drag.py; const m = Math.hypot(jx, jy);
@@ -2893,10 +2893,10 @@ function renderCtl(el) {
     for (const [v, label] of opts) { const b = document.createElement('button'); b.textContent = label; if (v === cur) b.className = 'on'; b.addEventListener('click', () => { set(v); save(); A.sfx('click'); renderHangar(); }); r.append(b); }
     el.append(r);
   };
-  row('움직이는 방식', [['pad', '🕹️ 조종판(기본)'], ['rel', '👆 끌어서'], ['above', '☝️ 기체를 손가락 위로']], S.touch || 'pad', v => { S.touch = v; });
-  if (S.touch === 'rel') row('민감도: 빠를수록 손가락을 조금만 움직여도 돼요', SENS.map(([v, l]) => [v, l]), S.sens || 1.3, v => { S.sens = v; });
+  row('움직이는 방식', [['rel', '👆 끌어서(기본)'], ['pad', '🕹️ 조종판'], ['above', '☝️ 기체를 손가락 위로']], S.touch || 'rel', v => { S.touch = v; });
+  if ((S.touch || 'rel') === 'rel') row('민감도: 빠를수록 손가락을 조금만 움직여도 돼요', SENS.map(([v, l]) => [v, l]), S.sens || 1.3, v => { S.sens = v; });
   const n = document.createElement('div'); n.className = 'acNote';
-  n.textContent = (S.touch || 'pad') === 'pad' ? '화면 아래 조종판 안을 누르고 가고 싶은 쪽으로 밀어요. 많이 밀수록 빨라지고, 손을 떼면 멈춰요.' : (S.touch === 'above') ? '기체가 손가락보다 한 뼘 위에 떠요. 손에 가리지 않지만 화면 맨 아래로는 못 내려가요.' : '팁: 화면 아래쪽 빈 곳에서 끌면 손이 기체를 가리지 않아요. 손가락을 기체 위에 둘 필요가 없어요.';
+  n.textContent = (S.touch || 'rel') === 'pad' ? '화면 아래 조종판 안을 누르고 가고 싶은 쪽으로 밀어요. 많이 밀수록 빨라지고, 손을 떼면 멈춰요.' : (S.touch === 'above') ? '기체가 손가락보다 한 뼘 위에 떠요. 손에 가리지 않지만 화면 맨 아래로는 못 내려가요.' : '팁: 화면 아래쪽 빈 곳에서 끌면 손이 기체를 가리지 않아요. 손가락을 기체 위에 둘 필요가 없어요.';
   el.append(n);
   row('피해 숫자', [[true, '🔢 보이기'], [false, '끄기']], S.dmgNum !== false, v => { S.dmgNum = v; });
 }
