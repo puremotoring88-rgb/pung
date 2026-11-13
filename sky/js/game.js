@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.55';
+const VERSION = '0.56';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -153,6 +153,35 @@ function showPopup() {
   if (!p) { $('away').classList.add('hidden'); return false; }
   $('away').querySelector('h2').textContent = p.title; $('awayTxt').innerHTML = p.html; $('away').classList.remove('hidden');
   return true;
+}
+// ---------- 0.56 친구 초대: ?ref=친구 코드로 들어온 새 조종사가 아이디를 만들고 1-1을 깨면 둘 다 고철(server/invite.sql) ----------
+const REF_GIFT = 100, REF_KEY = 'boltwing.ref', REF_DONE = 'boltwing.refDone';
+const GAME_URL = 'https://puremotoring88-rgb.github.io/pung/sky/';
+const myRefUrl = () => GAME_URL + (window.Friend && Friend.code ? `?ref=${Friend.code}` : '');   // 내 초대 링크(아이디가 없으면 그냥 주소)
+{ const q = new URLSearchParams(location.search).get('ref'); try { if (q && /^[A-Za-z0-9]{6}$/.test(q) && !localStorage.getItem(REF_DONE)) localStorage.setItem(REF_KEY, q.toUpperCase()); } catch (e) { /* 무시 */ } }
+const refWait = () => { try { return !localStorage.getItem(REF_DONE) && localStorage.getItem(REF_KEY); } catch (e) { return null; } };
+let refBusy = false, refOff = false, refAt = 0;
+async function refTick() {   // 격납고를 그릴 때마다(2분에 한 번): 받을 초대 보상이 있는지 본다
+  if (refBusy || refOff || !Cloud.uid || Date.now() - refAt < 120000) return;
+  refBusy = true; refAt = Date.now();
+  try {
+    const code = refWait(); let got = false;
+    if (code && S.cleared >= 1) {
+      const r = await Cloud.call('ref_claim', { p_code: code });
+      if (r === 'ok') { got = true; S.scrap += REF_GIFT; save(); popups.push({ title: '🎁 초대 보상', html: `<div>친구의 초대로 와서 1-1을 깼어요!</div><div class="big">🔩 ${REF_GIFT}</div><div class="rules">초대해 준 친구도 고철 ${REF_GIFT}를 받아요.</div>` }); A.sfx('levelup'); }
+      try { localStorage.setItem(REF_DONE, '1'); localStorage.removeItem(REF_KEY); } catch (e) { /* 무시 */ }   // 받았든 못 받았든 이 기기는 한 번만
+    }
+    const n = Math.max(0, Math.min(30, (await Cloud.call('ref_collect', {})) | 0));
+    if (n) { got = true; S.scrap += REF_GIFT * n; save(); popups.push({ title: '🤝 초대한 친구가 왔어요!', html: `<div>내 초대 링크로 온 친구 ${n}명이 1-1을 깼어요</div><div class="big">🔩 ${REF_GIFT * n}</div>` }); A.sfx('levelup'); }
+    if (got && state === 'hangar' && $('away').classList.contains('hidden')) { showPopup(); renderHangar(); }
+  } catch (e) { if (/PGRST202|Could not find the function/.test(String(e && e.message || e))) refOff = true; }   // 서버에 아직 없으면 조용히 쉰다
+  refBusy = false;
+}
+async function shareInvite() {   // 🔗 초대 링크 보내기(공유 창이 되는 기기는 카톡 등으로 바로)
+  if (window.Friend && !Friend.code && Cloud.uid) { try { await Friend.poll(true); } catch (e) { /* 무시 */ } }   // 아직 내 코드를 못 받았으면 먼저
+  const fc = window.Friend && Friend.code, url = myRefUrl(), text = `⚡ 볼트윙 같이 하자! 설치 없이 바로 하는 로봇 비행 슈팅이야.${fc ? ` 이 링크로 와서 아이디를 만들고 1-1을 깨면 우리 둘 다 고철 🔩${REF_GIFT}!` : ''}`;
+  if (navigator.share) { try { await navigator.share({ title: '볼트윙 BOLTWING', text, url }); return true; } catch (e) { if (e && e.name === 'AbortError') return false; } }
+  try { await navigator.clipboard.writeText(`${text}\n${url}`); return 'copied'; } catch (e) { window.prompt('이 링크를 친구에게 보내세요', url); return false; }
 }
 function gainScrap(v) {   // 고철 얻기(고철 수집 연구가 적용된다)
   run.scrapCarry = (run.scrapCarry || 0) + v * GROW.scrap * (1 + 0.05 * rs('salvage')) * (run.gambler ? 2 : 1) * (itemOn('gold') ? 2 : 1) * (run.coop ? 1.2 : 1) * (run.comeback ? 1.5 : 1);   // 황금 시간 2배, 함께 하면 20% 더, 돌아온 조종사 1.5배
@@ -422,7 +451,7 @@ function lookSetsBox() {
 }
 // 결과 사진 카드: 맵 그림 위에 내 기체·칭호·점수를 한 장으로
 function photoCard() {
-  const c = document.createElement('canvas'); c.width = 720; c.height = 960; const g = c.getContext('2d');
+  const c = document.createElement('canvas'); c.width = 720; c.height = 1090; const g = c.getContext('2d');   // 0.56: 아래 130px은 QR 띠
   const th = run ? run.theme : stageTheme(hangarStage), far = Art.far(th);
   g.drawImage(far, 0, 0, far.width, Math.min(far.height, far.width * 960 / 720), 0, 0, 720, 960);
   const sh = g.createLinearGradient(0, 0, 0, 960); sh.addColorStop(0, 'rgba(4,8,18,.75)'); sh.addColorStop(0.35, 'rgba(4,8,18,.2)'); sh.addColorStop(0.62, 'rgba(4,8,18,.35)'); sh.addColorStop(1, 'rgba(4,8,18,.92)');
@@ -445,6 +474,12 @@ function photoCard() {
   g.fillStyle = '#fff'; g.font = '800 32px sans-serif'; g.fillText(myNick(), 84, 874);
   g.textAlign = 'right'; g.fillStyle = tc; g.font = '700 22px sans-serif'; g.fillText(`${TIERS[myTierV].name} · ⚡${powerOf(buildStats()).toLocaleString()}`, 636, 830);
   g.fillStyle = '#9fb3c8'; g.font = '600 20px sans-serif'; g.fillText(`${frameOf(S.frame).name} · 도감 ${bookCount().pct}% · ${new Date().toLocaleDateString('ko-KR')}`, 636, 874);
+  // 0.56 아래 띠: 찍으면 바로 하는 QR(아이디가 있으면 내 초대 링크)
+  g.fillStyle = '#070b16'; g.fillRect(0, 960, 720, 130); g.fillStyle = 'rgba(255,209,102,.5)'; g.fillRect(0, 960, 720, 2);
+  try { QR.draw(g, myRefUrl(), 40, 972, 106); } catch (e) { /* 그리지 못하면 글자만 */ }
+  g.textAlign = 'left'; g.fillStyle = '#fff'; g.font = '800 28px sans-serif'; g.fillText('📱 카메라로 찍으면 바로 플레이', 172, 1012);
+  g.fillStyle = '#b9c8dc'; g.font = '600 20px sans-serif'; g.fillText('설치 없이 무료 · 뽑기·광고 없음', 172, 1046);
+  g.fillStyle = '#7f93ab'; g.font = '600 17px sans-serif'; g.fillText(GAME_URL.replace('https://', ''), 172, 1072);
   return c;
 }
 function showPhoto() {
@@ -458,7 +493,7 @@ function showPhoto() {
   c.toBlob(blob => {
     const file = new File([blob], 'boltwing.png', { type: 'image/png' });
     if (!(navigator.canShare && navigator.canShare({ files: [file] }))) { sb.remove(); return; }
-    sb.addEventListener('click', () => { navigator.share({ files: [file], text: `⚡ 볼트윙 ${location.origin}${location.pathname}` }).catch(() => {}); });
+    sb.addEventListener('click', () => { navigator.share({ files: [file], text: `⚡ 볼트윙 ${myRefUrl()}` }).catch(() => {}); });
   }, 'image/png');
 }
 // ---------- 첫 10분: 처음엔 스테이지만, 판을 하고 깰수록 모드·탭이 하나씩 열린다(숫자는 해 보고 조정) ----------
@@ -2647,7 +2682,7 @@ function showHangar() {
 const statBar = (label, k, val) => `<div class="stat"><span>${label}</span><i><b style="width:${Math.round(clamp(k, 0.04, 1) * 100)}%"></b></i><em>${val}</em></div>`;
 function renderHangar() {
   $('scrap').textContent = `🔩 ${S.scrap}`;
-  unlockCheck(); titleCheck(); Rank.leagueCheck();
+  unlockCheck(); titleCheck(); Rank.leagueCheck(); refTick();
   $('bestTxt').textContent = `최고 ${S.best.toLocaleString()} · ★${starCount()}`;
   if (!isOpen('tab:' + tab)) tab = 'sortie'; if (!isOpen('mode:' + selMode)) selMode = 'stage';
   S.newDot = S.newDot || {};
@@ -2676,7 +2711,7 @@ function renderHangar() {
   { const nt = nextOpenTip(); if (nt) $('modeInfo').insertAdjacentHTML('beforeend', `<div class="nextOpen">${nt}</div>`); }
   if (Cloud.guest && S.plays >= 1 && (S.guestAskAt || 0) <= S.plays) {   // 0.55: 손님으로 한 판 이상 했으면 아이디 만들기 권유(나중에 = 3판 뒤 다시)
     const gc = document.createElement('div'); gc.className = 'guestAsk';
-    gc.innerHTML = `<b>💾 기록을 지키세요</b><br><small>아이디를 만들면 지금 기록을 그대로 가져가고, 다른 기기에서도 이어 하고, 랭킹·친구·주간 리그를 쓸 수 있어요.</small>`;
+    gc.innerHTML = `<b>💾 기록을 지키세요</b><br><small>아이디를 만들면 지금 기록을 그대로 가져가고, 다른 기기에서도 이어 하고, 랭킹·친구·주간 리그를 쓸 수 있어요.${refWait() ? ` 친구 초대 보상 🔩${REF_GIFT}도 받을 수 있어요.` : ""}</small>`;
     const r = document.createElement('div'); r.className = 'gaRow';
     const b1 = document.createElement('button'); b1.className = 'main'; b1.textContent = '✨ 아이디 만들기'; b1.onclick = () => { A.sfx('click'); Cloud.toSignup(); };
     const b2 = document.createElement('button'); b2.textContent = '나중에'; b2.onclick = () => { S.guestAskAt = S.plays + 3; save(); A.sfx('click'); renderHangar(); };
@@ -2827,6 +2862,14 @@ function renderHangar() {
   }
   rollDaily();
   renderWeekly($('weekly'));
+  { const iv = $('invite'); iv.innerHTML = '';   // 0.56 친구 초대 칸
+    const fc = window.Friend && Friend.code;
+    iv.insertAdjacentHTML('beforeend', fc ? `<div>내 초대 링크 <small>${esc(myRefUrl().replace('https://', ''))}</small></div>` : `<div><small>${Cloud.uid ? '버튼을 누르면 내 초대 링크를 보내요.' : '아이디가 있어야 초대 보상을 받아요. 링크는 지금도 보낼 수 있어요.'}</small></div>`);
+    const b = document.createElement('button'); b.className = 'btn'; b.textContent = '🔗 초대 링크 보내기';
+    b.addEventListener('click', async () => { const r = await shareInvite(); if (r === 'copied') { b.textContent = '✅ 복사했어요! 카톡에 붙여 넣으세요'; setTimeout(() => { b.textContent = '🔗 초대 링크 보내기'; }, 2500); } });
+    iv.append(b);
+    iv.insertAdjacentHTML('beforeend', `<div class="rules">친구가 링크로 들어와 아이디를 만들고 1-1을 깨면 친구와 나 모두 고철 ${REF_GIFT}. 새로 만든 아이디만, 한 사람에 한 번만 돼요.</div>`);
+  }
   const at = $('attend'); at.innerHTML = '';
   const cyc = (S.attend.days - 1) % 7;
   ATTEND.forEach((r, i) => at.insertAdjacentHTML('beforeend', `<div class="${i <= cyc ? 'got' : ''} ${i === cyc ? 'today' : ''}">${i + 1}일<br>🔩${r}${i <= cyc ? '<br>✔' : ''}</div>`));
@@ -4521,7 +4564,7 @@ function coopPanel() {
     pr.append(btn(net.pub ? '🌐 공개 중 → 비공개로 바꾸기' : '🔒 비공개 중 → 공개로 바꾸기', () => { net.pub = !net.pub; Lobby.sync(); renderHangar(); }, net.pub ? 'main' : ''));
     const r = add('', 'div', 'cRow');
     r.append(btn('🔗 초대 링크 복사', async () => {
-      const link = `${location.origin}${location.pathname}?room=${net.code}`;
+      const link = `${GAME_URL}?room=${net.code}${window.Friend && Friend.code ? `&ref=${Friend.code}` : ""}`;
       try { await navigator.clipboard.writeText(link); coopMsg = '초대 링크를 복사했어요. 카톡에 붙여 넣으세요!'; } catch (e) { window.prompt('이 링크를 친구에게 보내세요', link); }
       renderHangar();
     }), btn('방 닫기', () => { leaveRoom(); coopMsg = ''; renderHangar(); }, 'off'));
@@ -4563,7 +4606,7 @@ setInterval(() => { if (Lobby.on) Lobby.sync(); }, 3000);
 const friendEl = document.createElement('div'); friendEl.className = 'friends';
 Friend.init({
   nick: () => myNick(), lv: () => S.pilot.lv, st: lobbyOpt.status, room: () => (net && net.mode === 'host' ? net.code : ''),
-  sfx: n => A.sfx(n), join: lobbyOpt.join, ensureRoom: lobbyOpt.ensureRoom,
+  sfx: n => A.sfx(n), join: lobbyOpt.join, ensureRoom: lobbyOpt.ensureRoom, share: shareInvite,
   canPop: () => state === 'hangar' && $('gate').classList.contains('hidden'),
   openPanel: () => { selMode = 'coop'; if (tab !== 'sortie') { const b = document.querySelector('.tabs button[data-tab="sortie"]'); if (b) b.click(); } renderHangar(); },
 });

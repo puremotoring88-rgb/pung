@@ -100,6 +100,7 @@ function draw() {
   if (ready === false) { add('친구 기능은 준비 중이에요(서버 설정을 하면 켜져요).', 'cNote'); return; }
   if (!code) { add('불러오는 중…', 'cNote'); return; }
   const mine = add(`내 친구 코드 <b class="frCode">${esc(code)}</b>`, 'frMine');
+  const ir = add('<small>🔗 내 초대 링크로 온 친구가 아이디를 만들고 1-1을 깨면 둘 다 고철을 받아요.</small>', 'cRow frRef'); ir.append(btn('🔗 초대 링크 보내기', async () => { const r = await opt.share(); if (r === 'copied') { note = '초대 링크를 복사했어요. 카톡에 붙여 넣으세요!'; draw(); } }, 'main'));
   mine.append(btn('복사', async () => { try { await navigator.clipboard.writeText(code); note = '친구 코드를 복사했어요. 친구에게 알려 주세요!'; } catch (e) { window.prompt('내 친구 코드', code); } draw(); }));
   if (!addInp) { addInp = document.createElement('input'); addInp.maxLength = 8; addInp.placeholder = '친구 코드 6글자'; addInp.className = 'code'; addInp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') request(addInp.value); }); }
   const ar = add('', 'cRow'); ar.append(addInp, btn('➕ 친구 신청', () => request(addInp.value)));
