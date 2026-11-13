@@ -35,7 +35,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.40';
+const VERSION = '0.41';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -75,13 +75,16 @@ const GOALS = [
 // ---------- 오래 하게 만드는 뼈대: 조종사 계급, 연구, 오늘의 임무, 출석 ----------
 const RANKS = ['훈련병', '이등 조종사', '일등 조종사', '편대원', '편대장', '교관', '에이스', '더블 에이스', '하늘의 별', '전설'];
 const rankName = lv => (lv <= RANKS.length ? RANKS[lv - 1] : `전설 ${lv - RANKS.length + 1}`);
-const pilotNeed = lv => 80 + 40 * lv;
+// 성장 속도(사용자 2026-11-13: 너무 빠르다): 조종사 레벨 곡선, 고철 수입, 레벨에 따라 열리는 판 안 아이템, 도감에 올리려면 잡아야 하는 수
+const GROW = { scrap: 0.7, foeBook: 10, multiLv: 4, itemLv: { orb: 1, bomb: 1, magnet: 1, slow: 3, rapid: 5, gold: 7, twin: 9, clover: 12 } };
+const pilotNeed = lv => 120 + 60 * lv + 6 * lv * lv;
 function gainPilotXp(x) {   // 판이 끝날 때마다 조종사 경험치. 계급이 오르면 고철을 받는다
-  let ups = 0, reward = 0;
+  let ups = 0, reward = 0; const lv0 = S.pilot.lv;
   S.pilot.xp += x;
   while (S.pilot.xp >= pilotNeed(S.pilot.lv)) { S.pilot.xp -= pilotNeed(S.pilot.lv); S.pilot.lv++; ups++; reward += 20 + 10 * S.pilot.lv; }
   S.scrap += reward;
-  return { ups, reward };
+  const opened = Object.keys(GROW.itemLv).filter(k => GROW.itemLv[k] > lv0 && GROW.itemLv[k] <= S.pilot.lv).map(k => ITEMS[k].icon + ' ' + ITEMS[k].name).concat(GROW.multiLv > lv0 && GROW.multiLv <= S.pilot.lv ? ['🔱 탄 +1 줍기'] : []);
+  return { ups, reward, opened };
 }
 // 연구: 고철로 사는 영구 강화(모든 기체에 적용)
 const RESEARCH = [
@@ -133,7 +136,7 @@ function showPopup() {
   return true;
 }
 function gainScrap(v) {   // 고철 얻기(고철 수집 연구가 적용된다)
-  run.scrapCarry = (run.scrapCarry || 0) + v * (1 + 0.05 * rs('salvage')) * (run.gambler ? 2 : 1) * (itemOn('gold') ? 2 : 1) * (run.coop ? 1.2 : 1) * (run.comeback ? 1.5 : 1);   // 황금 시간 2배, 함께 하면 20% 더, 돌아온 조종사 1.5배
+  run.scrapCarry = (run.scrapCarry || 0) + v * GROW.scrap * (1 + 0.05 * rs('salvage')) * (run.gambler ? 2 : 1) * (itemOn('gold') ? 2 : 1) * (run.coop ? 1.2 : 1) * (run.comeback ? 1.5 : 1);   // 황금 시간 2배, 함께 하면 20% 더, 돌아온 조종사 1.5배
   const whole = Math.floor(run.scrapCarry);
   run.scrapCarry -= whole; S.scrap += whole; run.scrapGot += whole;
   if (whole) dcount('scrap', whole);
@@ -286,13 +289,14 @@ function bk() {
     S.book = { maps: {}, foes: {}, boss: {}, hz: {} };
     for (let s = 1; s <= Math.min(S.maxStage, 9); s++) if (S.plays) S.book.maps[stageTheme(s)] = 1;
     (S.stats.bossSeen || []).forEach(i => { const b = D.BOSSES[i % D.BOSSES.length]; if (b) S.book.boss[b.id] = { k: 1, nohit: 0, fast: 0, best: 0 }; });
-    if (S.stats.kills > 0) for (const [k, e] of Object.entries(D.ENEMIES)) if ((e.from || 1) <= S.cleared + 1 && k !== 'treasure') S.book.foes[k] = 1;
+    if (S.stats.kills > 0) for (const [k, e] of Object.entries(D.ENEMIES)) if ((e.from || 1) <= S.cleared + 1 && k !== 'treasure') S.book.foes[k] = GROW.foeBook;
   }
   for (const k of ['maps', 'foes', 'boss', 'hz']) S.book[k] = S.book[k] || {}; return S.book;
 }
 function bookMark(cat, key) {
-  const B = bk(), first = !B[cat][key];
+  const B = bk();
   B[cat][key] = (B[cat][key] || 0) + 1;
+  const first = cat === 'foes' ? B[cat][key] === GROW.foeBook : B[cat][key] === 1;   // 적은 여러 번 잡아야 도감에 오른다
   if (!first || !run || state !== 'play') return;
   const nm = cat === 'maps' ? MAP_ICON[key] + ' ' + D.THEMES[key].name : cat === 'foes' ? (D.ENEMIES[key] || {}).name : cat === 'hz' ? HZ_NM[key] : '';
   if (nm) say(`📖 도감에 새로: ${nm}`, W / 2, H * (cat === 'maps' ? 0.5 : 0.46), '#ffd166', 18, 2);
@@ -309,7 +313,7 @@ function bookCount() {
   const B = bk(), foeKeys = Object.keys(D.ENEMIES), hzKeys = Object.keys(HZ_NM);
   const parts = [
     ['maps', Object.keys(B.maps).length, D.THEMES.length],
-    ['foes', foeKeys.filter(k => B.foes[k]).length, foeKeys.length],
+    ['foes', foeKeys.filter(k => (B.foes[k] || 0) >= GROW.foeBook).length, foeKeys.length],
     ['boss', D.BOSSES.reduce((s, b) => s + medalsOf(b.id).length, 0), D.BOSSES.length * MEDALS.length],
     ['routes', Object.keys(S.routes || {}).length, Object.keys(ROUTES).length],
     ['hz', hzKeys.filter(k => B.hz[k]).length, hzKeys.length],
@@ -357,7 +361,7 @@ function renderBook(el) {
   h += sec('🎖️ 칭호', TITLES.filter(t => t.ok()).length, TITLES.length, `<div class="ttlList">${TITLES.map(t => { const ok = t.ok(), on = titleName() === t.name; return `<button class="ttl${ok ? '' : ' off'}${on ? ' on' : ''}" data-t="${t.id}" ${ok ? '' : 'disabled'}><b>${ok ? '「' + t.name + '」' : '🔒 ???'}</b><i>${t.hint}</i></button>`; }).join('')}</div>`);
   h += sec('👑 보스 무훈', P0.boss[1], P0.boss[2], D.BOSSES.map(b => { const ms = medalsOf(b.id), r = B.boss[b.id]; return `<div class="bkBoss${r ? '' : ' off'}"><b>${r ? b.name : '???'}</b><span>${MEDALS.map(m => `<em class="${ms.includes(m[0]) ? 'on' : ''}" title="${m[2]}">${m[1]}</em>`).join('')}</span><i>${r ? `${r.k}번 · 최고 ${r.best ? r.best + '초' : '-'}` : '아직 못 만남'}</i></div>`; }).join('') + `<small class="bkNote">${MEDALS.map(m => m[1] + ' ' + m[2]).join(' · ')}</small>`);
   h += sec('🗺️ 맵', P0.maps[1], P0.maps[2], `<div class="bkGrid">${D.THEMES.map((t, i) => cell(B.maps[i], MAP_ICON[i], t.name, B.maps[i] ? `${B.maps[i]}번` : '')).join('')}</div>`);
-  h += sec('👾 적', P0.foes[1], P0.foes[2], `<div class="bkGrid">${Object.keys(D.ENEMIES).map(k => { const im = IMG['enemy-' + k]; return cell(B.foes[k], im ? `<img src="${im.src}" alt="">` : '👾', D.ENEMIES[k].name, B.foes[k] ? `${B.foes[k]}대` : ''); }).join('')}</div>`);
+  h += sec('👾 적', P0.foes[1], P0.foes[2], `<div class="bkGrid">${Object.keys(D.ENEMIES).map(k => { const im = IMG['enemy-' + k]; const n = B.foes[k] || 0, ok = n >= GROW.foeBook; return cell(ok, im ? `<img src="${im.src}" alt="">` : '👾', D.ENEMIES[k].name, ok ? `${n}대` : n ? `${n} / ${GROW.foeBook}` : ''); }).join('')}</div>`);
   h += sec('🧭 항로', P0.routes[1], P0.routes[2], `<div class="bkGrid">${Object.keys(ROUTES).map(k => cell((S.routes || {})[k], ROUTES[k].icon, ROUTES[k].name, ['일반', '희귀', '전설'][ROUTES[k].tier])).join('')}</div>`);
   h += sec('🌦️ 하늘의 사건', P0.hz[1], P0.hz[2], `<div class="bkGrid">${Object.keys(HZ_NM).map(k => { const [ic, ...nm] = HZ_NM[k].split(' '); return cell(B.hz[k], ic, nm.join(' ')); }).join('')}</div>`);
   el.innerHTML = h;
@@ -581,7 +585,7 @@ function startRun(stage, md = 'stage') {
   const isSt = md === 'stage', th0 = isSt ? stageTheme(stage) : themeFor(stage);   // 스테이지 모드: 챕터 맵·완만한 난이도
   shots = []; foes = []; ebul = []; drops = []; fx = []; texts = []; lasers = []; boss = null; shake = 0; flash = 0;
   run = { stage, t: 0, phase: 'waves', waveDur: 110, spawnT: 1.2, warnT: 0, endT: 0, chain: 0, score: 0, kills: 0, scrapGot: 0, partsGot: [],
-    level: 1, xp: 0, xpNeed: 12, taken: {}, d: diffFor(isSt ? lvOf(stage) : stage), theme: th0, loop: isSt ? (chOf(stage) - 1) / 5 | 0 : (stage - 1) / 5 | 0,
+    level: 1, xp: 0, xpNeed: 15, taken: {}, d: diffFor(isSt ? lvOf(stage) : stage), theme: th0, loop: isSt ? (chOf(stage) - 1) / 5 | 0 : (stage - 1) / 5 | 0,
     combo: 0, comboT: 0, maxCombo: 0, hits: 0, hurtT: 0, ults: 0,
     rushAt: rnd(42, 58), rush: null, rushDone: false, rushSum: null,
     banner: { kind: 'stage', title: `STAGE ${isSt ? stLabel(stage) : stage}`, sub: D.THEMES[th0].name + (isSt ? ' · 끝에 ' + END_NM[stageEnd(stage)] + (powerOf(buildStats()) < recPow(stage) * 0.9 ? ' · ⚠️ 권장 전투력보다 낮아요' : '') : ''), t: 0, life: 2.6 },
@@ -1807,7 +1811,7 @@ function update(dt) {
   } else if (run.phase === 'dead') {
     if ((run.endT -= dt) <= 0) { if (run.mode === 'auto') respawn(); else endRun(false); }
   } else if (run.xp >= run.xpNeed && !run.rush && !P.trap) {   // 박자·그물 중에는 레벨 업 창을 미룬다
-    run.xp -= run.xpNeed; run.level++; run.xpNeed = Math.round(run.xpNeed * 1.5 + 4);   // 카드는 덜 자주(작은 강화는 줍기로)
+    run.xp -= run.xpNeed; run.level++; run.xpNeed = Math.round(run.xpNeed * 1.55 + 6);   // 카드는 덜 자주(작은 강화는 줍기로)
     openCards();
   }
 }
@@ -1893,7 +1897,7 @@ function endOther(win) {   // 무한 생존·보스 러시·자동 출격의 결
     `<div>처치 <b>${run.kills}</b> · 최고 콤보 <b>${run.maxCombo}</b> · 레벨 <b>${run.level}</b></div>`,
     `<div>얻은 고철 🔩 <b>${run.scrapGot}</b></div>`,
     run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
-    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}</div>`,
+    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새 아이템이 나오기 시작해요: ${up.opened.join(', ')}</b>` : ''}</div>`,
   ].filter(Boolean).join('');
   const btns = $('rBtns'); btns.innerHTML = '';
   const mk = (label, cls, fn) => { const b = document.createElement('button'); b.className = 'btn ' + cls; b.textContent = label; b.addEventListener('click', () => { A.sfx('click'); fn(); }); btns.append(b); };
@@ -1957,7 +1961,7 @@ function endRun(win) {
     `<div>얻은 고철 🔩 <b>${run.scrapGot}</b>${newStars ? ` + 새 별 보상 🔩 <b>${newStars * STAR_REWARD}</b>` : ''}</div>`,
     run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
     opened.length ? `<div class="gold">🔓 새로 열림: ${opened.join(', ')}</div>` : '',
-    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}</div>`,
+    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새 아이템이 나오기 시작해요: ${up.opened.join(', ')}</b>` : ''}</div>`,
     `<div class="rules">${STAR_RULES.map((r, i) => `${now[i] ? '★' : '☆'} ${r}`).join('<br>')}</div>`,
     win ? `<div>다음: 스테이지 ${stLabel(run.stage + 1)} · ${stageEnd(run.stage + 1) === 'leader' ? END_NM.leader : END_NM[stageEnd(run.stage + 1)] + ' ' + D.BOSSES[stageBossIdx(run.stage + 1)].name}${subOf(run.stage) === 5 ? ' · 🗺️ 새 맵 「' + D.THEMES[stageTheme(run.stage + 1)].name + '」' : ''}</div>` : '<div>격납고에서 부품과 무기를 강화하고 다시 도전해 보세요.</div>',
   ].filter(Boolean).join('');
@@ -2750,7 +2754,7 @@ function renderHangar() {
       pl.append(row);
     }
   } else pl.innerHTML = `<p class="note">칸을 누르면 가진 부품이 나옵니다. 모은 부품 ${Object.keys(S.parts).length} / ${D.PARTS.length}종</p>`;
-  $('pilot').innerHTML = `<span class="lv">Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}</span><i><b style="width:${S.pilot.xp / pilotNeed(S.pilot.lv) * 100}%"></b></i><em>${Math.floor(S.pilot.xp)} / ${pilotNeed(S.pilot.lv)}</em>`;
+  $('pilot').innerHTML = `<span class="lv">Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}</span><i><b style="width:${S.pilot.xp / pilotNeed(S.pilot.lv) * 100}%"></b></i><em>${Math.floor(S.pilot.xp)} / ${pilotNeed(S.pilot.lv)}</em>${(() => { const nx = Object.keys(GROW.itemLv).filter(k => GROW.itemLv[k] > S.pilot.lv).sort((a, b) => GROW.itemLv[a] - GROW.itemLv[b])[0]; return nx ? `<small class="pNext">Lv ${GROW.itemLv[nx]}에 ${ITEMS[nx].icon} ${ITEMS[nx].name} 열림</small>` : ''; })()}`;
   const rl = $('research'); rl.innerHTML = '';
   for (const r of RESEARCH) {
     const lv = rs(r.id), row = document.createElement('div');
@@ -3044,7 +3048,8 @@ const ITEMS = {
   clover: { icon: '🍀', name: '네잎클로버', desc: '다음 카드 4장, 좋은 카드가 잘 나온다', c: '#6ee37a' },
 };
 const TIMED = ['magnet', 'slow', 'rapid', 'gold'];
-function dropItem(x, y, id) { drops.push({ kind: 'item', id: id || pick(Object.keys(ITEMS)), x, y, vy: 55, v: 1 }); }
+const itemsOpen = () => Object.keys(ITEMS).filter(k => (GROW.itemLv[k] || 1) <= S.pilot.lv);   // 조종사 레벨이 오를수록 아이템이 하나씩 열린다
+function dropItem(x, y, id) { drops.push({ kind: 'item', id: id || pick(itemsOpen()), x, y, vy: 55, v: 1 }); }
 function useItem(id, who = P) {
   const it = ITEMS[id]; if (!it) return;
   say(`${it.icon} ${it.name}!`, who.x, who.y - 64, it.c, 20, 1.3); A.sfx('part'); buzz(30);
@@ -3243,7 +3248,7 @@ const UPGR = {
   multi: { icon: '🔱', c: '#9dffcf', w: 0.6, txt: '탄 +1', on: () => { run.m.multi += 1; run.upMulti = (run.upMulti || 0) + 1; } },
 };
 function dropUp(x, y) {
-  const ids = Object.keys(UPGR).filter(k => k !== 'multi' || (run.upMulti || 0) < 2);
+  const ids = Object.keys(UPGR).filter(k => k !== 'multi' || ((run.upMulti || 0) < 2 && S.pilot.lv >= GROW.multiLv));
   let r = Math.random() * ids.reduce((a, k) => a + UPGR[k].w, 0), id = ids[0];
   for (const k of ids) if ((r -= UPGR[k].w) <= 0) { id = k; break; }
   drops.push({ kind: 'up', id, x, y, vy: 60, v: 1 });
@@ -4238,7 +4243,7 @@ function guestEnd(m) {
   $('rStars').innerHTML = '';
   $('rStats').innerHTML = [`<div class="big">${m.score.toLocaleString()}<small>점(팀)</small></div>`, `<div>팀 처치 <b>${m.kills}</b></div>`,
     `<div>받은 고철 🔩 <b>${m.scrap}</b> (팀이 모은 만큼 모두 받아요)</div>`, run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
-    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}</div>`,
+    `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새 아이템이 나오기 시작해요: ${up.opened.join(', ')}</b>` : ''}</div>`,
     '<div class="rules">스테이지 별과 랭크는 혼자 할 때 기록됩니다. 방장이 다시 출격하면 자동으로 함께 시작해요.</div>'].filter(Boolean).join('');
   const btns = $('rBtns'); btns.innerHTML = '';
   const b = document.createElement('button'); b.className = 'btn big'; b.textContent = '방에서 기다리기';
