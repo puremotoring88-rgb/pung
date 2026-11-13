@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.51';
+const VERSION = '0.52';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -3182,8 +3182,12 @@ function skillTick(dt) {
 }
 const itemOn = id => run && run['it_' + id] > 0;
 function tickItems(dt) {
-  for (const id of TIMED) if (run['it_' + id] > 0) run['it_' + id] -= dt;
-  for (const s of [P, ...allies]) if (s.twinT > 0) s.twinT -= dt;
+  for (const id of TIMED) if (run['it_' + id] > 0) { run['it_' + id] -= dt; if (run['it_' + id] <= 0 && P && !P.down) itemEnd(ITEMS[id]); }   // 0.52: 끝나면 알림
+  for (const s of [P, ...allies]) if (s.twinT > 0) { s.twinT -= dt; if (s === P && s.twinT <= 0 && !P.down) itemEnd(ITEMS.twin); }
+}
+function itemEnd(it) {   // 시간제 효과가 끝났음을 기체 위에 짧게 알린다(탄이 왜 줄었는지 알 수 있게)
+  if (!it || state !== 'play') return;
+  say(`${it.icon} ${it.name} 끝!`, P.x, P.y - 64, '#c8d2e0', 17, 1.1); A.sfx('click'); ringFx(P.x, P.y, 50, it.c);
 }
 function drawItemHud() {   // 켜져 있는 아이템과 남은 시간
   let x = 18;
