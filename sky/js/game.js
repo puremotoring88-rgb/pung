@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.57';
+const VERSION = '0.58';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -622,8 +622,12 @@ function shipTierFx(g, tier, t, size, sx) {   // 성장 단계에 따른 빛(몸
 }
 // 스테이지가 오를수록 적이 단단해지고 탄이 빨라진다
 const L = () => (run && run.mode === 'stage' ? Math.floor(lvOf(run.stage)) : run ? run.stage : 1);   // 지금 판의 난이도 수준(스테이지 모드는 챕터 번호 대신 lvOf)
+// 0.58 난이도 따라잡기(사용자: 1-3에서 적이 안 보이고 보스가 녹는다). 판 안에서 카드·줍기로 세진 만큼 적·보스 체력도 일부 따라 올라간다.
+const DIFF = { hp: 0.4, chase: 0.55 };   // hp: 수준 1마다 적 체력 +40%(전엔 32%), chase: 판 안 화력 증가분의 55%만큼 적 체력도 늘림
+const runPow = () => run ? run.m.dmg * run.m.rate * (1 + 0.35 * run.m.multi) * (1 + 0.25 * (run.m.drones || 0)) : 1;   // 판을 시작할 때 1
+const foeK = () => (run && run.mode !== 'auto' ? 1 + DIFF.chase * Math.max(0, runPow() - 1) : 1);
 const diffFor = s => ({
-  hp: 1 + 0.32 * (s - 1),
+  hp: 1 + DIFF.hp * (s - 1),
   bs: Math.min(1.6, 1 + 0.05 * (s - 1)),
   fr: Math.min(1.8, 1 + 0.06 * (s - 1)),
   dmg: Math.min(32, 10 + 2 * (s - 1)),
@@ -695,7 +699,7 @@ function say(text, x, y, color, size = 22, life = 1.2) { if (run && run.arena &&
 
 // ---------- 적 ----------
 function addFoe(type, x, y, o) {
-  const E = D.ENEMIES[type] || { hp: 1, r: 22, xp: 0, score: 30 }, hp = E.hp * run.d.hp * (run.teamK || 1);   // 함께 하면 적이 튼튼해진다
+  const E = D.ENEMIES[type] || { hp: 1, r: 22, xp: 0, score: 30 }, hp = E.hp * run.d.hp * foeK() * (run.teamK || 1);   // 함께 하면 적이 튼튼해진다, 판 안에서 세진 만큼도
   const e = Object.assign({ nid: ++foeSeq, type, x, y, vx: 0, vy: 0, r: E.r, hp, maxHp: hp, t: 0, fireT: rnd(0.6, 1.6), flash: 0, xp: E.xp, score: E.score, elite: !!E.elite }, o);
   const ec = run.dangerT > 0 ? 0.45 : L() >= 3 ? Math.min(0.3, 0.04 + 0.025 * L()) : 0;
   if (type !== 'treasure' && !e.harmless && Math.random() < ec) {   // 정예: 방패(먼저 깎아야 함), 쾌속(빠름), 폭발(부서지면 탄을 뿌림)
@@ -823,7 +827,7 @@ function foeAI(e, dt) {
 function spawnBoss() {
   const idx = run.mode === 'rush' ? run.bossIdx : run.mode === 'endless' ? run.bossCount % 5 : run.mode === 'stage' ? stageBossIdx(run.stage) : (run.stage - 1) % 5, def = D.BOSSES[idx];
   const scout = run.mode === 'stage' && stageEnd(run.stage) === 'scout';   // 보스 선발대: 다음 챕터 보스를 미리 만난다(체력 절반)
-  const hp = def.hp * run.d.hp * (1 + 0.15 * run.loop) * (run.mode === 'auto' ? 0.35 : 1) * (run.teamK || 1) * (scout ? 0.5 : 1);
+  const hp = def.hp * run.d.hp * foeK() * (1 + 0.15 * run.loop) * (run.mode === 'auto' ? 0.35 : 1) * (run.teamK || 1) * (scout ? 0.5 : 1);
   boss = { def, idx, t: 0, x: W / 2, y: -170, entering: true, tm: {}, parts: [], spin: 0, inhale: 0, mirror: 0, stream: 0, tx: W / 2, slash: 0 };
   const lay = { spider: [[0, 70]], whale: [[0, 90]], twins: [[-135, 56], [135, 56]], knight: [[0, 60]], core: [[0, 82]] }[def.id];
   for (const [dx, r] of lay) {
