@@ -2,8 +2,9 @@
 // 효과음은 무기·기체마다 다르고, 배경음악은 격납고·스테이지·보스가 다르며 스테이지 배경마다 조(키)가 바뀐다.
 window.AudioKit = (() => {
 'use strict';
-let ac = null, musicBus, sfxBus, musicOn = true, sfxOn = true;
+let ac = null, musicBus, sfxBus, leadBus, padBus, musicOn = true, sfxOn = true;
 let mood = null, theme = 0, step = 0, nextT = 0, noiseBuf = null, startT = 0;
+let dlNode = null;
 const last = {};
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -17,6 +18,16 @@ function init() {
   const out = ac.createGain(); out.gain.value = 0.9; out.connect(comp);
   musicBus = ac.createGain(); musicBus.gain.value = musicOn ? 0.3 : 0; musicBus.connect(out);
   sfxBus = ac.createGain(); sfxBus.gain.value = sfxOn ? 0.55 : 0; sfxBus.connect(out);
+  // 0.46 고급스러운 울림: 잔향(방 울림)과 메아리. 음악 전체에 조금, 가락에는 메아리까지
+  const rev = ac.createConvolver(), ir = ac.createBuffer(2, ac.sampleRate * 2.4, ac.sampleRate);
+  for (let c = 0; c < 2; c++) { const dd = ir.getChannelData(c); for (let i = 0; i < dd.length; i++) dd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / dd.length, 3.2); }
+  rev.buffer = ir; const wet = ac.createGain(); wet.gain.value = 0.32; rev.connect(wet); wet.connect(out);
+  const mSend = ac.createGain(); mSend.gain.value = 0.55; musicBus.connect(mSend); mSend.connect(rev);
+  const sSend = ac.createGain(); sSend.gain.value = 0.18; sfxBus.connect(sSend); sSend.connect(rev);
+  leadBus = ac.createGain(); leadBus.gain.value = 1; leadBus.connect(musicBus);
+  const dl = dlNode = ac.createDelay(1), fb = ac.createGain(), dw = ac.createGain(), dlf = ac.createBiquadFilter(); dl.delayTime.value = 0.3; fb.gain.value = 0.32; dw.gain.value = 0.28; dlf.type = 'lowpass'; dlf.frequency.value = 3200;
+  leadBus.connect(dl); dl.connect(dlf); dlf.connect(fb); fb.connect(dl); dlf.connect(dw); dw.connect(musicBus);
+  padBus = ac.createGain(); padBus.gain.value = 1; padBus.connect(musicBus);
   setInterval(tick, 25);
   document.addEventListener('visibilitychange', () => { if (ac) (document.hidden ? ac.suspend() : ac.resume()); });
 }
@@ -44,6 +55,28 @@ function noise(bus, t, dur, vol, ftype, f0, f1, q = 1) {
   if (f1 && f1 !== f0) f.frequency.exponentialRampToValueAtTime(f1, t + dur);
   env(g, t, 0.003, dur, vol); s.connect(f); f.connect(g); g.connect(bus); s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05);
 }
+
+// ---------- 0.46 고급 악기: 여러 겹·필터·잔향으로 풍성하게 ----------
+function vo(bus, type, f, t, dur, vol, a, det, fl0, fl1, q) {
+  const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f; if (det) o.detune.value = det;
+  let nd = o;
+  if (fl0) { const fl = ac.createBiquadFilter(); fl.type = 'lowpass'; fl.Q.value = q || 0.7; fl.frequency.setValueAtTime(fl0, t); if (fl1) fl.frequency.exponentialRampToValueAtTime(fl1, t + a + dur); o.connect(fl); nd = fl; }
+  env(g, t, a, dur, vol); nd.connect(g); g.connect(bus); o.start(t); o.stop(t + a + dur + 0.05);
+}
+// kind: saw(슈퍼소우) pad(따뜻한 패드) str(현악) ep(일렉 피아노) pluck(뜯는 소리) bell(종) 그 밖은 기본 파형
+function inst(kind, midi, t, dur, vol, bus) {
+  bus = bus || leadBus; const f = mtof(midi);
+  if (kind === 'saw') { [-14, 0, 14].forEach(d => vo(bus, 'sawtooth', f, t, dur, vol * 0.45, 0.008, d, 3800, 1400, 1)); vo(bus, 'square', f / 2, t, dur, vol * 0.18, 0.008, 0, 1600, 600); }
+  else if (kind === 'pad') [-9, 9].forEach(d => vo(bus, 'sawtooth', f, t, dur, vol * 0.5, Math.min(0.45, dur * 0.3), d, 1300, 700));
+  else if (kind === 'str') { [-7, 7].forEach(d => vo(bus, 'sawtooth', f, t, dur, vol * 0.45, Math.min(0.25, dur * 0.25), d, 2200, 1200)); vo(bus, 'triangle', f * 2, t, dur, vol * 0.15, 0.2); }
+  else if (kind === 'ep') { vo(bus, 'sine', f, t, dur * 1.4, vol, 0.004); vo(bus, 'sine', f * 2, t, dur * 0.5, vol * 0.35, 0.002); vo(bus, 'triangle', f * 4, t, 0.08, vol * 0.12, 0.001); }
+  else if (kind === 'pluck') { vo(bus, 'sawtooth', f, t, Math.min(dur, 0.22), vol, 0.002, 0, 4200, 300, 2); vo(bus, 'sawtooth', f, t, Math.min(dur, 0.22), vol * 0.5, 0.002, 10, 4200, 300, 2); }
+  else if (kind === 'bell') { vo(bus, 'sine', f, t, dur + 0.6, vol, 0.002); vo(bus, 'sine', f * 2.76, t, 0.4, vol * 0.35, 0.001); vo(bus, 'sine', f * 5.4, t, 0.15, vol * 0.18, 0.001); }
+  else osc(bus, kind, f, f, t, dur, vol);
+}
+// 북을 칠 때 패드 소리를 잠깐 낮춘다(사이드체인: 음악이 숨 쉬듯 출렁임)
+function duck(t) { if (!padBus) return; const g = padBus.gain; g.cancelScheduledValues(t); g.setValueAtTime(0.3, t); g.linearRampToValueAtTime(1, t + 0.22); }
+function syncEcho(bpm) { if (dlNode) dlNode.delayTime.setValueAtTime(Math.min(0.9, 60 / bpm * 0.75), ac.currentTime); }   // 메아리 = 점8분음표
 
 // ---------- 효과음 ----------
 const SFX = {
@@ -77,13 +110,19 @@ const SFX = {
   good: t => osc(sfxBus, 'triangle', 1175, 1175, t, 0.1, 0.1),
   rush: t => [392, 523, 659, 784, 1047].forEach((f, i) => osc(sfxBus, 'square', f, f, t + i * 0.07, 0.12, 0.06)),
   buy: t => [880, 1320].forEach((f, i) => osc(sfxBus, 'square', f, f, t + i * 0.05, 0.08, 0.05)),
+  // 0.46 리듬 연출: 반짝임·콤보 축하·피버·놓침·풀콤보
+  sparkle: t => [2637, 3136, 3951].forEach((f, i) => osc(sfxBus, 'sine', f, f, t + i * 0.025, 0.12, 0.035)),
+  fanfare: t => { [523, 659, 784, 1047].forEach((f, i) => { osc(sfxBus, 'sawtooth', f, f, t + i * 0.06, 0.18, 0.035); osc(sfxBus, 'triangle', f * 2, f * 2, t + i * 0.06, 0.2, 0.04); }); noise(sfxBus, t + 0.18, 0.5, 0.08, 'highpass', 6000, 9000); },
+  fever: t => { osc(sfxBus, 'sawtooth', 200, 1600, t, 0.5, 0.06); noise(sfxBus, t, 0.6, 0.12, 'bandpass', 800, 6000, 1.5); [1047, 1319, 1568, 2093].forEach((f, i) => osc(sfxBus, 'square', f, f, t + 0.45 + i * 0.05, 0.12, 0.04)); },
+  miss: t => { osc(sfxBus, 'sawtooth', 160, 70, t, 0.14, 0.06); noise(sfxBus, t, 0.08, 0.06, 'lowpass', 600, 200); },
+  fullcombo: t => { [523, 659, 784, 1047, 1319, 1568, 2093].forEach((f, i) => { osc(sfxBus, 'triangle', f, f, t + i * 0.07, 0.4, 0.09); osc(sfxBus, 'sine', f * 1.5, f * 1.5, t + i * 0.07 + 0.03, 0.3, 0.03); }); noise(sfxBus, t + 0.5, 1.2, 0.1, 'highpass', 5000, 9000); },
   // 기체마다 다른 궁극기 소리
   ult_laser: t => { osc(sfxBus, 'sawtooth', 120, 1800, t, 0.6, 0.14); for (let i = 0; i < 10; i++) osc(sfxBus, 'square', 220 + (i % 2) * 30, 220 + (i % 2) * 30, t + 0.4 + i * 0.25, 0.24, 0.05); },
   ult_bulwark: t => { osc(sfxBus, 'sine', 60, 60, t, 1.2, 0.4); [880, 1320, 1760].forEach((f, i) => osc(sfxBus, 'triangle', f, f * 0.98, t + 0.05 * i, 0.9, 0.08)); },
   ult_swarm: t => { for (let i = 0; i < 14; i++) noise(sfxBus, t + i * 0.08, 0.18, 0.1, 'bandpass', 800, 3000, 3); },
   ult_nova: t => { noise(sfxBus, t, 1.4, 0.6, 'lowpass', 2400, 80); [262, 330, 392, 523].forEach(f => osc(sfxBus, 'sine', f, f * 2, t + 0.2, 1.3, 0.07)); },
 };
-const GAP = { vulcan: 0.05, laser: 0.06, drone: 0.08, hit: 0.04, xp: 0.03, scrap: 0.05, boomS: 0.04, reflect: 0.06, missile: 0.08 };
+const GAP = { sparkle: 0.05, miss: 0.12, fanfare: 0.3, vulcan: 0.05, laser: 0.06, drone: 0.08, hit: 0.04, xp: 0.03, scrap: 0.05, boomS: 0.04, reflect: 0.06, missile: 0.08 };
 function sfx(name) {
   if (!ac || !sfxOn || ac.state !== 'running') return;
   const now = ac.currentTime;
@@ -117,6 +156,17 @@ const SONGS = [
     pat: { k: 'x..x..x...x.....', s: '....x..o....x..o', h: 'oooooooooooooooo' } },
   { id: 'dnb', name: '번개 브레이크', genre: '드럼앤베이스', k: 1.1, root: 50, prog: [[0, 3, 7], [0, 3, 7], [8, 12, 15], [7, 10, 14]], lead: 'sawtooth', bass: 'sine', bassPat: 'x.......x.x.....',
     pat: { k: 'x.........x.....', S: '....x.......x...', h: 'oooooooooooooooo' } },
+  // ✨ 0.46 고급 곡: 슈퍼소우·패드·일렉 피아노·종·현악, 4화음, 잔향과 메아리
+  { id: 'star', name: '별빛 고속도로', genre: '✨ 신스웨이브', pro: true, k: 0.95, root: 57, prog: [[0, 3, 7, 10], [8, 12, 15, 19], [5, 8, 12, 15], [7, 10, 14, 17]], lead: 'sawtooth', inst: 'saw', bass: 'sawtooth', bassPat: 'x.o.x.o.x.o.x.o.', padInst: 'pad', pad: true,
+    arp: [0, 1, 2, 3, 2, 1, 2, 3], arpInst: 'pluck', pat: { k: 'x...x...x...x...', S: '....x.......x...', h: '..o...o...o...o.' } },
+  { id: 'candy', name: '솜사탕 은하', genre: '✨ 퓨처베이스', pro: true, k: 0.9, root: 60, prog: [[0, 4, 7, 11], [9, 12, 16, 19], [5, 9, 12, 16], [7, 11, 14, 17]], lead: 'sawtooth', inst: 'bell', bass: 'sine', bassPat: 'x..x..x...x.....', padInst: 'pad', pad: true,
+    chordPat: 'x..x..x...x.x...', chordInst: 'saw', pat: { k: 'x.....x...x.....', S: '....x.......x...', h: 'o.o.o.o.o.o.o.o.', o: '..............x.' } },
+  { id: 'lounge', name: '달빛 라운지', genre: '✨ 재즈 소울', pro: true, k: 0.8, root: 50, prog: [[2, 5, 9, 12], [7, 11, 14, 17], [0, 4, 7, 11], [9, 12, 16, 19]], lead: 'triangle', inst: 'ep', bass: 'triangle', bassPat: 'x...x.o...x.x...', soft: true, padInst: 'str', pad: true,
+    chordPat: 'x.....x...x.....', chordInst: 'ep', pat: { k: 'x.......x.x.....', r: '....x.......x...', h: 'o.oo.o.oo.o.oo.o' } },
+  { id: 'hero', name: '영웅의 비상', genre: '✨ 시네마틱', pro: true, k: 1, root: 50, prog: [[0, 3, 7], [8, 12, 15], [3, 7, 10], [10, 14, 17]], lead: 'triangle', inst: 'bell', bass: 'sawtooth', bassPat: 'x.x.x.x.x.x.x.x.', padInst: 'str', pad: true,
+    arp: [0, 1, 2, 1], arpInst: 'pluck', pat: { k: 'x.....x.x.......', T: '..........x.x.xx', S: '....x.......x...', h: 'o.o.o.o.o.o.o.o.' } },
+  { id: 'aurora', name: '오로라 트랜스', genre: '✨ 트랜스', pro: true, k: 1.08, root: 57, prog: [[0, 3, 7], [5, 8, 12], [8, 12, 15], [7, 11, 14]], lead: 'sawtooth', inst: 'saw', bass: 'sawtooth', bassPat: '..xx..xx..xx..xx', padInst: 'pad', pad: true,
+    arp: [0, 1, 2, 3, 2, 1, 2, 3], arpInst: 'pluck', pat: { k: 'x...x...x...x...', s: '....x.......x...', o: '..x...x...x...x.', h: 'oxoxoxoxoxoxoxox' } },
 ];
 const ROOTS = [45, 48, 43, 50, 41, 52, 40, 47, 53];   // 스테이지 배경마다 다른 조(A, C, G, D)
 // 맵마다 다른 음악: 빠르기·화음·북 무늬·악기·가락(mel: 마디마다 16칸, 숫자 = 그 마디 화음의 몇 번째 음(3~5는 한 옥타브 위), '-' 늘임, '.' 쉼)
@@ -152,12 +202,14 @@ function music(m, th) {
   if (m === 'boss') MOODS.boss = Object.assign({ drums: 'hard' }, mm, { bpm: Math.min(160, mm.bpm + 24), pat: Object.assign({}, mm.pat, BOSS_PAT), arpWave: 'sawtooth', arp: [0, 2, 1, 3, 0, 2, 1, 3], arpHalf: false, soft: false, stab: true });
   if (m === 'escape') MOODS.escape = Object.assign({ drums: 'beat' }, ESC_MUS);
   mood = m; theme = th || 0; step = 0; nextT = ac.currentTime + 0.08; startT = nextT;
+  if (MOODS[m]) syncEcho(MOODS[m].bpm);
 }
 // 리듬 결투: 박자 수 세기 + 악보의 음표마다 가락을 미리 예약한다. 0번째 박의 시각을 돌려준다
 function duel(chart, bpm, countIn, song) {
   const beat = 60 / bpm, S = song || SONGS[0];
   if (!ac || ac.state !== 'running') return performance.now() / 1000 + countIn * beat + 0.3;
-  MOODS.duel = { bpm, prog: S.prog, root: S.root, pat: S.pat, bass: S.bass, bassPat: S.bassPat, soft: S.soft, pad: S.pad, noArp: true, drums: 'beat' };
+  MOODS.duel = { bpm, prog: S.prog, root: S.root, pat: S.pat, bass: S.bass, bassPat: S.bassPat, soft: S.soft, pad: S.pad, padInst: S.padInst, noArp: !S.arp, arp: S.arp, arpWave: 'triangle', arpInst: S.arpInst, chordPat: S.chordPat, chordInst: S.chordInst, drums: 'beat' };
+  syncEcho(bpm);
   mood = 'duel'; theme = 0; step = 0; nextT = ac.currentTime + 0.1; startT = nextT;
   const t0 = startT + countIn * beat;
   for (let i = 0; i < countIn; i++) osc(sfxBus, 'square', i === countIn - 1 ? 1760 : 1320, i === countIn - 1 ? 1760 : 1320, startT + i * beat, 0.06, 0.08);
@@ -165,7 +217,8 @@ function duel(chart, bpm, countIn, song) {
   for (const n of chart) {   // 줄마다 그 마디 화음의 음: 1·3·5도와 한 옥타브 위
     const ch = S.prog[Math.floor(n.b / 4) % 4], t = t0 + n.b * beat;
     const midi = S.root + 12 + [ch[0], ch[1], ch[2], ch[0] + 12][n.lane];
-    osc(musicBus, S.lead, mtof(midi), mtof(midi), t, beat * (n.len || (S.lead === 'triangle' ? 0.3 : 0.42)), (S.lead === 'sawtooth' ? 0.04 : 0.05) * lv);
+    if (S.inst) inst(S.inst, midi, t, beat * (n.len || 0.45), (S.inst === 'saw' ? 0.05 : S.inst === 'ep' ? 0.08 : 0.07) * lv);
+    else osc(leadBus, S.lead, mtof(midi), mtof(midi), t, beat * (n.len || (S.lead === 'triangle' ? 0.3 : 0.42)), (S.lead === 'sawtooth' ? 0.04 : 0.05) * lv);
     osc(musicBus, 'triangle', mtof(midi + 12), mtof(midi + 12), t, beat * 0.3, 0.035 * lv);
   }
   return t0;
@@ -185,7 +238,8 @@ function playStep(M, s, t, sp) {
   const bar = Math.floor(s / 16) % 4, i = s % 16, ch = M.prog[bar], root = M.root ? M.root - 12 : mood === 'hangar' ? 50 : ROOTS[theme % ROOTS.length];
   if (M.pat) {   // 리듬 곡의 북 무늬
     const P = M.pat, on = (p, ...c) => p && c.includes(p[i]), sv = M.soft ? 0.55 : 1;
-    if (on(P.k, 'x')) osc(musicBus, 'sine', M.soft ? 110 : 150, 40, t, 0.18, 0.5 * sv);
+    if (on(P.k, 'x')) { osc(musicBus, 'sine', M.soft ? 110 : 150, 40, t, 0.18, 0.5 * sv); osc(musicBus, 'triangle', 2400, 600, t, 0.012, 0.06 * sv); duck(t); }
+    if (on(P.T, 'x')) { const tf = 190 - i * 5; osc(musicBus, 'sine', tf, tf * 0.6, t, 0.22, 0.32); noise(musicBus, t, 0.08, 0.06, 'lowpass', 900, 300); }
     if (on(P.s, 'x')) { noise(musicBus, t, 0.14, 0.16, 'bandpass', 1800, 1200, 0.8); osc(musicBus, 'triangle', 220, 180, t, 0.08, 0.07); }
     if (on(P.s, 'o')) noise(musicBus, t, 0.06, 0.05, 'bandpass', 2000, 1600, 0.8);
     if (on(P.S, 'x')) { noise(musicBus, t, 0.2, 0.22, 'bandpass', 1500, 900, 0.6); osc(musicBus, 'triangle', 200, 150, t, 0.1, 0.1); }
@@ -201,16 +255,17 @@ function playStep(M, s, t, sp) {
       env(g, t, 0.005, dd, M.soft ? 0.12 : 0.15);
       o.connect(fl); fl.connect(g); g.connect(musicBus); o.start(t); o.stop(t + dd + 0.05);
     }
-    if (M.pad && i === 0) ch.forEach(c => osc(musicBus, 'sine', mtof(root + 12 + c), mtof(root + 12 + c), t, sp * 15, 0.03, 0.4));
+    if (M.pad && i === 0) ch.forEach(c => inst(M.padInst || 'pad', root + 12 + c, t, sp * 15, (M.soft ? 0.022 : 0.028) * (ch.length > 3 ? 0.8 : 1), padBus));
+    if (M.chordPat && M.chordPat[i] === 'x') ch.forEach(c => inst(M.chordInst || 'saw', root + 24 + c, t, sp * 1.6, (M.chordInst === 'ep' ? 0.035 : 0.022), padBus));
     if (M.arp && !M.noArp && (!M.arpHalf || i % 2 === 0)) {   // 맵 음악의 아르페지오
       const k = M.arp[(M.arpHalf ? i / 2 | 0 : i) % M.arp.length], n = root + 12 + ch[k % 3] + (k >= 3 ? 12 : 0);
-      osc(musicBus, M.arpWave, mtof(n), mtof(n), t, sp * (M.arpHalf ? 1.8 : 0.9), (M.soft ? 0.022 : 0.026));
+      if (M.arpInst) inst(M.arpInst, n + 12, t, sp * (M.arpHalf ? 1.8 : 0.9), 0.03, padBus); else osc(musicBus, M.arpWave, mtof(n), mtof(n), t, sp * (M.arpHalf ? 1.8 : 0.9), (M.soft ? 0.022 : 0.026));
     }
     if (M.mel) {   // 가락: 화음의 음을 고르고 '-'만큼 늘인다
       const ln = M.mel[bar % M.mel.length], c = ln[i];
       if (c >= '0' && c <= '5') {
         const d = +c, n = root + 24 + ch[d % 3] + (d >= 3 ? 12 : 0); let len = 1; while (ln[i + len] === '-') len++;
-        osc(musicBus, M.lead || 'square', mtof(n), mtof(n), t, sp * len * 0.92, M.lead === 'sawtooth' ? 0.024 : M.lead === 'sine' ? 0.045 : 0.03);
+        osc(leadBus, M.lead || 'square', mtof(n), mtof(n), t, sp * len * 0.92, M.lead === 'sawtooth' ? 0.024 : M.lead === 'sine' ? 0.045 : 0.03);
       }
     }
     if (M.stab && [0, 3, 6, 10].includes(i)) { const n = root + 24 + ch[(i / 3 | 0) % 3]; osc(musicBus, 'square', mtof(n), mtof(n), t, sp * 1.4, 0.022); }
@@ -235,7 +290,7 @@ function playStep(M, s, t, sp) {
     const n = root + 12 + ch[k % 3] + (k === 3 ? 12 : 0);
     osc(musicBus, M.arpWave, mtof(n), mtof(n), t, sp * (slow ? 2.5 : 0.9), slow ? 0.05 : 0.03);
   }
-  if (M.pad && i === 0) ch.forEach(c => osc(musicBus, 'sine', mtof(root + c), mtof(root + c), t, sp * 15, 0.035, 0.4));
+  if (M.pad && i === 0) ch.forEach(c => inst('pad', root + c, t, sp * 15, 0.032, padBus));
   if (mood === 'boss' && [0, 3, 6, 10].includes(i)) { const n = root + 24 + ch[(i / 3 | 0) % 3]; osc(musicBus, 'square', mtof(n), mtof(n), t, sp * 1.4, 0.025); }
   if (mood === 'stage' && bar % 2 === 1 && (i === 0 || i === 6 || i === 10)) { const n = root + 24 + ch[(i / 4 | 0) % 3]; osc(musicBus, 'triangle', mtof(n), mtof(n), t, sp * 2.5, 0.035); }
 }
