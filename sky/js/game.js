@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.59';
+const VERSION = '0.60';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -502,10 +502,10 @@ const OPENS = [
   { k: 'tab:goals', icon: '🏅', name: '임무', need: { plays: 1 }, tip: '오늘의 임무와 도전 과제로 고철을 받아요.' },
   { k: 'tab:parts', icon: '⚙️', name: '부품', need: { cleared: 2 }, tip: '보스가 떨어뜨린 부품을 끼우면 더 강해져요.' },
   { k: 'tab:look', icon: '🎨', name: '꾸미기', need: { cleared: 3 }, tip: '도색·불꽃·꼬리·스티커로 내 기체를 꾸며요.' },
+  { k: 'mode:coop', icon: '🤝', name: '친구와 함께', need: { cleared: 3 }, tip: '친구 1~2명과 같은 하늘에서 싸워요.' },
   { k: 'tab:book', icon: '📖', name: '도감·칭호', need: { cleared: 3 }, tip: '만난 맵·적·보스 무훈을 모으고 칭호를 달아요.' },
   { k: 'mode:endless', icon: '♾️', name: '무한 생존', need: { cleared: 5 }, tip: '끝없이 몰려오는 적을 얼마나 버틸까요?' },
   { k: 'tab:ship', icon: '✈️', name: '기체 고르기', need: { cleared: 5 }, tip: '새 기체가 열렸어요. 기체마다 궁극기가 달라요.' },
-  { k: 'mode:coop', icon: '🤝', name: '친구와 함께', need: { cleared: 5 }, tip: '친구 1~2명과 같은 하늘에서 싸워요.' },
   { k: 'tab:research', icon: '🔬', name: '연구', need: { cleared: 7 }, tip: '오래 쌓이는 강화. 고철을 더 벌게도 해 줘요.' },
   { k: 'mode:dojo', icon: '🎵', name: '리듬 도장', need: { cleared: 8 }, tip: '비행은 쉬고 리듬 게임만! 곡 8개.' },
   { k: 'tab:rank', icon: '🏆', name: '랭킹', need: { cleared: 7 }, tip: '다른 조종사들과 점수를 겨뤄요.' },
@@ -660,6 +660,7 @@ function startRun(stage, md = 'stage') {
   run.gateAt = md === 'stage' || md === 'endless' ? 32 : 0; run.treasureAt = md === 'stage' || md === 'endless' ? 80 : 0;
   Forge.show(false); $('forge').classList.remove('rest'); $('fRest').classList.add('hidden'); $('ultBtn').classList.remove('hidden'); cam.x = cam.y = 0;
   if (md === 'auto') { run.d.hp = Math.pow(1.22, stage - 1); run.goldStart = S.forge.earned; run.rushDone = true; run.waveDur = 45; run.rushAt = rnd(15, 30); run.banner = { kind: 'stage', title: `ZONE ${stage}`, sub: '사방에서 온다! 피하면서 싸우자', t: 0, life: 2.6 }; S.idle.on = true; S.idle.lastSeen = Date.now(); keepAwake(true); }
+  run.at0 = Date.now(); Cloud.log('start', { m: md, s: stage, pl: S.plays, c: run.coop ? 1 : 0 });   // 0.60 이름 없는 기록
   if (/fast/.test(location.hash)) { run.waveDur = md === 'endless' ? Infinity : 26; run.rushAt = 8; run.nextBoss = 30; if (md === 'auto') run.waveDur = 14; if (run.gateAt) { run.gateAt = 4; run.treasureAt = 14; } }   // 점검용: 빨리 보기
   P = { x: W / 2, y: H - 190, tx: W / 2, ty: H - 190, lx: W / 2, bank: 0, hp: st.maxHp, maxHp: st.maxHp, inv: 2, ult: 0, fireT: 0, droneT: 0, seekT: 2,
     barrierReady: false, barrierT: 0, ultKind: null, ultT: 0, swarmQ: 0, swarmT: 0, ga: 0, novaR: 0, trap: null, bombs: SKILL.start, skCd: 0 };
@@ -1992,6 +1993,7 @@ function resultFx() {   // 결과 점수가 0부터 올라가고, 최고 기록�
   requestAnimationFrame(step);
 }
 function endRun(win) {
+  Cloud.log('end', { m: run.mode, s: run.stage, w: win ? 1 : 0, t: Math.round((Date.now() - (run.at0 || Date.now())) / 1000), k: run.kills, sc: run.score, lv: S.pilot.lv, pw: powerOf(buildStats()), c: run.coop ? 1 : 0 });   // 0.60
   state = 'result';
   Forge.show(false);
   netEndOnce(win);
@@ -3082,7 +3084,7 @@ $('throwBtn').addEventListener('pointerdown', e => { e.stopPropagation(); throwB
 $('skillBtn').addEventListener('pointerdown', e => { e.stopPropagation(); useSkill(); });
 $('pauseBtn').addEventListener('click', pauseGame);
 $('resume').addEventListener('click', resumeGame);
-$('quit').addEventListener('click', () => { save(); $('pause').classList.add('hidden'); if (net && net.mode === 'guest') { leaveRoom(); showHangar(); return; } if (run && run.mode !== 'stage') endRun(false); else showHangar(); });
+$('quit').addEventListener('click', () => { save(); if (run) Cloud.log('quit', { m: run.mode, s: run.stage, t: Math.round((Date.now() - (run.at0 || Date.now())) / 1000), k: run.kills }); $('pause').classList.add('hidden'); if (net && net.mode === 'guest') { leaveRoom(); showHangar(); return; } if (run && run.mode !== 'stage') endRun(false); else showHangar(); });
 $('assistBtn').addEventListener('click', () => { assistOn = !assistOn; A.sfx('click'); renderHangar(); });
 $('go').addEventListener('click', () => {
   A.init(); A.sfx('click');
@@ -3092,11 +3094,12 @@ $('go').addEventListener('click', () => {
 function startEscape(o) {   // 탈출 작전(js/escape.js)
   $('hangar').classList.add('hidden'); A.music('escape', 0);
   const SND = { rope: 'tap', release: 'click', flap: 'tap', coin: 'scrap', hurt: 'hurt', phase: 'click', alarm: 'warning', boom: 'boomL', star: 'levelup' };
+  const escAt = Date.now(); Cloud.log('start', { m: 'escape', s: 0, pl: S.plays, c: o && o.race ? 1 : 0 });   // 0.60
   Escape.start({
     sfx: k => A.sfx(SND[k] || 'click'),
     img: k => IMG[k] || null, frame: S.frame,
     best: () => S.records.escape || 0,
-    gain: (sc, dist, stars) => { S.records.escapeStars = Math.max(S.records.escapeStars || 0, stars || 0); S.scrap += sc; S.records.escape = Math.max(S.records.escape || 0, dist); S.plays++; dcount('runs'); weekRoll(); S.week.pts += 1 + (stars || 0); save(); Rank.league(S.week.pts); },
+    gain: (sc, dist, stars) => { Cloud.log('end', { m: 'escape', s: 0, w: 1, t: Math.round((Date.now() - escAt) / 1000), d: Math.round(dist || 0), st: stars || 0 }); S.records.escapeStars = Math.max(S.records.escapeStars || 0, stars || 0); S.scrap += sc; S.records.escape = Math.max(S.records.escape || 0, dist); S.plays++; dcount('runs'); weekRoll(); S.week.pts += 1 + (stars || 0); save(); Rank.league(S.week.pts); },
     easy: () => (S.escEasy !== undefined ? S.escEasy : (S.records.escape || 0) < 500), setEasy: v => { S.escEasy = v; save(); },   // 🐢 연습 모드: 처음(최고 500m 전)엔 켜짐
     home: () => showHangar(), saveGhost, loadGhost,
   }, o);
@@ -4687,7 +4690,13 @@ const gateUi = () => {
   gateWas = false;
   if (gateJoin) { gateJoin = false; joinRoom(joinCode); }
 };
-Cloud.init({ getS: () => S, saveKey: SAVE_KEY, canReload: () => state === 'hangar', sfx: n => A.sfx(n), onUi: () => { Cloud.render($('acctBox')); gateUi(); } });
+Cloud.init({ ver: VERSION, getS: () => S, saveKey: SAVE_KEY, canReload: () => state === 'hangar', sfx: n => A.sfx(n), onUi: () => { Cloud.render($('acctBox')); gateUi(); } });
+// 0.60 이름 없는 플레이 기록: 열기·창 닫기
+const openAt = Date.now();
+Cloud.log('open', { pl: S.plays, cl: S.cleared, lv: S.pilot.lv, a: Cloud.uid ? 'a' : Cloud.guest ? 'g' : 'o', mob: matchMedia('(pointer: coarse)').matches ? 1 : 0 });
+setTimeout(() => Cloud.flush(), 4000);
+window.addEventListener('pagehide', () => { Cloud.log('bye', { t: Math.round((Date.now() - openAt) / 1000), pl: S.plays }); Cloud.flush(true); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) Cloud.flush(true); });
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});   // 인터넷 없이도 열리게
 renderHangar();
 gateUi();

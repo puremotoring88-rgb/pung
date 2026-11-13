@@ -42,7 +42,31 @@ const ui = () => { if (onUi) onUi(); };
 // 다른 기기에서 같은 아이디로 로그인하면 이 기기는 로그아웃된다(한 번에 한 기기). 이 기기 기록은 그대로 남는다.
 function kicked() { if (acct) lastId = acct.uid; acct = null; store(); msg = '다른 기기에서 이 아이디로 로그인해서 여기는 로그아웃됐어요. 이 기기의 기록은 남아 있어요. 여기서 이어 하려면 다시 로그인하세요.'; }
 
+// 0.60 이름 없는 플레이 기록(server/stats.sql): 기기마다 무작위 번호 하나와 숫자 몇 개만. 아이디·별명은 보내지 않는다. 설정에서 끌 수 있다.
+const STQ = 'boltwing.statQ', ANON = 'boltwing.anon', NOSTAT = 'boltwing.noStat';
+let sq = [], stOff = false, stBusy = false, ver = '';
+try { sq = JSON.parse(localStorage.getItem(STQ) || '[]'); if (!Array.isArray(sq)) sq = []; } catch (e) { sq = []; }
+const stSave = () => { try { localStorage.setItem(STQ, JSON.stringify(sq)); } catch (e) { /* 무시 */ } };
+const statOn = () => { try { return localStorage.getItem(NOSTAT) !== '1'; } catch (e) { return false; } };
+const anonId = () => {
+  let a = localStorage.getItem(ANON);
+  if (!a || !/^[0-9a-f-]{36}$/.test(a)) { a = crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => (Math.random() * 16 | 0).toString(16)); localStorage.setItem(ANON, a); }
+  return a;
+};
+function log(e, d) {
+  if (stOff || !statOn()) return;
+  sq.push({ e, d: d || {} }); if (sq.length > 60) sq = sq.slice(-60); stSave();
+  if (e === 'end' || e === 'quit' || e === 'signup' || sq.length >= 10) flush();
+}
+function flush(keep) {
+  if (stOff || stBusy || !sq.length || !statOn()) return;
+  const rows = sq.splice(0, 30); stSave(); stBusy = !keep;
+  rpc('log_events', { p_dev: anonId(), p_ver: ver, p_rows: rows }, keep)
+    .catch(e => { if (/PGRST202|Could not find the function/.test(String(e && e.message || e))) { stOff = true; sq = []; } else sq = rows.concat(sq).slice(-60); stSave(); })
+    .finally(() => { stBusy = false; });
+}
 function init(o) {
+  ver = o.ver || '';
   getS = o.getS; saveKey = o.saveKey; canReload = o.canReload || (() => true); sfx = o.sfx || (() => {}); onUi = o.onUi;
   acct = read();
   if (acct) { if (acct.keep === undefined) acct.keep = true; store(); }   // 이 기능 전에 로그인해 둔 기기는 유지
@@ -110,6 +134,7 @@ async function enter(kind, id, pw, keep, carry, nick) {
   msg = kind === 'signup' ? '만드는 중…' : '로그인하는 중…'; ui();
   try {
     const token = await rpc(kind === 'signup' ? 'acct_signup' : 'acct_login', { p_uid: id, p_pw: pw });
+    if (kind === 'signup') log('signup', {});
     if (kind === 'signup' && nick) { getS().nick = nick; try { localStorage.setItem('boltwing.newNick', nick); } catch (e) { /* 무시 */ } }   // 0.57: 새로 시작하며 다시 열려도 별명이 남게
     let own = owner(), legacy;
     const S = getS();
@@ -278,8 +303,9 @@ function render(el) {
     const r3 = add('', 'acRow'); r3.append(btn('📜 개인정보 처리방침', () => window.open('privacy.html', '_blank')), btn('🚨 신고·문의', ask), btn('🗑️ 계정 지우기', delAcct, 'off'));
     add('기록은 판이 끝나거나 앱을 닫을 때 저절로 계정에 저장돼요. 한 번에 한 기기에서만 로그인돼요. 로그아웃하면 이 기기의 기록은 비워지고 계정에 남아요.', 'acNote');
   }
+  if (acct || offline) { const sl = add('', 'acKeep acStat', 'label'), sc = document.createElement('input'); sc.type = 'checkbox'; sc.checked = statOn(); sc.onchange = () => { try { if (sc.checked) localStorage.removeItem(NOSTAT); else { localStorage.setItem(NOSTAT, '1'); sq = []; stSave(); } } catch (e) { /* 무시 */ } }; sl.append(sc, document.createTextNode(' 📊 이름 없는 통계 보내기 (어디서 막히는지 보고 게임을 고치는 데만 써요)')); }
   if (msg) add(esc(msg), 'acMsg');
 }
 
-return { init, dirty, call: (fn, b) => (acct ? rpc(fn, Object.assign({ p_token: acct.token }, b)) : Promise.reject(new Error('session'))), keep: () => !!(acct && acct.keep), render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; }, report, reportWhy, ask, get offline() { return offline; }, get guest() { try { return offline && localStorage.getItem(GUEST) === '1'; } catch (e) { return false; } }, toSignup };
+return { init, dirty, call: (fn, b) => (acct ? rpc(fn, Object.assign({ p_token: acct.token }, b)) : Promise.reject(new Error('session'))), keep: () => !!(acct && acct.keep), render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; }, report, reportWhy, ask, log, flush, get offline() { return offline; }, get guest() { try { return offline && localStorage.getItem(GUEST) === '1'; } catch (e) { return false; } }, toSignup };
 })();
