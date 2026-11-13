@@ -75,6 +75,12 @@ function send(text) {
   if (inp) inp.value = '';
 }
 const rooms = () => Object.entries(people).filter(([k, p]) => k !== me && p && p.room && !p.play && p.n < 3).map(([k, p]) => ({ k, ...p }));
+async function reportMsg(m) {   // 0.59: 대기실 채팅 신고 → 그 사람의 최근 말 10줄을 운영자에게, 그리고 숨기기
+  if (!window.confirm(`${m.n}님을 운영자에게 신고할까요? 이 사람의 최근 말이 함께 가고, 앞으로 이 사람의 말은 숨겨요.`)) return;
+  const p = people[m.id] || {}, lines = log.filter(x => x.id === m.id).slice(-10).map(x => x.t).join(' / ');
+  try { await window.Cloud.report('lobby', p.fc || '', m.n, lines || m.t); note = '신고했어요. 이 사람의 말은 이제 숨겨져요.'; } catch (e) { note = window.Cloud.reportWhy(e); }
+  mute.add(m.id); draw();
+}
 async function invite(k) {   // 0.49: 이 사람을 내 방으로 부르기(방이 없으면 비공개 방을 만든다)
   const p = people[k]; if (!p || k === me) return;
   if (Date.now() - lastInv < 4000) { note = '초대는 조금 천천히 보내 주세요.'; ui(); return; }
@@ -144,6 +150,7 @@ function draw() {
     const row = document.createElement('div'); row.className = 'lbMsg' + (m.id === me ? ' me' : '');
     row.innerHTML = `<b>${esc(m.n)}</b> ${esc(m.t)}`;
     if (m.id !== me) { const h = document.createElement('button'); h.className = 'lbHide'; h.textContent = '숨기기'; h.title = '이 사람의 말을 더는 보지 않아요'; h.addEventListener('click', () => { mute.add(m.id); draw(); }); row.append(h); }
+    if (m.id !== me && window.Cloud && window.Cloud.report) { const rp = document.createElement('button'); rp.className = 'lbHide'; rp.textContent = '🚨'; rp.title = '운영자에게 신고(이 사람의 최근 말이 함께 가요)'; rp.addEventListener('click', () => reportMsg(m)); row.append(rp); }
     lg.append(row);
   }
   const qk = add('', 'lbQuick');
@@ -155,7 +162,7 @@ function draw() {
   const ir = add('', 'cRow lbIn'); ir.append(inp, btn('보내기', () => send(inp.value)));
   if (keep) inp.focus();
   if (note) add(esc(note), 'cMsg');
-  add('채팅은 저장되지 않고 지금 대기실에 있는 사람에게만 보여요. 연락처·SNS·나이·학교·사는 곳은 보낼 수 없어요. 불편한 말이나 초대를 보내는 사람은 [숨기기]를 누르고, 힘든 일이 있으면 어른께 알려 주세요.', 'cNote');
+  add('채팅은 저장되지 않고 지금 대기실에 있는 사람에게만 보여요. 연락처·SNS·나이·학교·사는 곳은 보낼 수 없어요. 불편한 말이나 초대를 보내는 사람은 [숨기기], 심하면 🚨로 운영자에게 신고해 주세요.', 'cNote');
   lg.scrollTop = lg.scrollHeight;
 }
 return { open, close, sync, render, why, QUICK, get on() { return on; } };

@@ -114,11 +114,11 @@ function render(el) {
   const me = add(`${gem(S.pilot.lv)}<b>${esc(S.nick)}</b> <small>${g[1]} 보석 · 조종사 Lv ${S.pilot.lv}${joined() ? '' : ' · 랭킹에서 빠져 있음'}</small><div class="rkStat">불러오는 중…</div>`, 'rkMe');
   const row = add('', 'rkRow');
   const b1 = document.createElement('button'); b1.className = 'rkBtn'; b1.textContent = '✏️ 별명 바꾸기';
-  b1.addEventListener('click', () => { const n = (window.prompt('새 별명(한글·영어·숫자 2~10글자, 실명·학교 이름은 쓰지 마세요)', S.nick) || '').trim(); if (!n || n === S.nick) return; const p = nickProblem(n); if (p) { window.alert(p); return; } S.nick = n; save(); sfx('part'); render(el); });
+  b1.addEventListener('click', () => { const n = (window.prompt('새 별명 (한글·영어·숫자 2~10글자)', S.nick) || '').trim(); if (!n || n === S.nick) return; const p = nickProblem(n); if (p) { window.alert(p); return; } S.nick = n; save(); sfx('part'); render(el); });
   const b2 = document.createElement('button'); b2.className = 'rkBtn sub'; b2.textContent = joined() ? '랭킹에서 빠지기' : '랭킹에 다시 참여';
   b2.addEventListener('click', () => { if (joined() && !window.confirm('앞으로의 기록을 올리지 않을까요? (이미 올린 이번 주 기록은 다음 주에 주간 순위에서 사라져요)')) return; S.rank.off = !S.rank.off; save(); render(el); });
   row.append(b1, b2);
-  if (/^조종사\d+$/.test(S.nick)) add('지금 별명은 자동으로 붙은 이름이에요. 마음에 드는 별명으로 바꿔 보세요! (실명·학교 이름 말고)', 'rkHint');
+  if (/^조종사\d+$/.test(S.nick)) add('지금 별명은 자동으로 붙은 이름이에요. 마음에 드는 별명으로 바꿔 보세요!', 'rkHint');
   const chips = add('', 'rkChips');
   for (const [id, label] of MODES) { const b = document.createElement('button'); b.textContent = label; b.className = view.mode === id ? 'on' : ''; b.addEventListener('click', () => { view.mode = id; sfx('click'); render(el); }); chips.append(b); }
   if (view.mode === 'league') { leagueView(el, add, me.querySelector('.rkStat')); return; }

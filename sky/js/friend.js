@@ -137,6 +137,11 @@ function draw() {
       cw.append(qk);
       if (!inp) { inp = document.createElement('input'); inp.maxLength = 50; inp.placeholder = '귓속말 (50글자)'; inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter' && chat) send(chat, inp.value); }); }
       const ir = document.createElement('div'); ir.className = 'cRow lbIn'; ir.append(inp, btn('보내기', () => send(f.code, inp.value))); cw.append(ir);
+      const rp = document.createElement('div'); rp.className = 'cRow'; rp.append(btn('🚨 신고', async () => {   // 0.59: 최근 귓속말 10줄을 운영자에게
+        if (!window.confirm(`${f.nick}님을 운영자에게 신고할까요? 최근 귓속말 몇 줄이 함께 가요.`)) return;
+        const lines = (chats[f.code] || []).slice(-10).map(m => `${m.me ? '나' : f.nick}: ${m.t}`).join(' / ') || '(대화 없음)';
+        try { await window.Cloud.report('whisper', f.code, f.nick, lines); note = '신고했어요. 더 받고 싶지 않으면 ⋯ → 차단을 눌러 주세요.'; } catch (e) { note = window.Cloud.reportWhy(e); } draw();
+      }, 'mini')); cw.append(rp);
       fl.append(cw); setTimeout(() => { lg.scrollTop = lg.scrollHeight; }, 0);
       if (keepInp) inp.focus();
     }
@@ -148,7 +153,7 @@ function draw() {
   const sr = add('', 'cRow');
   sr.append(btn(whisper ? '🔔 귓속말 받는 중 → 받지 않기' : '🔕 귓속말 받지 않는 중 → 받기', () => act('fr_set', { p_whisper: !whisper }, () => { whisper = !whisper; return whisper ? '귓속말을 받아요.' : '귓속말을 받지 않아요.'; })));
   if (note) add(esc(note), 'cMsg');
-  add('귓속말은 친구끼리만, 저장되지 않아요. 연락처·SNS·나이·학교·사는 곳은 보낼 수 없어요. 불편한 친구는 ⋯ → 끊기·차단을 하고, 힘든 일이 있으면 어른께 알려 주세요.', 'cNote');
+  add('귓속말은 친구끼리만, 저장되지 않아요. 연락처·SNS·나이·학교·사는 곳은 보낼 수 없어요. 불편한 친구는 ⋯ → 끊기·차단, 심하면 귓속말 창의 🚨 신고를 눌러 주세요.', 'cNote');
 }
 return { init, render, request, poll, get code() { return code; }, get ready() { return ready; } };
 })();

@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.58';
+const VERSION = '0.59';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -2698,7 +2698,7 @@ function renderMe() {
 }
 function editNick() {
   A.sfx('click');
-  const n = (window.prompt('새 별명 (한글·영어·숫자 2~10글자, 실명·학교 이름은 쓰지 마세요)', myNick()) || '').trim();
+  const n = (window.prompt('새 별명 (한글·영어·숫자 2~10글자)', myNick()) || '').trim();
   if (!n || n === S.nick) return;
   const p = Rank.nickProblem(n); if (p) { window.alert(p); return; }
   S.nick = n; save(); A.sfx('part'); renderHangar();
@@ -4683,6 +4683,7 @@ const gateUi = () => {
   $('gate').classList.toggle('hidden', !open);
   if (open) { gateWas = true; Cloud.render($('gateBox')); return; }
   if (state === 'hangar' && (gateWas || (document.querySelector('.guestAsk') && !Cloud.guest))) renderHangar();   // 로그인 문이 닫히면 내 정보 줄·안내를 새로
+  if (gateWas && Cloud.uid) { try { localStorage.removeItem('boltwing.newNick'); } catch (e) { /* 무시 */ } }   // 다시 열지 않고 들어왔으면 별명은 이미 들어가 있다
   gateWas = false;
   if (gateJoin) { gateJoin = false; joinRoom(joinCode); }
 };

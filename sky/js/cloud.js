@@ -11,7 +11,7 @@ const AK = 'boltwing.acct';   // 로그인 정보(아이디·접속표). 기록(
 const OWN = 'boltwing.owner';   // 이 기기 기록의 주인 { uid, at, dirty }
 // 📴 혼자 하기(인터넷 없이): 주인이 LOCAL인 기록. 서버에 없는 유일한 사본이라, 계정이 이 기기를 쓰는 동안에는 SLOT에 따로 넣어 둔다.
 const LOCAL = '@local', OFF = 'boltwing.offline', SLOT = 'boltwing.slot.' + LOCAL;
-let offline = false, form = 'login', carryDef = false, lastNick = '';   // form: 로그인 칸 / 새로 만들기 칸, carryDef: 새로 만들 때 지금 기록 가져가기 기본값
+let offline = false, form = 'login', carryDef = false, lastNick = '', keepAge = false, keepAgr = false;   // form: 로그인 칸 / 새로 만들기 칸, carryDef: 새로 만들 때 지금 기록 가져가기 기본값
 const GUEST = 'boltwing.guest', HAD = 'boltwing.hadAcct';   // 0.55: 처음 온 기기는 로그인 없이 바로(손님), 이 기기에서 로그인한 적이 있으면 로그인 문부터
 let leaving = false, lastId = '', getS, saveKey, canReload, sfx, onUi, acct = null, timer = null, busy = false, msg = '', choose = null;
 
@@ -186,6 +186,25 @@ async function passwd() {
   ui();
 }
 
+async function delAcct() {   // 0.59: 계정 지우기(비밀번호 확인 → 서버에서 지움 → 이 기기 기록도 비움)
+  if (!acct) return;
+  const p = window.prompt(`계정 「${acct.uid}」을(를) 지워요. 기록·친구·랭킹 이름이 모두 사라지고 되돌릴 수 없어요.\n계속하려면 비밀번호를 넣어 주세요.`); if (!p) return;
+  if (!window.confirm('정말 지울까요? 되돌릴 수 없어요.')) return;
+  try { await rpc('acct_delete', { p_token: acct.token, p_pw: p }); }
+  catch (e) { msg = /PGRST202|Could not find the function/.test(String(e && e.message || e)) ? '계정 지우기는 준비 중이에요(서버 설정을 하면 켜져요).' : why(e); ui(); return; }
+  acct = null; store();
+  try { localStorage.removeItem(saveKey); localStorage.removeItem(OWN); } catch (e) { /* 무시 */ }
+  window.alert('계정을 지웠어요. 그동안 고마웠어요!');
+  leaving = true; location.reload();
+}
+// 0.59: 신고·문의(아이디가 없어도 보낼 수 있다). kind: 'whisper' 귓속말 · 'lobby' 대기실 채팅 · 'ask' 문의
+const report = (kind, code, nick, body) => rpc('report_add', { p_token: acct ? acct.token : null, p_kind: kind, p_code: code || '', p_nick: nick || '', p_body: String(body || '').slice(0, 1500) });
+const reportWhy = e => { const m = String(e && e.message || e); return /PGRST202|Could not find the function/.test(m) ? '신고는 준비 중이에요(서버 설정을 하면 켜져요).' : /slow/.test(m) ? '조금 뒤에 다시 보내 주세요.' : /Failed to fetch|NetworkError/.test(m) ? '인터넷 연결을 확인해 주세요.' : '보내지 못했어요.'; };
+async function ask() {
+  const t = (window.prompt('운영자에게 보낼 말(신고·문의·버그). 연락처·실명은 쓰지 마세요.') || '').trim(); if (!t) return;
+  try { await report('ask', '', '', `[${acct ? acct.uid : '아이디 없음'}] ${t}`); msg = '보냈어요. 고마워요!'; } catch (e) { msg = reportWhy(e); }
+  ui();
+}
 // 설정 칸의 계정 상자
 function render(el) {
   el.innerHTML = '';
@@ -203,6 +222,7 @@ function render(el) {
     add('<b>📴 혼자 하기 중</b> <small>인터넷 없이</small>', 'acHead');
     const r = add('', 'acRow'); r.append(btn('✨ 아이디 만들기', toSignup, 'main'), btn('👤 로그인', leaveOffline));
     add('기록은 이 기기에만 쌓여요. 기기를 바꾸거나 브라우저 기록을 지우면 사라질 수 있어요. 아이디를 만들면 지금 기록을 가져갈 수 있어요. 랭킹·친구와 함께는 인터넷과 아이디가 필요해요.', 'acNote');
+    const r9 = add('', 'acRow'); r9.append(btn('📜 개인정보 처리방침', () => window.open('privacy.html', '_blank')), btn('🚨 신고·문의', ask));
   } else if (!acct) {
     // 0.54: 로그인 화면과 새로 만들기 화면을 나눈다(아이디를 안 쓰고 「새로 만들기」를 눌러 안 된다고 느끼던 문제)
     const su = form === 'signup';
@@ -217,12 +237,19 @@ function render(el) {
     const S0 = getS(), own0 = owner(), canCarry = su && (!own0 || own0.uid === LOCAL) && !!(S0.plays || S0.cleared);
     let carry = null;
     if (canCarry) { const cl = add('', 'acKeep acCarry', 'label'); carry = document.createElement('input'); carry.type = 'checkbox'; carry.checked = carryDef; cl.append(carry, document.createTextNode(` 📦 지금까지 한 기록 가져가기 (${summary(S0)})`)); }
+    let age = null, agr = null;
+    if (su) {   // 0.59: 만 14세 확인·개인정보 처리방침 동의(둘 다 체크해야 만들 수 있다)
+      const al = add('', 'acKeep acAge', 'label'); age = document.createElement('input'); age.type = 'checkbox'; age.checked = keepAge; age.onchange = () => { keepAge = age.checked; }; al.append(age, document.createTextNode(' 🎂 만 14세 이상이에요'));
+      const gl = add('', 'acKeep acAge', 'label'); agr = document.createElement('input'); agr.type = 'checkbox'; agr.checked = keepAgr; agr.onchange = () => { keepAgr = agr.checked; }; gl.append(agr); gl.insertAdjacentHTML('beforeend', ' 📜 <a href="privacy.html" target="_blank">개인정보 처리방침</a>을 읽었고 동의해요');
+    }
     const kp = add('', 'acKeep', 'label'), keep = document.createElement('input'); keep.type = 'checkbox';
     kp.append(keep, document.createTextNode(' 이 기기에서 로그인 유지 (내 기기일 때만)'));
     const go = () => {
+      if (su && !age.checked) { lastId = id.value; msg = '만 14세 미만은 보호자 동의가 필요해서 아이디를 만들 수 없어요. 아래 「아이디 없이 계속 하기」(또는 혼자 하기)로 즐겨 주세요. 기록은 이 기기에 남아요.'; ui(); return; }
+      if (su && !agr.checked) { lastId = id.value; msg = '📜 개인정보 처리방침에 동의해야 아이디를 만들 수 있어요. 무엇을 모으는지 한 장으로 적어 두었어요.'; ui(); return; }
       if (su && pw.value !== pw2.value) { lastId = id.value; msg = '비밀번호와 확인이 서로 달라요. 똑같이 두 번 써 주세요.'; ui(); return; }
       const nn = nk.value.trim(); lastNick = nn;
-      if (su) { const p = !nn ? '④ 별명을 써 주세요. 친구와 랭킹에 보이는 이름이에요(실명·학교 이름 말고).' : window.Rank && Rank.nickProblem ? Rank.nickProblem(nn) : ''; if (p) { lastId = id.value; msg = p; ui(); return; } }
+      if (su) { const p = !nn ? '④ 별명을 써 주세요. 친구와 랭킹에 보이는 이름이에요.' : window.Rank && Rank.nickProblem ? Rank.nickProblem(nn) : ''; if (p) { lastId = id.value; msg = p; ui(); return; } }
       enter(su ? 'signup' : 'login', id.value, pw.value, keep.checked, !!(carry && carry.checked), su ? nn : '');
     };
     const calm = () => { if (msg && !busy) { msg = ''; const m = el.querySelector('.acMsg'); if (m) m.remove(); } };   // 다시 쓰기 시작하면 앞 안내는 지운다
@@ -248,10 +275,11 @@ function render(el) {
     add(`<b>👤 ${esc(acct.uid)}</b> <small>로그인됨 · ${acct.dirty ? '저장 대기 중' : when ? `☁️ ${when} 저장됨` : '☁️ 저장됨'}</small>`, 'acHead');
     const r = add('', 'acRow');
     r.append(btn('☁️ 지금 저장', async () => { acct.dirty = true; await push(); if (!msg) msg = '저장했어요.'; ui(); }, 'main'), btn('비밀번호 바꾸기', passwd), btn('로그아웃', logout));
+    const r3 = add('', 'acRow'); r3.append(btn('📜 개인정보 처리방침', () => window.open('privacy.html', '_blank')), btn('🚨 신고·문의', ask), btn('🗑️ 계정 지우기', delAcct, 'off'));
     add('기록은 판이 끝나거나 앱을 닫을 때 저절로 계정에 저장돼요. 한 번에 한 기기에서만 로그인돼요. 로그아웃하면 이 기기의 기록은 비워지고 계정에 남아요.', 'acNote');
   }
   if (msg) add(esc(msg), 'acMsg');
 }
 
-return { init, dirty, call: (fn, b) => (acct ? rpc(fn, Object.assign({ p_token: acct.token }, b)) : Promise.reject(new Error('session'))), keep: () => !!(acct && acct.keep), render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; }, get offline() { return offline; }, get guest() { try { return offline && localStorage.getItem(GUEST) === '1'; } catch (e) { return false; } }, toSignup };
+return { init, dirty, call: (fn, b) => (acct ? rpc(fn, Object.assign({ p_token: acct.token }, b)) : Promise.reject(new Error('session'))), keep: () => !!(acct && acct.keep), render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; }, report, reportWhy, ask, get offline() { return offline; }, get guest() { try { return offline && localStorage.getItem(GUEST) === '1'; } catch (e) { return false; } }, toSignup };
 })();
