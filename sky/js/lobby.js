@@ -60,7 +60,7 @@ function close() {
 // 내 상태(이름, 공개한 방)를 대기실에 알린다
 function sync() {
   if (!ch || !opt) return;
-  const r = opt.room() || {}, s = { nick: clean(opt.nick()).slice(0, 10), room: r.pub ? r.code : null, n: r.n || 0, mode: r.mode || '', play: !!r.play, lv: opt.lv ? opt.lv() : 0, st: opt.status ? opt.status() : '' };
+  const r = opt.room() || {}, s = { nick: clean(opt.nick()).slice(0, 10), room: r.pub ? r.code : null, n: r.n || 0, mode: r.mode || '', play: !!r.play, lv: opt.lv ? opt.lv() : 0, st: opt.status ? opt.status() : '', fc: window.Friend && window.Friend.code || '' };
   const k = JSON.stringify(s);
   if (k === last) return;
   last = k; ch.track(s).catch(() => {});
@@ -122,6 +122,7 @@ function draw() {
       const s = ST[p.st] || ['💤 쉬는 중', 'idle'], row = document.createElement('div'); row.className = 'lbP';
       row.innerHTML = `<span class="lv">Lv ${p.lv | 0}</span><b>${esc(p.nick || '조종사')}</b><small class="st ${s[1]}">${s[0]}</small>`;
       if (p.st !== 'play') row.append(btn('🎮 초대', () => invite(k), 'mini'));
+      if (p.fc && window.Friend && window.Friend.ready && p.fc !== window.Friend.code) row.append(btn('➕ 친구', () => { window.Friend.request(p.fc); note = `${p.nick}님에게 친구 신청을 보냈어요(친구 칸에서 확인).`; draw(); }, 'mini'));
       const h = document.createElement('button'); h.className = 'lbHide'; h.textContent = '숨기기'; h.title = '이 사람의 말·초대를 더는 보지 않아요'; h.addEventListener('click', () => { mute.add(k); draw(); }); row.append(h);
       pl.append(row);
     }
@@ -157,5 +158,5 @@ function draw() {
   add('채팅은 저장되지 않고 지금 대기실에 있는 사람에게만 보여요. 연락처·SNS·나이·학교·사는 곳은 보낼 수 없어요. 불편한 말이나 초대를 보내는 사람은 [숨기기]를 누르고, 힘든 일이 있으면 어른께 알려 주세요.', 'cNote');
   lg.scrollTop = lg.scrollHeight;
 }
-return { open, close, sync, render, get on() { return on; } };
+return { open, close, sync, render, why, QUICK, get on() { return on; } };
 })();

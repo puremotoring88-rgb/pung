@@ -108,6 +108,16 @@
   .lbP { display: flex; align-items: center; gap: calc(var(--u) * 1); padding: calc(var(--u) * .6) calc(var(--u) * 1); border-radius: calc(var(--u) * 1); background: rgba(255, 255, 255, .06); } .lbP b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .lbP .lv { font-size: .78em; color: #ffd166; white-space: nowrap; } .lbP .st { font-size: .78em; white-space: nowrap; opacity: .8; } .lbP .st.play { color: #ff9a7a; } .lbP .st.room { color: #7fffd4; }
   .lbP .cbtn.mini { margin-left: auto; padding: calc(var(--u) * .5) calc(var(--u) * 1.2); font-size: calc(var(--u) * 2.2); } .lbP .cbtn.mini + .lbHide { margin-left: 0; }
+  .friends { margin: calc(var(--u) * 1.6) 0; padding-top: calc(var(--u) * 1.2); border-top: 1px solid rgba(255, 255, 255, .12); } .frHead small { opacity: .7; }
+  .frMine { display: flex; align-items: center; gap: calc(var(--u) * 1); margin: calc(var(--u) * 1) 0; } .frMine .frCode { font-size: 1.25em; letter-spacing: .12em; color: #ffd166; } .frMine .cbtn { padding: calc(var(--u) * .5) calc(var(--u) * 1.2); }
+  .frReq, .frOut { margin: calc(var(--u) * .8) 0; padding: calc(var(--u) * 1); border-radius: calc(var(--u) * 1); background: rgba(127, 255, 212, .1); } .frOut { display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, .05); opacity: .85; }
+  .frList { display: flex; flex-direction: column; gap: calc(var(--u) * .6); margin: calc(var(--u) * 1) 0; } .frList > small { opacity: .6; }
+  .frF { display: flex; align-items: center; gap: calc(var(--u) * .8); padding: calc(var(--u) * .6) calc(var(--u) * 1); border-radius: calc(var(--u) * 1); background: rgba(255, 255, 255, .06); opacity: .6; } .frF.on { opacity: 1; }
+  .frF .dot { width: calc(var(--u) * 1.4); height: calc(var(--u) * 1.4); border-radius: 50%; background: #666; flex: none; } .frF.on .dot { background: #4dff9e; box-shadow: 0 0 6px #4dff9e; }
+  .frF .lv { font-size: .78em; color: #ffd166; } .frF b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .frF small { font-size: .78em; opacity: .8; white-space: nowrap; } .frF .cbtn.mini { padding: calc(var(--u) * .5) calc(var(--u) * 1); font-size: calc(var(--u) * 2.2); } .frF .cbtn.mini:first-of-type { margin-left: auto; }
+  .frUn { font-style: normal; background: #ff5d7a; color: #fff; border-radius: 99px; padding: 0 calc(var(--u) * .8); font-size: .75em; }
+  .frChat { padding: calc(var(--u) * 1); border-radius: calc(var(--u) * 1); background: rgba(76, 201, 255, .08); border: 1px solid rgba(76, 201, 255, .3); }
+  .frPop { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 90; max-width: min(92vw, 420px); padding: 10px 14px; border-radius: 14px; background: rgba(20, 14, 44, .96); border: 1px solid #ffd166; color: #fff; box-shadow: 0 6px 24px rgba(0, 0, 0, .5); display: flex; flex-direction: column; gap: 8px; animation: lbInvIn .35s; font-size: 15px; word-break: break-all; } .frPop div { display: flex; gap: 8px; justify-content: flex-end; }
   .lbQuick { display: flex; flex-wrap: wrap; gap: calc(var(--u) * .8); margin-bottom: calc(var(--u) * 1); } .lbQuick .cbtn { padding: calc(var(--u) * 1) calc(var(--u) * 1.6); font-size: calc(var(--u) * 2.6); }
   .lbIn input { flex: 1; min-width: 0; }
   .acct { margin-bottom: calc(var(--u) * 3); padding: calc(var(--u) * 2.6); border-radius: calc(var(--u) * 2.4); background: rgba(10,20,40,.6); border: 1px solid rgba(127,216,255,.35); text-align: left; }
@@ -588,6 +598,7 @@
 <script src="js/cloud.js"></script>
 <script src="js/notice.js"></script>
 <script src="js/lobby.js"></script>
+<script src="js/friend.js"></script>
 <script src="js/escape.js"></script>
 <script src="js/game.js"></script>
 </body>

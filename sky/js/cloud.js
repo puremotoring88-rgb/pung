@@ -218,5 +218,5 @@ function render(el) {
   if (msg) add(esc(msg), 'acMsg');
 }
 
-return { init, dirty, keep: () => !!(acct && acct.keep), render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; }, get offline() { return offline; } };
+return { init, dirty, call: (fn, b) => (acct ? rpc(fn, Object.assign({ p_token: acct.token }, b)) : Promise.reject(new Error('session'))), keep: () => !!(acct && acct.keep), render, check, get uid() { return acct && acct.uid; }, get choosing() { return !!choose; }, get leaving() { return leaving; }, get offline() { return offline; } };
 })();

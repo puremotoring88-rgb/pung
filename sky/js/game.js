@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.49';
+const VERSION = '0.50';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -4525,6 +4525,7 @@ function coopPanel() {
   }
   if (coopMsg) add(esc(coopMsg), 'div', 'cMsg');
   add('함께 하면: 사람 수만큼 적이 튼튼해지고 고철은 20% 더 · 둘이 가까이 날면 <b>연결 빔</b>(적을 지지고 탄을 막음) · 격추된 친구 곁에 가면 <b>구출</b> · 3초 안에 같이 궁극기를 쓰면 <b>합동 궁극기</b> · 💬로 짧은 말 · 카드는 방장이 고름 · 리듬 결투는 쉼', 'div', 'cNote');
+  box.append(friendEl); Friend.render(friendEl);
   box.append(lobbyEl);
   if (!Lobby.on) Lobby.open(lobbyOpt); else Lobby.sync();
   Lobby.render(lobbyEl);
@@ -4546,6 +4547,14 @@ const lobbyOpt = {
   }),
 };
 setInterval(() => { if (Lobby.on) Lobby.sync(); }, 3000);
+// 0.50 친구·귓속말(js/friend.js)
+const friendEl = document.createElement('div'); friendEl.className = 'friends';
+Friend.init({
+  nick: () => myNick(), lv: () => S.pilot.lv, st: lobbyOpt.status, room: () => (net && net.mode === 'host' ? net.code : ''),
+  sfx: n => A.sfx(n), join: lobbyOpt.join, ensureRoom: lobbyOpt.ensureRoom,
+  canPop: () => state === 'hangar' && $('gate').classList.contains('hidden'),
+  openPanel: () => { selMode = 'coop'; if (tab !== 'sortie') { const b = document.querySelector('.tabs button[data-tab="sortie"]'); if (b) b.click(); } renderHangar(); },
+});
 
 $('fGo').addEventListener('click', leaveRest);
 EMOTES.forEach((t, i) => { const b = document.createElement('button'); b.textContent = t; b.addEventListener('pointerdown', e => { e.stopPropagation(); sendEmote(i); }); $('emoBar').append(b); });
