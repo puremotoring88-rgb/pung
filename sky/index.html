@@ -359,7 +359,7 @@
   .attend { display: grid; grid-template-columns: repeat(7, 1fr); gap: calc(var(--u) * 1); }
   .attend div { border: 1px solid #2b3c56; background: rgba(14, 23, 38, .9); border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 1.4) 0; font-size: calc(var(--u) * 2.6); line-height: 1.4; }
   .attend div.got { border-color: #ffd166; background: linear-gradient(#3a2f10, #1e180a); color: #ffe7a3; } .attend div.today { box-shadow: 0 0 calc(var(--u) * 3) rgba(255, 209, 102, .6); }
-  .howto { gap: calc(var(--u) * 1.6) !important; font-size: calc(var(--u) * 3.2); line-height: 1.5 !important; } .howto b { color: #ffe7a3; } .howto small { opacity: .7; }
+  .howto { gap: calc(var(--u) * 1.6) !important; font-size: calc(var(--u) * 3.2); line-height: 1.5 !important; } .howto b { color: #ffe7a3; } .howto small { opacity: .7; } #howto { z-index: 30; background: rgba(4, 6, 18, .94); } #howto .howto { max-height: 64vh; overflow-y: auto; }
   /* PC: 양옆 빈 자리에 조작 안내 */
   #side { display: none; position: fixed; left: 2vw; top: 50%; transform: translateY(-50%); width: 18vw; max-width: 260px; font-size: 14px; line-height: 1.9; color: #b9c8dc;
     background: rgba(14, 23, 38, .7); border: 1px solid #2b3c56; border-radius: 16px; padding: 18px; }
@@ -553,7 +553,8 @@
     <div class="stats howto">
       <div><b>👆 움직이기</b> 화면을 누른 채 끌면 로봇이 따라옵니다. 쏘는 것은 자동! <small>(PC: 마우스를 따라가거나 방향키)</small></div>
       <div><b>⚪ 맞는 자리</b> 로봇 가운데 흰 점만 맞습니다. 탄 사이로 흰 점을 지나가게 하세요.</div>
-      <div><b>🌟 궁극기</b> 적을 맞히면 차오릅니다. 다 차면 오른쪽 아래 단추(또는 두 번 톡톡, 스페이스).</div>
+      <div><b>🌟 궁극기</b> 시간이 지나면 저절로 차오릅니다. 다 차면 오른쪽 아래 단추(또는 두 번 톡톡, 스페이스).</div>
+      <div><b>💣 스킬</b> 💣 아이템을 주우면 폭탄이 모입니다(3개까지). 궁극기 단추 위의 💣 단추(PC: X)로 기체마다 다른 스킬!</div>
       <div><b>⬆ 레벨 업</b> 초록 알을 모으면 카드 3장 중 하나를 골라 이번 판 동안 강해집니다.</div>
       <div><b>🕸 그물</b> 걸리면 못 움직입니다. 화면을 빠르게 <b>연타</b>해서 빠져나오세요.</div>
       <div><b>♪ 비트 러시</b> 음표가 동그라미에 닿을 때 <b>톡!</b> 맞히면 박자 빔이 나갑니다.</div>
