@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.47';
+const VERSION = '0.48';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -1748,9 +1748,13 @@ function update(dt) {
       s.vx = Math.cos(a) * sp; s.vy = Math.sin(a) * sp;
       if (!Q.low && Math.random() < 0.5) fx.push({ k: 'smoke', x: s.x, y: s.y, vx: 0, vy: 0, t: 0, life: 0.4, size: 10 });
     }
-    s.x += s.vx * dt; s.y += s.vy * dt;
+    if (s.orb) {   // 말벌 회오리: 기체 둘레를 돌며 반지름이 50 → 275로 커짐, 0.3초마다 같은 적을 다시 벨 수 있음
+      if (s.t > 3) { s.dead = true; continue; }
+      const R = 50 + s.t * 75, a = s.orb.a0 + s.t * 7; s.x = s.orb.who.x + Math.cos(a) * R; s.y = s.orb.who.y + Math.sin(a) * R;
+      if ((s.rh = (s.rh || 0) + dt) > 0.3) { s.rh = 0; s.hits = []; }
+    } else { s.x += s.vx * dt; s.y += s.vy * dt; }
     if (s.eraser) ebul = ebul.filter(b => b.net || Math.hypot(b.x - s.x, b.y - s.y) > s.r + 12);   // 중간 스킬 표창은 닿는 탄을 지운다
-    if (offView(s.x, s.y, run.arena ? 160 : 40) || s.t > 4) { s.dead = true; continue; }
+    if (!s.orb && (offView(s.x, s.y, run.arena ? 160 : 40) || s.t > 4)) { s.dead = true; continue; }
     for (const e of foes) {
       if (e.dead || e.inv || s.hits.includes(e)) continue;
       if (Math.hypot(e.x - s.x, e.y - s.y) > e.r + s.r) continue;
@@ -1758,7 +1762,7 @@ function update(dt) {
         if (Math.random() < 0.5) eShot(s.x, s.y, angTo({ x: s.x, y: s.y }), 170, { color: '#9fc8ff', r: 6 });
         A.sfx('reflect'); s.dead = true; break;
       }
-      hitFoe(e, s.dmg, s.own);
+      hitFoe(e, s.orb && e.isBoss ? s.dmg * 0.5 : s.dmg, s.own);
       s.hits.push(e);
       if (s.boom) { for (const o of foes) if (o !== e && !o.dead && Math.hypot(o.x - s.x, o.y - s.y) < 46 + o.r) hitFoe(o, s.dmg * 0.5); explode(s.x, s.y, 14, '#ffb86b'); }
       spark(s.x, s.y, 2, s.color, 120, 0.2, 2);
@@ -2248,7 +2252,15 @@ function drawShots() {
   ctx.globalCompositeOperation = 'lighter';
   ctx.lineCap = 'round';
   for (const s of shots) {
-    if (s.star) { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.t * 16); ctx.drawImage(Forge.sprite(s.star), -15, -15, 30, 30); ctx.restore(); continue; }
+    if (s.star) {
+      if (s.orb) {   // 말벌 회오리: 노란 빛 + 크게 + 꼬리
+        const a = s.orb.a0 + s.t * 7 - 0.35, R = 50 + s.t * 75, tx = s.orb.who.x + Math.cos(a) * R, ty = s.orb.who.y + Math.sin(a) * R, k = Math.min(1, (3 - s.t) * 2);
+        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.55 * k; ctx.strokeStyle = '#ffe066'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(s.x, s.y); ctx.stroke();
+        ctx.globalAlpha = 0.8 * k; ctx.drawImage(Art.glow('#ffd23c', 30), s.x - 30, s.y - 30, 60, 60); ctx.restore();
+        ctx.save(); ctx.globalAlpha = k; ctx.translate(s.x, s.y); ctx.rotate(s.t * 20); ctx.drawImage(Forge.sprite(s.star), -22, -22, 44, 44); ctx.restore(); continue;
+      }
+      ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.t * 16); ctx.drawImage(Forge.sprite(s.star), -15, -15, 30, 30); ctx.restore(); continue;
+    }
     const len = s.long ? 30 : s.homing ? 10 : 16, sp = Math.hypot(s.vx, s.vy) || 1, ux = s.vx / sp, uy = s.vy / sp;
     ctx.strokeStyle = s.color; ctx.lineWidth = s.r * 1.8;
     ctx.beginPath(); ctx.moveTo(s.x - ux * len, s.y - uy * len); ctx.lineTo(s.x, s.y); ctx.stroke();
@@ -3112,7 +3124,7 @@ const SKILL = {
   max: 3, start: 1, cd: 1.2,
   falcon: { icon: '🚀', name: '추적 미사일', desc: '적을 쫓는 큰 미사일 8발' },
   turtle: { icon: '🛡️', name: '방패 파동', desc: '둘레의 탄을 모두 지우고 1.5초 무적' },
-  hornet: { icon: '🌀', name: '표창 회오리', desc: '탄을 지우며 꿰뚫는 표창 12개' },
+  hornet: { icon: '🌀', name: '표창 회오리', desc: '표창 12개가 3초 동안 내 둘레를 돌며 넓게 퍼짐(적을 여러 번 베고 탄을 지움)' },
   phoenix: { icon: '💣', name: '불꽃 폭탄', desc: '앞으로 던진 폭탄이 크게 터짐' },
 };
 const skillOn = () => !!run && !run.arena;   // 0.43: 함께 할 때도 모두가 쓴다(참가자는 방장에게 부탁)
@@ -3147,7 +3159,9 @@ function doSkill(who, id, pw) {
     who.inv = Math.max(who.inv || 0, 1.5); ringFx(who.x, who.y, 300, '#9dffcf'); ringFx(who.x, who.y, 200, '#7bdc6b');
     for (const e of foes.slice()) if (!e.harmless && !e.civ && Math.hypot(e.x - who.x, e.y - who.y) < 300) hitFoe(e, 60 * pw * (e.isBoss ? 0.5 : 1), own);
   } else if (id === 'hornet') {
-    for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; addShot(who.x, who.y, Math.cos(a) * 520, Math.sin(a) * 520, 30 * pw, { r: 13, pierce: 99, star: 3, eraser: true, color: '#ffe066' }); }
+    // 0.48: 사방으로 흩어지던 표창 → 3초 동안 내 둘레를 돌며 넓게 퍼지는 회오리(닿는 적을 여러 번 베고, 지나는 길의 탄을 지움)
+    ringFx(who.x, who.y, 120, '#ffe066');
+    for (let i = 0; i < 12; i++) addShot(who.x, who.y, 0, 0, 16 * pw, { r: 15, pierce: 999, star: 3, eraser: true, color: '#ffe066', orb: { who, a0: i / 12 * TAU } });
   } else {
     const ty = Math.max(90, who.y - 300);
     (run.skBombs = run.skBombs || []).push({ x: who.x, y: ty, t: 0.45, pw, own });
