@@ -21,6 +21,7 @@ const lvOf = s => 1 + (s - 1) / 3;            // 난이도 수준(예전 스테�
 const stageEnd = s => (subOf(s) === 5 ? 'boss' : subOf(s) === 3 ? 'scout' : 'leader');
 const stageBossIdx = s => (subOf(s) === 5 ? (chOf(s) - 1) % 5 : chOf(s) % 5);
 const END_NM = { boss: '👑 챕터 보스', scout: '⚔️ 보스 선발대', leader: '🛡️ 정예 편대' };
+const recPow = s => Math.min(1620, 560 + 24 * (s - 1));   // 스테이지 권장 전투력(새 기체 약 575, 다 강화하면 약 1600)
 let skyTheme = -1;
 const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -34,7 +35,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.38';
+const VERSION = '0.39';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -583,7 +584,7 @@ function startRun(stage, md = 'stage') {
     level: 1, xp: 0, xpNeed: 12, taken: {}, d: diffFor(isSt ? lvOf(stage) : stage), theme: th0, loop: isSt ? (chOf(stage) - 1) / 5 | 0 : (stage - 1) / 5 | 0,
     combo: 0, comboT: 0, maxCombo: 0, hits: 0, hurtT: 0, ults: 0,
     rushAt: rnd(42, 58), rush: null, rushDone: false, rushSum: null,
-    banner: { kind: 'stage', title: `STAGE ${isSt ? stLabel(stage) : stage}`, sub: D.THEMES[th0].name + (isSt ? ' · 끝에 ' + END_NM[stageEnd(stage)] : ''), t: 0, life: 2.6 },
+    banner: { kind: 'stage', title: `STAGE ${isSt ? stLabel(stage) : stage}`, sub: D.THEMES[th0].name + (isSt ? ' · 끝에 ' + END_NM[stageEnd(stage)] + (powerOf(buildStats()) < recPow(stage) * 0.9 ? ' · ⚠️ 권장 전투력보다 낮아요' : '') : ''), t: 0, life: 2.6 },
     m: { dmg: 1, rate: 1, multi: 0, pierce: 0, drones: 0, magnet: 1, ult: 1, speed: 1, barrier: 0 },
     mode: md, wave: 1, bossCount: 0, nextBoss: 90, bossIdx: 0, startedAt: Date.now(), zone0: stage, assist };
   if (md === 'endless') { run.waveDur = Infinity; run.banner = { kind: 'stage', title: 'WAVE 1', sub: '무한 생존 · 얼마나 버틸까?', t: 0, life: 2.6 }; }
@@ -2681,12 +2682,19 @@ function renderHangar() {
     const n = document.createElement('button');
     n.className = 'node' + (s === hangarStage ? ' on' : '') + (open ? '' : ' locked') + (S.cleared >= s ? ' done' : '');
     const rk = (S.ranks || {})[s];
-    n.innerHTML = `<span class="num ch">${stLabel(s)}</span><span class="nm"><b>${en === 'leader' ? END_NM.leader : END_NM[en] + ' ' + bd.name}</b><small>${en === 'boss' ? '챕터 마지막 · 진짜 보스' : en === 'scout' ? '다음 챕터 보스의 선발대(체력 절반)' : '커다란 대장 전차와 호위'}</small></span>${rk ? `<span class="rank r${rk}">${rk}</span>` : ''}<span class="st">${[0, 1, 2].map(i => `<em class="${stars[i] ? 'on' : ''}">★</em>`).join('')}</span>${open ? '' : '<span class="lock">🔒</span>'}`;
+    n.innerHTML = `<span class="num ch">${stLabel(s)}</span><span class="nm"><b>${en === 'leader' ? END_NM.leader : END_NM[en] + ' ' + bd.name}</b><small>${en === 'boss' ? '챕터 마지막 · 진짜 보스' : en === 'scout' ? '다음 챕터 보스의 선발대(체력 절반)' : '커다란 대장 전차와 호위'} · <span class="rp${pw < recPow(s) ? ' low' : ''}">⚡${recPow(s)}</span></small></span>${rk ? `<span class="rank r${rk}">${rk}</span>` : ''}<span class="st">${[0, 1, 2].map(i => `<em class="${stars[i] ? 'on' : ''}">★</em>`).join('')}</span>${open ? '' : '<span class="lock">🔒</span>'}`;
     if (open) n.addEventListener('click', () => { hangarStage = s; A.sfx('click'); renderHangar(); });
     map.append(n);
   }
   const hEn = stageEnd(hangarStage), bd = D.BOSSES[stageBossIdx(hangarStage)];
   $('stTip').innerHTML = `<b>스테이지 ${stLabel(hangarStage)}</b> · ${D.THEMES[stageTheme(hangarStage)].name} · 끝에 <b>${hEn === 'leader' ? END_NM.leader : END_NM[hEn] + ' ' + bd.name}</b><br><small>${hEn === 'leader' ? '대장 전차가 둥근 탄과 조준 탄을 쏘고 호위를 부릅니다. 대장을 부수면 클리어!' : bd.tip}</small><br><small class="rules">${STAR_RULES.map((r, i) => `${(S.stars[hangarStage] || [])[i] ? '★' : '☆'} ${r}`).join(' · ')}</small>`;
+  {   // 권장 전투력: 모자라면 강화하러 가는 길을 알려 준다
+    const rp = recPow(hangarStage), gap = rp - pw, up = ['arms', 'parts', 'research'].find(t => isOpen('tab:' + t));
+    $('stTip').insertAdjacentHTML('beforeend', `<div class="recLine${gap > 0 ? ' low' : ''}">⚡ 권장 전투력 <b>${rp.toLocaleString()}</b> · 내 전투력 <b>${pw.toLocaleString()}</b> ${gap > 0 ? `<em>(${gap.toLocaleString()} 모자라요)</em>` : '✅'}</div>`
+      + (gap > rp * 0.1 ? `<small class="recHelp">조금 어려울 수 있어요. 앞 스테이지에서 고철을 모아 무기·부품·연구를 강화하면 쉬워져요.${up ? ' <button class="recGo">🔧 강화하러 가기</button>' : ''}</small>` : ''));
+    const go = $('stTip').querySelector('.recGo');
+    if (go) go.addEventListener('click', () => { const b = document.querySelector(`.tabs button[data-tab="${up}"]`); if (b) b.click(); });
+  }
   if (tab === 'sortie') requestAnimationFrame(() => { const on = map.querySelector('.node.on'); if (on) map.scrollTop = on.offsetTop - map.clientHeight / 2; });
   const fr = $('frames'); fr.innerHTML = '';
   for (const f of D.FRAMES) {
