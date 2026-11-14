@@ -166,7 +166,6 @@
   .logo small { display: block; font-size: calc(var(--u) * 3.2); opacity: .75; letter-spacing: .3em; margin-top: calc(var(--u) * 1); }
   .wallet { text-align: right; } .hgR { display: flex; align-items: center; }
   #fullBtn { margin-left: calc(var(--u) * 1.5); width: calc(var(--u) * 8); height: calc(var(--u) * 8); border-radius: calc(var(--u) * 2); border: 1px solid #2b3c56; background: rgba(12, 20, 34, .85); color: #dfe9f5; font-size: calc(var(--u) * 4); flex: none; }
-  #instBtn { margin-left: calc(var(--u) * 1.5); width: calc(var(--u) * 8); height: calc(var(--u) * 8); border-radius: calc(var(--u) * 2); border: 1px solid #4a7fc0; background: rgba(20, 50, 90, .85); color: #dfe9f5; font-size: calc(var(--u) * 4); flex: none; }
   #homeHow { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.6); padding: 16px; }
   #homeHow .hhIn { max-width: 420px; width: 100%; background: #0d1628; border: 1px solid #4a7fc0; border-radius: 16px; padding: 18px; color: #e8f0fa; display: flex; flex-direction: column; gap: 8px; }
   #homeHow b { font-size: 1.15em; } #homeHow small { color: #9fb3c8; } #homeHow ol { margin: 4px 0; padding-left: 1.3em; line-height: 1.8; } #homeHow li b { font-size: 1em; color: #ffd166; }
@@ -536,7 +535,7 @@
   <div id="hangar" class="overlay">
     <header class="hgHead">
       <div class="logo"><b>BOLT<i>WING</i></b><small>볼트윙</small></div>
-      <div class="hgR"><div class="wallet"><span id="scrap">🔩 0</span><span id="bestTxt"></span></div><button id="instBtn" title="홈 화면에 추가">📲</button><button id="fullBtn" title="전체 화면">⛶</button></div>
+      <div class="hgR"><div class="wallet"><span id="scrap">🔩 0</span><span id="bestTxt"></span></div><button id="fullBtn" title="전체 화면">⛶</button></div>
     </header>
     <div id="me" class="meBar"></div>
     <div id="pilot" class="pilot"></div>
@@ -575,6 +574,7 @@
         <button id="vibBtn" class="btn sub">📳 진동</button><button id="mouseBtn" class="btn sub">🖱 마우스 따라가기</button><button id="leftyBtn" class="btn sub">✋ 오른손 모드</button>
         <button id="fsBtn" class="btn sub">⛶ 전체 화면</button><button id="helpBtn" class="btn sub">❔ 하는 법</button>
       </div>
+      <div id="homeBox" class="guestAsk"><b>📲 홈 화면에 볼트윙 놓기</b><br><small>휴대폰 홈 화면(컴퓨터는 바탕화면)에 아이콘을 만들어 두면, 다음부터 링크를 찾지 않고 아이콘을 눌러 앱처럼 바로 시작해요. 화면도 더 넓게 써요.</small><div class="gaRow"><button id="instBtn" class="main">📲 홈 화면에 추가하기</button></div></div>
       <h3>손가락 조작</h3>
       <div id="ctlBox" class="acct"></div>
       <h3>저장</h3>

@@ -555,7 +555,7 @@ function isHomeApp() {
   if (matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone) return true;
   try { return localStorage.getItem(HOME_KEY) === '1'; } catch (e) { return false; }
 }
-function markHome() { const b = $('instBtn'); if (b) b.classList.toggle('hidden', isHomeApp()); }
+function markHome() { const b = $('homeBox'); if (b) b.classList.toggle('hidden', isHomeApp()); }   // 이미 홈 화면 앱이면 설정 칸을 숨김
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instEvt = e; markHome(); });
 window.addEventListener('appinstalled', () => { instEvt = null; try { localStorage.setItem(HOME_KEY, '1'); } catch (e) { /* 무시 */ } markHome(); A.sfx('levelup'); if (state === 'hangar') renderHangar(); });
 function homeHow() {
