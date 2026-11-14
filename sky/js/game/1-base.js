@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.71';
+const VERSION = '0.72';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -102,7 +102,7 @@ function gainPilotXp(x) {   // 판이 끝날 때마다 조종사 경험치. 계�
   const ms = []; S.msGot = S.msGot || {};
   for (const l of Object.keys(PILOT_MS).map(Number)) if (l <= S.pilot.lv && !S.msGot[l]) { const m = PILOT_MS[l]; S.msGot[l] = 1; reward += m.scrap; if (m.look) { S.owned = S.owned || {}; S.owned[m.look] = 1; } ms.push(`🎁 Lv ${l} 보상: ${m.nm} · 🔩${m.scrap}`); }
   S.scrap += reward;
-  const opened = Object.keys(GROW.itemLv).filter(k => GROW.itemLv[k] > lv0 && GROW.itemLv[k] <= S.pilot.lv).map(k => ITEMS[k].icon + ' ' + ITEMS[k].name).concat(GROW.multiLv > lv0 && GROW.multiLv <= S.pilot.lv ? ['🔱 탄 +1 줍기'] : [], D.PARTS.filter(p => (GROW.partLv[p.id] || 1) > lv0 && (GROW.partLv[p.id] || 1) <= S.pilot.lv).map(p => '⚙️ 부품 ' + p.name), ms);
+  const opened = Object.keys(GROW.itemLv).filter(k => GROW.itemLv[k] > lv0 && GROW.itemLv[k] <= S.pilot.lv).map(k => ITEMS[k].icon + ' ' + ITEMS[k].name).concat(GROW.multiLv > lv0 && GROW.multiLv <= S.pilot.lv ? ['🔱 탄 +1 줍기'] : [], D.PARTS.filter(p => (GROW.partLv[p.id] || 1) > lv0 && (GROW.partLv[p.id] || 1) <= S.pilot.lv).map(p => '🧩 부품 ' + p.name), ms);
   return { ups, reward, opened };
 }
 // 연구: 고철로 사는 영구 강화(모든 기체에 적용)
@@ -195,7 +195,7 @@ const WEEK = { tiers: 25, step: 3 };   // 칸마다 주간 별 3개(일주일에
 function weekReward(i) {   // i: 1~25
   if (i === 25) return { k: 'title', v: 150, icon: '🏆', txt: '칭호 「주간 완주자」 + 고철 150' };
   if (i === 10 || i === 20) return { k: 'look', v: 0, icon: '🎨', txt: '꾸미기 하나 무료' };
-  if (i === 5 || i === 15) return { k: 'part', v: 0, icon: '⚙️', txt: '새 부품(다 모았으면 고철 60)' };
+  if (i === 5 || i === 15) return { k: 'part', v: 0, icon: '🧩', txt: '새 부품(다 모았으면 고철 60)' };
   if (i === 8 || i === 12 || i === 18 || i === 22) return { k: 'core', v: 2, icon: '💠', txt: '코어 2(한계 돌파 재료)' };   // 0.63
   return { k: 'scrap', v: 20 + i * 4, icon: '🔩', txt: `고철 ${20 + i * 4}` };
 }
@@ -505,7 +505,7 @@ function showPhoto() {
 const OPENS = [
   { k: 'tab:arms', icon: '🔫', name: '무기 강화', need: { plays: 1 }, tip: '모은 고철로 무기를 강하게 만들어요.' },
   { k: 'tab:goals', icon: '🏅', name: '임무', need: { plays: 1 }, tip: '오늘의 임무와 도전 과제로 고철을 받아요.' },
-  { k: 'tab:parts', icon: '⚙️', name: '부품', need: { cleared: 2 }, tip: '보스가 떨어뜨린 부품을 끼우면 더 강해져요.' },
+  { k: 'tab:parts', icon: '🧩', name: '부품', need: { cleared: 2 }, tip: '보스가 떨어뜨린 부품을 끼우면 더 강해져요.' },
   { k: 'tab:look', icon: '🎨', name: '꾸미기', need: { cleared: 3 }, tip: '도색·불꽃·꼬리·스티커로 내 기체를 꾸며요.' },
   { k: 'mode:coop', icon: '🤝', name: '친구와 함께', need: { cleared: 3 }, tip: '친구 1~2명과 같은 하늘에서 싸워요.' },
   { k: 'tab:book', icon: '📖', name: '도감·칭호', need: { cleared: 3 }, tip: '만난 맵·적·보스 무훈을 모으고 칭호를 달아요.' },

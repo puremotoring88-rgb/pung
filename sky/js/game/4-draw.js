@@ -339,7 +339,7 @@ function drawDrops() {
       ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(Art.glow('#ffd166', 40), -40, -40, 80, 80); ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = Art.metal(ctx, 0, -12, 0, 12, [[0, '#e3a75a'], [1, '#7a4a18']]); ctx.fillRect(-15, -13, 30, 26);
       ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.strokeRect(-15, -13, 30, 26); ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(15, 0); ctx.stroke();
-      ctx.font = '15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⚙️', 0, 6); ctx.restore();
+      ctx.font = '15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🧩', 0, 6); ctx.restore();
     }
   }
 }
