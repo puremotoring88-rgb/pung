@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.68';
+const VERSION = '0.69';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -286,7 +286,7 @@ const STAR_REWARD = 10;
 const maxGearLv = () => Math.max(1, ...Object.values(S.weapons || {}), ...Object.values(S.parts || {}));
 function addCores(n) { S.cores = (S.cores || 0) + n; if (run) run.coresGot = (run.coresGot || 0) + n; }
 // 손맛 숫자(해 보고 조정): 큰 적·정예를 부술 때 잠깐 멈춤(초), 보스 처치 느린 화면(초·빠르기), 피해 숫자 간격(초)
-const FEEL = { ultInv: 2, ultLock: 0, ultSec: 50, stopBig: 0.065, stopElite: 0.045, stopBoss: 0.14, slowBoss: 1.5, slowK: 0.3, numGap: 0.16 };
+const FEEL = { shakeMax: 1.2,  ultInv: 2, ultLock: 0, ultSec: 50, stopBig: 0.065, stopElite: 0.045, stopBoss: 0.14, slowBoss: 1.5, slowK: 0.3, numGap: 0.16 };
 let hitStop = 0, slowT = 0, dnums = [];
 
 // ---------- 그림 파일(있으면 쓰고 없으면 코드로 그린 그림) ----------
@@ -632,9 +632,11 @@ function shipTierFx(g, tier, t, size, sx) {   // 성장 단계에 따른 빛(몸
 // 스테이지가 오를수록 적이 단단해지고 탄이 빨라진다
 const L = () => (run && run.mode === 'stage' ? Math.floor(lvOf(run.stage)) : run ? run.stage : 1);   // 지금 판의 난이도 수준(스테이지 모드는 챕터 번호 대신 lvOf)
 // 0.58 난이도 따라잡기(사용자: 1-3에서 적이 안 보이고 보스가 녹는다). 판 안에서 카드·줍기로 세진 만큼 적·보스 체력도 일부 따라 올라간다.
-const DIFF = { hp: 0.4, chase: 0.55 };   // hp: 수준 1마다 적 체력 +40%(전엔 32%), chase: 판 안 화력 증가분의 55%만큼 적 체력도 늘림
+// 0.69(사용자: 2-2에서 일반 적이 몰려와 못 잡고 보스는 금방): 일반 적은 「한 줄 화력(피해×연사)」의 40%만큼(최대 4배), 보스는 전체 화력(탄 갈래·드론 포함)의 65%만큼
+const DIFF = { hp: 0.3, chase: 0.4, mobCap: 4, chaseBoss: 0.65 };
 const runPow = () => run ? run.m.dmg * run.m.rate * (1 + 0.35 * run.m.multi) * (1 + 0.25 * (run.m.drones || 0)) : 1;   // 판을 시작할 때 1
-const foeK = () => (run && run.mode !== 'auto' ? 1 + DIFF.chase * Math.max(0, runPow() - 1) : 1);
+const hitPow = () => run ? run.m.dmg * run.m.rate : 1;   // 적 하나를 맞히는 힘(탄 갈래는 퍼져서 한 적에 다 맞지 않으므로 뺌)
+const foeK = boss => (run && run.mode !== 'auto' ? (boss ? 1 + DIFF.chaseBoss * Math.max(0, runPow() - 1) : Math.min(DIFF.mobCap, 1 + DIFF.chase * Math.max(0, hitPow() - 1))) : 1);
 const diffFor = s => ({
   hp: 1 + DIFF.hp * (s - 1),
   bs: Math.min(1.6, 1 + 0.05 * (s - 1)),

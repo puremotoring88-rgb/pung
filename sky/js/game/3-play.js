@@ -664,7 +664,7 @@ function tickFx(dt) {
   fx = fx.filter(p => p.t < p.life);
   for (const t of texts) t.t += dt;
   texts = texts.filter(t => t.t < t.life);
-  shake = Math.max(0, shake - dt * 2.5);
+  shake = Math.max(0, Math.min(shake, S.noShake ? 0 : FEEL.shakeMax) - dt * 2.5);   // 0.69: 구조물·하늘 사건이 4~6을 넣어 화면이 ±40px 넘게 흔들려 탄을 못 피했다 → 최대 1.2(약 ±10px), 설정에서 끌 수 있음
   flash = Math.max(0, flash - dt * 2.5);
 }
 

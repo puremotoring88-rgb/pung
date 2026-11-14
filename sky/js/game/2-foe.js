@@ -45,9 +45,13 @@ function ring(x, y, n, off, sp, o) { for (let i = 0; i < n; i++) eShot(x, y, off
 function spawnWave() {
   const s = L(), extra = Math.min(3, (s - 1) / 2 | 0);
   const opts = [['line', 3], ['weave', 3], ['column', 2]];
-  if (s >= 2) opts.push(['dive', 2], ['turret', 2], ['net', 1.2]);
-  if (s >= 3) opts.push(['split', 2]);
-  if (s >= 4) opts.push(['tank', 1]);
+  // 0.69: 쏘는 적을 하나씩 천천히(전에는 1-4에서 돌격기·포대선·그물기가 한꺼번에 나와 탄이 갑자기 많아졌다). lv = 소수까지 본 난이도(1-3 = 1.67, 2-2 = 3)
+  const lv = run.mode === 'stage' ? lvOf(run.stage) : s, ramp = (a, b) => clamp((lv - a) / (b - a), 0, 1);
+  if (lv >= 1.6) opts.push(['dive', 2 * (0.4 + 0.6 * ramp(1.6, 3))]);
+  if (lv >= 2) opts.push(['turret', 2 * (0.35 + 0.65 * ramp(2, 3.4))]);
+  if (lv >= 2.3) opts.push(['net', 1.2]);
+  if (lv >= 3) opts.push(['split', 2]);
+  if (lv >= 4.3) opts.push(['tank', 1]);
   const mf = Object.keys(D.ENEMIES).find(k => D.ENEMIES[k].map === run.theme);   // 맵 전용 적
   if (mf && !run.arena) opts.push(['map', 2.6]);
   let roll = Math.random() * opts.reduce((a, o) => a + o[1], 0), kind = opts[0][0];
@@ -152,7 +156,7 @@ function foeAI(e, dt) {
 function spawnBoss() {
   const idx = run.mode === 'rush' ? run.bossIdx : run.mode === 'endless' ? run.bossCount % 5 : run.mode === 'stage' ? stageBossIdx(run.stage) : (run.stage - 1) % 5, def = D.BOSSES[idx];
   const scout = run.mode === 'stage' && stageEnd(run.stage) === 'scout';   // 보스 선발대: 다음 챕터 보스를 미리 만난다(체력 절반)
-  const hp = def.hp * run.d.hp * foeK() * (1 + 0.15 * run.loop) * (run.mode === 'auto' ? 0.35 : 1) * (run.teamK || 1) * (scout ? 0.5 : 1);
+  const hp = def.hp * run.d.hp * foeK(true) * (1 + 0.15 * run.loop) * (run.mode === 'auto' ? 0.35 : 1) * (run.teamK || 1) * (scout ? 0.5 : 1);
   boss = { def, idx, t: 0, x: W / 2, y: -170, entering: true, tm: {}, parts: [], spin: 0, inhale: 0, mirror: 0, stream: 0, tx: W / 2, slash: 0 };
   const lay = { spider: [[0, 70]], whale: [[0, 90]], twins: [[-135, 56], [135, 56]], knight: [[0, 60]], core: [[0, 82]] }[def.id];
   for (const [dx, r] of lay) {
@@ -370,7 +374,7 @@ function bossAI(dt) {
 const LEADER = { hp: 11, r: 46, scale: 1.75, ring: 2.6, aim: 3.4, call: 9 };   // 체력 배수(장갑기의), 크기, 원형 탄·조준 탄·호위 부르기 간격(초)
 function spawnLeader() {
   const e = addFoe('tank', W / 2, -80, { ty: 210 });
-  e.leader = true; e.mod = undefined; e.sh = 0; e.r = LEADER.r; e.hp = e.maxHp = e.maxHp * LEADER.hp; e.xp = 10; e.score = 2500 * L();
+  e.leader = true; e.mod = undefined; e.sh = 0; e.r = LEADER.r; e.hp = e.maxHp = e.maxHp * LEADER.hp * foeK(true) / foeK(); e.xp = 10; e.score = 2500 * L();
   e.ringT = 1.8; e.aimT = 2.6; e.callT = 1;
   run.leaderE = e; run.hitsAtBoss = run.hits; run.bossStart = run.t;
   A.music('boss', run.theme);

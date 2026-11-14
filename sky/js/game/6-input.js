@@ -220,6 +220,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
 $('musicBtn').addEventListener('click', () => { S.music = !S.music; A.setMusic(S.music); save(); renderHangar(); });
 $('sfxBtn').addEventListener('click', () => { S.sfx = !S.sfx; A.setSfx(S.sfx); save(); renderHangar(); });
 $('vibBtn').addEventListener('click', () => { S.vib = !S.vib; save(); buzz(40); renderHangar(); });
+$('shakeBtn').addEventListener('click', () => { S.noShake = !S.noShake; save(); A.sfx('click'); renderHangar(); });   // 0.69 화면 흔들림 끄기
 $('fsBtn').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else goFullscreen(); });
 $('photo').addEventListener('click', showPhoto);
 $('copy').addEventListener('click', async () => {
