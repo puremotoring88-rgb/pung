@@ -460,7 +460,27 @@ function renderLook(el) {
   const pv = document.createElement('div'); pv.className = 'lkPreview';
   const c = document.createElement('canvas'); c.width = 300; c.height = 210; pv.append(c); el.append(pv);
   let t0 = 0; const g = c.getContext('2d');
-  const anim = () => { if (!c.isConnected) return; t0 += 1 / 60; g.clearRect(0, 0, 300, 210); drawShipAt(g, S.frame, 150, 95, 2.3, Math.sin(t0) * 0.3, t0, false, L); requestAnimationFrame(anim); };
+  const tp = []; let tT = 0;   // 0.63: 미리보기에도 꼬리(판 안의 trailFx와 같은 모양을 이 캔버스에 그린다)
+  const trailPv = (sx, sy) => {
+    const v = lookOf('trail', L.trail)[2];
+    if (v && (tT -= 1 / 60) <= 0) {
+      tT = v === 'smoke' ? 0.05 : 0.07;
+      const y = sy + 46, x = sx + rnd(-7, 7);
+      if (v === 'smoke') tp.push({ k: 's', x, y, vx: rnd(-10, 10), vy: 120, t: 0, life: 0.7, size: 9 });
+      else if (v === 'rainbow') for (const dx of [-6, 0, 6]) tp.push({ k: 'p', x: sx + dx, y, vx: 0, vy: 200, t: 0, life: 0.5, color: `hsl(${(t0 * 300 + dx * 20) % 360},100%,62%)`, size: 5 });
+      else tp.push({ k: 'g', ch: v, x, y, vx: rnd(-30, 30), vy: rnd(110, 170), t: 0, life: 0.8, size: rnd(12, 18), color: { '✦': '#fff3a0', '♥': '#ff7ad9', '♪': '#9fd0ff', '❀': '#ffb3d9', '☄': '#7af0ff' }[v] || '#fff' });
+    }
+    for (let i = tp.length - 1; i >= 0; i--) {
+      const p = tp[i]; p.t += 1 / 60; p.x += p.vx / 60; p.y += p.vy / 60;
+      if (p.t >= p.life) { tp.splice(i, 1); continue; }
+      const a = 1 - p.t / p.life; g.globalAlpha = a;
+      if (p.k === 's') { g.fillStyle = 'rgba(200,210,225,.5)'; g.beginPath(); g.arc(p.x, p.y, p.size * (1 + p.t * 1.6), 0, TAU); g.fill(); }
+      else if (p.k === 'p') { g.fillStyle = p.color; g.beginPath(); g.arc(p.x, p.y, p.size * a + 1, 0, TAU); g.fill(); }
+      else { g.fillStyle = p.color; g.font = `${Math.round(p.size)}px sans-serif`; g.textAlign = 'center'; g.fillText(p.ch, p.x, p.y); }
+    }
+    g.globalAlpha = 1;
+  };
+  const anim = () => { if (!c.isConnected) return; t0 += 1 / 60; g.clearRect(0, 0, 300, 210); const sx = 150 + Math.sin(t0 * 0.9) * 40; trailPv(sx, 95); drawShipAt(g, S.frame, sx, 95, 2.3, Math.sin(t0 * 0.9 + 1.2) * 0.35, t0, false, L); requestAnimationFrame(anim); };
   anim();
   if (lookTry) {   // 입혀 보기 중: 직접 「사기」를 눌러야 고철을 쓴다
     const it = LOOKS[lookTry.cat].list.find(x => x[0] === lookTry.id), cost = it[3], gift = cost < 0, can = !gift && lookCanBuy(lookTry.cat, it), enough = S.scrap >= cost;

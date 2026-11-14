@@ -25,21 +25,25 @@ const WEAPONS = [
 // 부품: 보스를 잡거나 큰 적을 부수면 나오고, 격납고에서 고철로 강화한다(최대 5단계)
 const SLOTS = { engine: '엔진', armor: '장갑', chip: '칩', drone: '드론' };
 const PARTS = [
-  { id: 'turbo', slot: 'engine', name: '터보 엔진', icon: '🔥', desc: l => `이동 속도 +${8 * l}%` },
+  { id: 'turbo', slot: 'engine', name: '터보 엔진', icon: '🔥', desc: l => `이동 속도 +${Math.round(8 * l)}%` },
   { id: 'blink', slot: 'engine', name: '회피 엔진', icon: '💨', desc: l => `맞은 뒤 무적 시간 +${(0.25 * l).toFixed(2)}초` },
-  { id: 'plate', slot: 'armor', name: '강화 장갑', icon: '🛡️', desc: l => `최대 체력 +${15 * l}` },
+  { id: 'plate', slot: 'armor', name: '강화 장갑', icon: '🛡️', desc: l => `최대 체력 +${Math.round(15 * l)}` },
   { id: 'regen', slot: 'armor', name: '재생 장갑', icon: '💚', desc: l => `1초마다 체력 ${(0.4 * l).toFixed(1)} 회복` },
-  { id: 'power', slot: 'chip', name: '화력 칩', icon: '💥', desc: l => `피해 +${7 * l}%` },
-  { id: 'rapid', slot: 'chip', name: '연사 칩', icon: '⚡', desc: l => `연사 +${7 * l}%` },
-  { id: 'ultchip', slot: 'chip', name: '궁극 칩', icon: '🌟', desc: l => `궁극기 충전 +${12 * l}%` },
-  { id: 'magnet', slot: 'chip', name: '자석 칩', icon: '🧲', desc: l => `줍는 범위 +${25 * l}%` },
-  { id: 'gun', slot: 'drone', name: '사격 드론', icon: '🛸', desc: l => `옆에서 함께 쏘는 드론(피해 ${3 + 2 * l})` },
-  { id: 'guard', slot: 'drone', name: '방어 드론', icon: '🔰', desc: l => `둘레를 돌며 탄을 막는 드론 ${l >= 3 ? 2 : 1}대` },
-  { id: 'seeker', slot: 'drone', name: '미사일 드론', icon: '🚀', desc: l => `${(3.2 - 0.3 * l).toFixed(1)}초마다 유도탄 2발` },
+  { id: 'power', slot: 'chip', name: '화력 칩', icon: '💥', desc: l => `피해 +${Math.round(7 * l)}%` },
+  { id: 'rapid', slot: 'chip', name: '연사 칩', icon: '⚡', desc: l => `연사 +${Math.round(7 * l)}%` },
+  { id: 'ultchip', slot: 'chip', name: '궁극 칩', icon: '🌟', desc: l => `궁극기 충전 +${Math.round(12 * l)}%` },
+  { id: 'magnet', slot: 'chip', name: '자석 칩', icon: '🧲', desc: l => `줍는 범위 +${Math.round(25 * l)}%` },
+  { id: 'gun', slot: 'drone', name: '사격 드론', icon: '🛸', desc: l => `옆에서 함께 쏘는 드론(피해 ${Math.round(3 + 2 * l)})` },
+  { id: 'guard', slot: 'drone', name: '방어 드론', icon: '🔰', desc: l => `둘레를 돌며 탄을 막는 드론 ${l >= 8 ? 3 : l >= 3 ? 2 : 1}대` },
+  { id: 'seeker', slot: 'drone', name: '미사일 드론', icon: '🚀', desc: l => `${Math.max(1.1, 3.2 - 0.3 * l).toFixed(1)}초마다 유도탄 2발` },
 ];
-const PART_COST = l => 40 * l + 15 * l * l;   // 부품 강화 값(0.53: 55·140·255·400…, 단계가 오를수록 가파르게)
-const WEAPON_COST = l => 60 * l + 20 * l * l;   // 무기 강화 값(0.53: 80·200·360·560, 끝까지 1200)
-const MAX_LV = 5;
+const PART_COST = l => 40 * l + 15 * l * l;   // 부품 강화 값(0.53: 55·140·255·400…, 0.63: Lv 10까지 이어서 525·720·925·1140·1365)
+const WEAPON_COST = l => 60 * l + 20 * l * l;   // 무기 강화 값(0.53: 80·200·360·560, 0.63: 800·1080·1400·1760·2160)
+const MAX_LV = 10;   // 0.63: 5 → 10. Lv 6부터는 「한계 돌파」: 💠 코어와 조종사 레벨이 필요
+const BREAK_LV = 5;
+const CORE_NEED = { w: t => t - 4, p: t => t - 5 };   // t = 올릴 단계. 무기 Lv6~10에 2·3·4·5·6개, 부품 1·2·3·4·5개
+const PILOT_GATE = { 6: 6, 7: 9, 8: 12, 9: 16, 10: 20 };   // 이 단계로 올리려면 조종사 Lv
+const PEFF = l => (l <= 5 ? l : 5 + 0.6 * (l - 5));   // 부품 효과: Lv 6부터는 한 단계에 0.6만큼(Lv 10 = 예전 Lv 8)
 
 // 판 안에서 레벨이 오르면 고르는 카드(이번 판에만 적용)
 const CARDS = [
@@ -96,5 +100,5 @@ const THEMES = [
   { name: '구름 위 성', sky: ['#f2b8a0', '#f6d8d0', '#e8e0f4'], cloud: 'rgba(255,240,245,', stars: false },
 ];
 
-return { FRAMES, WEAPONS, SLOTS, PARTS, PART_COST, WEAPON_COST, MAX_LV, CARDS, ENEMIES, BOSSES, THEMES };
+return { FRAMES, WEAPONS, SLOTS, PARTS, PART_COST, WEAPON_COST, MAX_LV, BREAK_LV, CORE_NEED, PILOT_GATE, PEFF, CARDS, ENEMIES, BOSSES, THEMES };
 })();

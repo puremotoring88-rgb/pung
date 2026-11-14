@@ -21,7 +21,7 @@ const lvOf = s => 1 + (s - 1) / 3;            // 난이도 수준(예전 스테�
 const stageEnd = s => (subOf(s) === 5 ? 'boss' : subOf(s) === 3 ? 'scout' : 'leader');
 const stageBossIdx = s => (subOf(s) === 5 ? (chOf(s) - 1) % 5 : chOf(s) % 5);
 const END_NM = { boss: '👑 챕터 보스', scout: '⚔️ 보스 선발대', leader: '🛡️ 정예 편대' };
-const recPow = s => Math.min(1620, 560 + 24 * (s - 1));   // 스테이지 권장 전투력(새 기체 약 575, 다 강화하면 약 1600)
+const recPow = s => Math.min(2200, 560 + 24 * (s - 1));   // 스테이지 권장 전투력(새 기체 약 575, Lv 5까지 약 1600, 0.63 한계 돌파까지 약 2290)
 // 0.47 다음 챕터 문: 챕터 c의 첫 스테이지는 지금까지 모은 별이 (c-1)×STAR_GATE개 이상이어야 열린다(한 챕터 별 15개 중 7개꼴). 이미 깬 곳은 그대로
 const STAR_GATE = 7;
 const totalStars = () => Object.values(S.stars || {}).reduce((n, a) => n + (a || []).filter(Boolean).length, 0);
@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.62';
+const VERSION = '0.63';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -66,7 +66,7 @@ const buzz = ms => { if (S.vib && navigator.vibrate) { try { navigator.vibrate(m
 const frameOf = id => D.FRAMES.find(f => f.id === id);
 const weaponOf = id => D.WEAPONS.find(w => w.id === id);
 const unlocked = o => !o.unlock || S.cleared >= o.unlock || !!(S.got && S.got[o.id]);   // S.got = 0.42 전에 이미 열려 있던 기체·무기
-const eqLv = id => (Object.values(S.equip).includes(id) ? S.parts[id] || 1 : 0);
+const eqLv = id => (Object.values(S.equip).includes(id) ? D.PEFF(S.parts[id] || 1) : 0);   // 0.63: Lv 6부터는 효과가 조금씩(PEFF)
 const starCount = () => Object.values(S.stars).reduce((a, s) => a + s.filter(Boolean).length, 0);
 
 // ---------- 도전 과제(이루면 고철을 받는다) ----------
@@ -196,6 +196,7 @@ function weekReward(i) {   // i: 1~25
   if (i === 25) return { k: 'title', v: 150, icon: '🏆', txt: '칭호 「주간 완주자」 + 고철 150' };
   if (i === 10 || i === 20) return { k: 'look', v: 0, icon: '🎨', txt: '꾸미기 하나 무료' };
   if (i === 5 || i === 15) return { k: 'part', v: 0, icon: '⚙️', txt: '새 부품(다 모았으면 고철 60)' };
+  if (i === 8 || i === 12 || i === 18 || i === 22) return { k: 'core', v: 2, icon: '💠', txt: '코어 2(한계 돌파 재료)' };   // 0.63
   return { k: 'scrap', v: 20 + i * 4, icon: '🔩', txt: `고철 ${20 + i * 4}` };
 }
 function weekKey(d = new Date()) { d = new Date(d); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }   // 그 주 월요일
@@ -212,6 +213,7 @@ function weekRoll() {
 function weekGive(i) {
   const r = weekReward(i); S.week.got[i] = 1;
   if (r.k === 'scrap') { S.scrap += r.v; return `🔩 고철 ${r.v}`; }
+  if (r.k === 'core') { addCores(r.v); return `💠 코어 ${r.v}`; }
   if (r.k === 'title') { S.weekDone = (S.weekDone || 0) + 1; S.scrap += r.v; return `🏆 「주간 완주자」 + 고철 ${r.v}`; }
   if (r.k === 'part') {
     const cand = partsAvail();
@@ -280,6 +282,9 @@ MODES.push({ id: 'coop', icon: '🤝', name: '친구와 함께', go: '함께 출
 let selMode = 'stage', dojoLv = 1;
 const STAR_RULES = ['클리어', '체력 절반 이상 남기고 클리어', '콤보 30 이상 만들기'];
 const STAR_REWARD = 10;
+// 0.63 💠 코어: 무기·부품 한계 돌파(Lv 6~10)에 쓴다. 보스 처치(챕터 보스 2)·스테이지 첫 클리어·주간 도전에서
+const maxGearLv = () => Math.max(1, ...Object.values(S.weapons || {}), ...Object.values(S.parts || {}));
+function addCores(n) { S.cores = (S.cores || 0) + n; if (run) run.coresGot = (run.coresGot || 0) + n; }
 // 손맛 숫자(해 보고 조정): 큰 적·정예를 부술 때 잠깐 멈춤(초), 보스 처치 느린 화면(초·빠르기), 피해 숫자 간격(초)
 const FEEL = { ultInv: 2, ultLock: 0, ultSec: 50, stopBig: 0.065, stopElite: 0.045, stopBoss: 0.14, slowBoss: 1.5, slowK: 0.3, numGap: 0.16 };
 let hitStop = 0, slowT = 0, dnums = [];
@@ -553,6 +558,8 @@ const TIERS = [
   { p: 1160, name: '에이스', c: '#ffb347', fx: '불꽃 꼬리' },
   { p: 1350, name: '전설', c: '#ff7ad9', fx: '빛 구슬이 돈다' },
   { p: 1540, name: '신화', c: '#ffd166', fx: '황금 고리' },
+  { p: 1850, name: '초월', c: '#b98cff', fx: '보라 고리가 하나 더' },   // 0.63 한계 돌파 뒤
+  { p: 2150, name: '천공', c: '#7af0ff', fx: '별빛이 흩날린다' },
 ];
 function powerOf(s) {   // 전투력: 화력(초당 피해)·체력·속도·드론·궁극기를 한 숫자로
   return Math.round(s.dmg * s.rate * 4 + s.maxHp * 1.5 + s.speed * 100 + (s.gun + s.guard + s.seeker) * 40 + s.ult * 60 + s.regen * 30 + s.magnet * 0.3);
@@ -618,7 +625,9 @@ function shipTierFx(g, tier, t, size, sx) {   // 성장 단계에 따른 빛(몸
   g.globalAlpha = 1;
   if (tier >= 5) for (let i = 0; i < 3; i++) { const a = t * 2.2 + i * TAU / 3, r = size * 0.62; g.drawImage(Art.glow(c, 14), Math.cos(a) * r - 7, Math.sin(a) * r * 0.75 - 7, 14, 14); }   // 도는 빛 구슬
   if (tier >= 6) { g.strokeStyle = `rgba(255,209,102,${0.35 + 0.25 * Math.sin(t * 4)})`; g.lineWidth = 2.5; g.beginPath(); g.ellipse(0, 0, size * 0.7, size * 0.55, 0, 0, TAU); g.stroke(); }   // 황금 고리
-  g.globalCompositeOperation = 'source-over';
+  if (tier >= 7) { g.strokeStyle = `rgba(185,140,255,${0.4 + 0.25 * Math.sin(t * 3 + 1)})`; g.lineWidth = 2; g.beginPath(); g.ellipse(0, 0, size * 0.82, size * 0.4, t * 0.9, 0, TAU); g.stroke(); }   // 0.63 초월: 기울어 도는 보라 고리
+  if (tier >= 8) for (let i = 0; i < 6; i++) { const k = (t * 0.6 + i / 6) % 1, a = i * 2.1 + Math.floor(t * 0.6 + i / 6) * 1.7, r = size * (0.4 + 0.6 * k); g.globalAlpha = 1 - k; g.drawImage(Art.glow('#7af0ff', 8), Math.cos(a) * r - 4, Math.sin(a) * r - 4, 8, 8); }   // 천공: 흩날리는 별빛
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
 }
 // 스테이지가 오를수록 적이 단단해지고 탄이 빨라진다
 const L = () => (run && run.mode === 'stage' ? Math.floor(lvOf(run.stage)) : run ? run.stage : 1);   // 지금 판의 난이도 수준(스테이지 모드는 챕터 번호 대신 lvOf)

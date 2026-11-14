@@ -51,8 +51,21 @@ function openFriends() {
   body.insertAdjacentHTML('beforeend', '<p class="note">친구 코드를 서로 알려 주고 신청하면 친구가 돼요. 친구가 접속하면 초록 점, 💬로 귓속말, 🎮로 같이 하기 초대.</p>');
   const box = document.createElement('div'); box.className = 'friends'; body.append(box); Friend.render(box);
 }
+// 0.63 무기·부품 Lv 10까지: Lv 6부터는 「한계 돌파」(💠 코어 + 조종사 레벨)
+const lvDots = lv => `<span class="lvDots">${Array.from({ length: D.MAX_LV }, (_, i) => `<i class="${i + 1 <= lv ? 'on' : ''}${i >= D.BREAK_LV ? ' brk' : ''}"></i>`).join('')}</span>`;
+function upButton(kind, lv, apply) {   // kind 'w' 무기 / 'p' 부품
+  const t = lv + 1, cost = kind === 'w' ? D.WEAPON_COST(lv) : D.PART_COST(lv), core = t > D.BREAK_LV ? D.CORE_NEED[kind](t) : 0, plv = D.PILOT_GATE[t] || 0;
+  const u = document.createElement('button');
+  if (S.pilot.lv < plv) { u.className = 'up gateUp'; u.textContent = `🔒 조종사 Lv ${plv}`; u.disabled = true; u.title = `Lv ${t} 한계 돌파는 조종사 Lv ${plv}부터`; return u; }
+  u.className = 'up' + (core ? ' brkUp' : '');
+  u.textContent = `${core ? '💠 돌파' : '강화'} 🔩${cost}${core ? ` 💠${core}` : ''}`;
+  u.disabled = S.scrap < cost || (S.cores || 0) < core;
+  if (core && (S.cores || 0) < core) u.title = `💠 코어가 ${core - (S.cores || 0)}개 모자라요(보스를 잡으면 나와요)`;
+  u.addEventListener('click', ev => { ev.stopPropagation(); if (S.scrap < cost || (S.cores || 0) < core) return; S.scrap -= cost; S.cores = (S.cores || 0) - core; apply(t); if (core) A.sfx('levelup'); save(); A.sfx('buy'); renderHangar(); });
+  return u;
+}
 function renderHangar() {
-  $('scrap').textContent = `🔩 ${S.scrap}`;
+  $('scrap').textContent = `🔩 ${S.scrap}${S.cores || maxGearLv() >= D.BREAK_LV ? ` · 💠 ${S.cores || 0}` : ''}`;
   unlockCheck(); titleCheck(); Rank.leagueCheck(); refTick();
   renderMe();
   $('bestTxt').textContent = `최고 ${S.best.toLocaleString()} · ★${starCount()}`;
@@ -177,13 +190,9 @@ function renderHangar() {
   for (const w of D.WEAPONS) {
     const open = unlocked(w), lv = S.weapons[w.id] || 1, d = document.createElement('div');
     d.className = 'card' + (S.weapon === w.id ? ' on' : '') + (open ? '' : ' locked');
-    d.innerHTML = `<b><span class="wIcon" style="background:${w.color};color:${w.color}"></span>${w.name} <small>Lv ${lv}</small></b><small>${w.desc}</small>${statBar('피해', w.dmg * (w.pellets || 1) / 30, Math.round(w.dmg * (1 + 0.1 * (lv - 1))))}${statBar('연사', w.rate / 10, w.rate + '/초')}<div class="lvDots">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= lv ? 'on' : ''}"></i>`).join('')}</div>` + (open ? '' : `<small class="lockTxt">🔒 스테이지 ${stLabel(w.unlock)} 클리어 시 열림</small>`);
-    if (open && lv < D.MAX_LV) {
-      const cost = D.WEAPON_COST(lv), u = document.createElement('button');
-      u.className = 'up'; u.textContent = `강화 🔩${cost}`; u.disabled = S.scrap < cost;
-      u.addEventListener('click', ev => { ev.stopPropagation(); if (S.scrap < cost) return; S.scrap -= cost; S.weapons[w.id] = lv + 1; save(); A.sfx('buy'); renderHangar(); });
-      d.append(u);
-    }
+    d.innerHTML = `<b><span class="wIcon" style="background:${w.color};color:${w.color}"></span>${w.name} <small>Lv ${lv}</small></b><small>${w.desc}</small>${statBar('피해', w.dmg * (w.pellets || 1) / 30, Math.round(w.dmg * (1 + 0.1 * (lv - 1))))}${statBar('연사', w.rate / 10, w.rate + '/초')}<div>${lvDots(lv)}</div>` + (open ? '' : `<small class="lockTxt">🔒 스테이지 ${stLabel(w.unlock)} 클리어 시 열림</small>`);
+    if (open && lv < D.MAX_LV) d.append(upButton('w', lv, t => { S.weapons[w.id] = t; }));
+    else if (open) d.insertAdjacentHTML('beforeend', '<small class="ult">💠 최고 단계</small>');
     d.addEventListener('click', () => { if (!open) return; S.weapon = w.id; if (!S.weapons[w.id]) S.weapons[w.id] = 1; save(); A.sfx('click'); renderHangar(); });
     wp.append(d);
   }
@@ -191,7 +200,7 @@ function renderHangar() {
   for (const [slot, label] of Object.entries(D.SLOTS)) {
     const id = S.equip[slot], p = D.PARTS.find(x => x.id === id), d = document.createElement('button');
     d.className = 'slot' + (p ? ' filled' : '') + (openSlot === slot ? ' open' : '');
-    d.innerHTML = p ? `<span class="ic">${p.icon}</span><b>${p.name}</b> Lv ${S.parts[id]}<i>${label} · ${p.desc(S.parts[id])}</i>` : `<span class="ic">＋</span><b>${label}</b><i>비어 있음 · 눌러서 고르기</i>`;
+    d.innerHTML = p ? `<span class="ic">${p.icon}</span><b>${p.name}</b> Lv ${S.parts[id]}<i>${label} · ${p.desc(D.PEFF(S.parts[id]))}</i>` : `<span class="ic">＋</span><b>${label}</b><i>비어 있음 · 눌러서 고르기</i>`;
     d.addEventListener('click', () => { openSlot = openSlot === slot ? null : slot; A.sfx('click'); renderHangar(); });
     sl.append(d);
   }
@@ -204,17 +213,12 @@ function renderHangar() {
     for (const p of owned) {
       const lv = S.parts[p.id], on = S.equip[openSlot] === p.id, row = document.createElement('div');
       row.className = 'pRow' + (on ? ' on' : '');
-      row.innerHTML = `<span class="ic">${p.icon}</span><span class="tx"><b>${p.name}</b> <span class="lvDots">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= lv ? 'on' : ''}"></i>`).join('')}</span><small>${p.desc(lv)}${lv < D.MAX_LV ? ` → ${p.desc(lv + 1)}` : ' (최고 단계)'}</small></span>`;
+      row.innerHTML = `<span class="ic">${p.icon}</span><span class="tx"><b>${p.name}</b> <small style="opacity:.7">Lv ${lv}</small> ${lvDots(lv)}<small>${p.desc(D.PEFF(lv))}${lv < D.MAX_LV ? ` → ${p.desc(D.PEFF(lv + 1))}` : ' (최고 단계)'}</small></span>`;
       const eq = document.createElement('button');
       eq.className = on ? 'eq' : ''; eq.textContent = on ? '빼기' : '끼우기';
       eq.addEventListener('click', () => { S.equip[openSlot] = on ? null : p.id; save(); A.sfx('click'); renderHangar(); });
       row.append(eq);
-      if (lv < D.MAX_LV) {
-        const cost = D.PART_COST(lv), u = document.createElement('button');
-        u.textContent = `강화 🔩${cost}`; u.disabled = S.scrap < cost;
-        u.addEventListener('click', () => { if (S.scrap < cost) return; S.scrap -= cost; S.parts[p.id] = lv + 1; save(); A.sfx('buy'); renderHangar(); });
-        row.append(u);
-      }
+      if (lv < D.MAX_LV) row.append(upButton('p', lv, t => { S.parts[p.id] = t; }));
       pl.append(row);
     }
   } else pl.innerHTML = `<p class="note">칸을 누르면 가진 부품이 나옵니다. 모은 부품 ${Object.keys(S.parts).length} / ${D.PARTS.length}종</p>`;

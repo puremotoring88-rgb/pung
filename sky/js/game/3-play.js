@@ -38,8 +38,8 @@ function fire(sh = P, Wp = st.Wp, base = st.dmg) {   // sh = 쏘는 기체(나 �
   const n = (st.gun ? 1 : 0) + run.m.drones, spots = [[-44, 16], [44, 16], [-72, 30], [72, 30]];
   return spots.slice(0, n).map(([dx, dy], i) => ({ x: P.x + dx, y: P.y + dy + Math.sin(T * 4 + i) * 3, part: st.gun && i === 0 }));
 }
-const guardCount = () => (st.guard ? (st.guard >= 3 ? 2 : 1) : 0);
-const guardSpots = () => Array.from({ length: guardCount() }, (_, i) => ({ x: P.x + Math.cos(P.ga + i * Math.PI) * 52, y: P.y + Math.sin(P.ga + i * Math.PI) * 52 }));
+const guardCount = () => (st.guard ? (st.guard >= 8 ? 3 : st.guard >= 3 ? 2 : 1) : 0);
+const guardSpots = () => Array.from({ length: guardCount() }, (_, i) => ({ x: P.x + Math.cos(P.ga + i * TAU / guardCount()) * 52, y: P.y + Math.sin(P.ga + i * TAU / guardCount()) * 52 }));
 
 function useUlt() {
   if (net && net.mode === 'guest') { if (P.ult >= 100) { net.conn.send({ t: 'ult' }); P.ult = 0; } return; }   // 참가자: 방장에게 부탁
@@ -460,7 +460,7 @@ function update(dt) {
       if (sp.length) A.sfx('drone');
     }
     if (st.seeker && (P.seekT -= dt) <= 0) {
-      P.seekT = 3.2 - 0.3 * st.seeker;
+      P.seekT = Math.max(1.1, 3.2 - 0.3 * st.seeker);
       for (const s of [-1, 1]) addShot(P.x + s * 20, P.y, s * 160, -200, 12 * (1 + 0.2 * st.seeker), { homing: true, r: 6, color: '#ffb86b' });
       A.sfx('missile');
     }
@@ -697,7 +697,7 @@ function endOther(win) {   // 무한 생존·보스 러시·자동 출격의 결
   $('rStats').innerHTML = [
     `<div class="big">${run.score.toLocaleString()}<small>점</small></div>`, `<div>${rec}</div>`,
     `<div>처치 <b>${run.kills}</b> · 최고 콤보 <b>${run.maxCombo}</b> · 레벨 <b>${run.level}</b></div>`,
-    `<div>얻은 고철 🔩 <b>${run.scrapGot}</b></div>`,
+    `<div>얻은 고철 🔩 <b>${run.scrapGot}</b>${run.coresGot ? ` · 💠 코어 <b>${run.coresGot}</b>` : ""}</div>`,
     run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
     `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새로 열림: ${up.opened.join(', ')}</b>` : ''}</div>`,
   ].filter(Boolean).join('');
@@ -742,6 +742,7 @@ function endRun(win) {
   if (now.some(Boolean)) S.stars[run.stage] = now;
   S.scrap += newStars * STAR_REWARD;
   const newGear = win ? D.FRAMES.concat(D.WEAPONS).filter(o => o.unlock && before < o.unlock && run.stage >= o.unlock && !(S.got || {})[o.id]).map(o => (D.FRAMES.includes(o) ? '✈️ 기체 ' : '🔫 무기 ') + o.name) : [];   // 챕터를 넘을 때 새 기체·무기
+  if (win && before < run.stage) addCores(1);   // 0.63: 처음 깬 스테이지마다 💠 1
   if (win) { S.cleared = Math.max(S.cleared, run.stage); S.maxStage = Math.max(S.maxStage, run.stage + 1); S.next = run.stage + 1; }
   S.lastRun = S.lastRun || {}; const prevScore = S.lastRun['stage' + run.stage]; S.lastRun['stage' + run.stage] = run.score;   // 지난번과 비교
   const newBest = run.score > S.best;
@@ -762,7 +763,7 @@ function endRun(win) {
     run.bossRank ? `<div>보스 랭크 <b class="gold">${run.bossRank}</b> · ${run.bossTime.toFixed(1)}초 · 맞은 횟수 ${run.hits - run.hitsAtBoss}${S.ranks && S.ranks[run.stage] ? ` · 최고 ${S.ranks[run.stage]}` : ''}</div>` : '',
     run.assist ? '<div>🛟 지원 출격으로 깼습니다(별 2·3과 S·A 랭크는 지원 없이 도전)</div>' : '',
     `<div>처치 <b>${run.kills}</b> · 최고 콤보 <b>${run.maxCombo}</b> · 레벨 <b>${run.level}</b></div>`,
-    `<div>얻은 고철 🔩 <b>${run.scrapGot}</b>${newStars ? ` + 새 별 보상 🔩 <b>${newStars * STAR_REWARD}</b>` : ''}</div>`,
+    `<div>얻은 고철 🔩 <b>${run.scrapGot}</b>${run.coresGot ? ` · 💠 코어 <b>${run.coresGot}</b>` : ""}${newStars ? ` + 새 별 보상 🔩 <b>${newStars * STAR_REWARD}</b>` : ''}</div>`,
     newGear.length ? `<div class="gold">🎉 새로 열림: ${newGear.join(', ')}</div>` : '',
     run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
     opened.length ? `<div class="gold">🔓 새로 열림: ${opened.join(', ')}</div>` : '',
