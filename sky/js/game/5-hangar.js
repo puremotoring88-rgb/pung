@@ -25,9 +25,11 @@ function renderMe() {
   const T = TIERS[myTierV];
   me.innerHTML = `<div class="meL">${Rank.gem(S.pilot.lv)}<b class="meNick">${esc(myNick())}</b><button class="meEdit" title="별명 바꾸기">${/^조종사\d+$/.test(myNick()) ? "✏️ 별명 정하기" : "✏️"}</button><small class="meTitle" style="color:${T.c}">「${esc(titleName())}」</small></div>`
     + `<button class="meFr">${frBtnHtml()}</button>`
+    + (() => { weekRoll(); const L = Rank.lg && Rank.LEAGUE[Rank.lg.tier || 0]; return `<button class="meStar" title="주간 별: 판을 하면 모여요. 임무 탭의 이번 주 도전 보상과 주간 리그 순위에 쓰여요">⭐ 이번 주 별 <b>${(S.week && S.week.pts) || 0}</b>${L ? ` · ${L[0]} ${L[1]} 리그` : ""} ›</button>`; })()   // 0.71: 주간 별을 늘 볼 수 있게
     + `<div class="meSub">⚡ ${powerOf(buildStats()).toLocaleString()} · ${T.name} · ${Cloud.uid ? `👤 ${esc(Cloud.uid)} <i>(아이디는 나만 보여요)</i>` : Cloud.guest ? '👤 손님 <i>(아이디 없이 하는 중)</i>' : '📴 혼자 하기'}</div>`;
   me.querySelector('.meEdit').addEventListener('click', editNick);
   me.querySelector('.meFr').addEventListener('click', openFriends);
+  me.querySelector('.meStar').addEventListener('click', () => { A.sfx('click'); const b = document.querySelector('.tabs button[data-tab="goals"]'); if (b) b.click(); });
 }
 function editNick() {
   A.sfx('click');

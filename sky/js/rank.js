@@ -15,7 +15,7 @@ let S, save, sfx, ver = '', view = { mode: 'league', week: true }, cache = {};
 
 const gemOf = lv => GEMS.find(g => lv >= g[0]) || GEMS[GEMS.length - 1];
 const gem = lv => { const g = gemOf(lv); return `<i class="gem" style="--c:${g[2]}" title="${g[1]} (조종사 Lv ${lv})"></i>`; };
-const lvTag = lv => `<em class="lvTag">Lv ${Number(lv) || 1}</em>`;   // 0.70: 보석만으로는 뜻을 몰라서 레벨 숫자도
+const lvTag = lv => `<em class="lvTag">Lv ${Number(lv) || 1}</em> `;   // 0.70: 보석만으로는 뜻을 몰라서 레벨 숫자도
 const zoneIdx = (pos, total) => ZONES.findIndex(z => pos <= Math.ceil(total * z[0]));
 const zoneTag = (pos, total) => { const z = ZONES[zoneIdx(pos, total)]; return `<em class="zone" style="--c:${z[3]}">${z[1]} ${z[2]}</em>`; };
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -72,7 +72,7 @@ function leagueView(el, add, stat) {
     const rows = d.rows || [], m = lgMine(d), c = lgCut(rows.length);
     stat.innerHTML = `${lgTag(d.tier)} ${m ? `조 <b>${m.pos}위</b> / ${rows.length}명` : '이번 주는 아직 참가 전'} · ⏳ ${dd ? dd + '일 ' : ''}${hh}시간 남음`;
     if (!d.joined) { list.innerHTML = `<p class="note">이번 주에 한 판 하면 ${lgTag(d.tier)}의 조에 들어가요!</p>`; return; }
-    let html = '<div class="rkGap lgHead">⭐ = 이번 주에 판을 하며 모은 <b>주간 별</b> · Lv = 조종사 레벨</div>';   // 0.70
+    let html = '';
     rows.forEach((r, i) => {
       const pos = Number(r.pos), cls = pos <= c.up ? ' lgU' : c.down && pos > rows.length - c.down ? ' lgD' : '';
       if (i === c.up && c.up) html += '<div class="rkGap lgLine">⬆ 여기까지 승급</div>';
