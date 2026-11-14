@@ -79,6 +79,7 @@ function toggleFull() {
   } catch (e) { /* 안 되는 기기 */ }
   A.sfx('click');
 }
+{ const ib = $('instBtn'); if (ib) { ib.addEventListener('click', () => { A.sfx('click'); addHome(); }); markHome(); } }   // 0.67 📲 홈 화면에 추가
 {
   const fb = $('fullBtn');
   if (fb) {

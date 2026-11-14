@@ -547,3 +547,38 @@ function drawUpDrop(d) {
   ctx.restore();
 }
 
+
+// ---------- 0.67 📲 홈 화면에 추가: 되는 브라우저는 바로 설치 창, 안 되면 기기에 맞는 방법을 알려 준다 ----------
+let instEvt = null;
+const HOME_KEY = 'boltwing.home';
+function isHomeApp() {
+  if (matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone) return true;
+  try { return localStorage.getItem(HOME_KEY) === '1'; } catch (e) { return false; }
+}
+function markHome() { const b = $('instBtn'); if (b) b.classList.toggle('hidden', isHomeApp()); }
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instEvt = e; markHome(); });
+window.addEventListener('appinstalled', () => { instEvt = null; try { localStorage.setItem(HOME_KEY, '1'); } catch (e) { /* 무시 */ } markHome(); A.sfx('levelup'); if (state === 'hangar') renderHangar(); });
+function homeHow() {
+  const ua = navigator.userAgent;
+  if (/KAKAOTALK|NAVER\(|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp/i.test(ua)) return { t: '카카오톡 같은 앱 안에서 열었어요', s: ['이 화면에서는 바로 추가가 안 돼요.', '오른쪽 위나 아래의 <b>⋮</b> 또는 <b>공유</b> 단추를 누르고', '<b>「다른 브라우저로 열기」</b>(크롬·삼성 인터넷·사파리)를 고른 뒤', '거기서 다시 <b>📲</b> 단추를 눌러 주세요.'], copy: true };
+  if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return { t: '아이폰·아이패드', s: ['화면 아래(또는 위)의 <b>공유 단추 ⬆️</b>를 누르고', '목록을 내려 <b>「홈 화면에 추가」</b>를 누른 뒤', '오른쪽 위 <b>「추가」</b>를 누르면 끝!'] };
+  if (/SamsungBrowser/i.test(ua)) return { t: '삼성 인터넷', s: ['화면 아래 오른쪽 <b>≡ 메뉴</b>를 누르고', '<b>「현재 페이지 추가」</b> → <b>「홈 화면」</b>을 고르면 끝!'] };
+  if (/Android/i.test(ua)) return { t: '안드로이드 크롬', s: ['오른쪽 위 <b>⋮ 메뉴</b>를 누르고', '<b>「홈 화면에 추가」</b>(또는 「앱 설치」)를 누른 뒤', '<b>「설치」</b>나 <b>「추가」</b>를 누르면 끝!'] };
+  return { t: '컴퓨터', s: ['주소창 오른쪽 끝의 <b>설치 단추(🖥️⬇)</b>를 누르거나', '<b>⋮ 메뉴</b> → <b>「전송, 저장 및 공유」</b> → <b>「페이지를 앱으로 설치」</b>를 누르면', '바탕화면·시작 메뉴에 볼트윙이 생겨요.'] };
+}
+function addHome() {
+  if (instEvt) {   // 크롬·삼성 인터넷·엣지: 설치 창을 바로 띄운다
+    const ev = instEvt; instEvt = null;
+    ev.prompt();
+    ev.userChoice.then(c => { if (c && c.outcome === 'accepted') { try { localStorage.setItem(HOME_KEY, '1'); } catch (e) { /* 무시 */ } if (state === 'hangar') renderHangar(); } markHome(); }).catch(() => {});
+    return;
+  }
+  const h = homeHow(), bx = document.createElement('div'); bx.id = 'homeHow';
+  bx.innerHTML = `<div class="hhIn"><b>📲 홈 화면에 추가하기</b><small>${h.t}</small><ol>${h.s.map(x => `<li>${x}</li>`).join('')}</ol>
+    ${h.copy ? '<button class="hhCopy">🔗 게임 주소 복사</button>' : ''}<button class="hhOk">알겠어요</button></div>`;
+  bx.addEventListener('click', ev => { if (ev.target === bx) bx.remove(); });
+  bx.querySelector('.hhOk').addEventListener('click', () => { A.sfx('click'); bx.remove(); });
+  const cp = bx.querySelector('.hhCopy');
+  if (cp) cp.addEventListener('click', async () => { try { await navigator.clipboard.writeText(GAME_URL); cp.textContent = '✅ 복사했어요! 크롬·사파리 주소창에 붙여 넣으세요'; } catch (e) { cp.textContent = GAME_URL; } });
+  document.body.append(bx);
+}

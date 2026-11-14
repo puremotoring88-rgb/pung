@@ -6,12 +6,12 @@ window.Lobby = (() => {
 const URL = 'https://karluttarljwyutztbgx.supabase.co';
 const KEY = 'sb_publishable_oT_Z6aYJ3uDZxcJeF3ArIA_4ivykkte';
 const LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js';
-const CH = 'boltwing-lobby-v1', MAXLOG = 40;
+const CH = 'boltwing-lobby-v1', MAXLOG = 40, CAP = 150;   // 0.67 CAP: 무료 서버의 실시간 연결 수를 넘지 않게 대기실은 150명까지
 const QUICK = ['안녕하세요 👋', '같이 하실 분?', '방 만들었어요!', '들어갈게요!', '고마워요 🙏', '잘했어요 👍', 'ㅋㅋㅋ', '한 판 더?'];
 const BAD = /(씨발|시발|ㅅㅂ|ㅆㅂ|병신|ㅂㅅ|븅신|개새|새끼|좆|존나|졸라|섹스|느금|니애미|니미|애미|에미|창녀|꺼져|닥쳐|fuck|shit|bitch|sex|porn)/i;
 const PRIV = /(\d[\d\s\-.]{7,}\d|https?:|www\.|\.com|\.kr|\.net|@\w|카톡|카카오|오픈채팅|오카|인스타|insta|디엠|\bdm\b|페메|텔레|telegram|디코|discord|라인아이디|전번|전화번호|폰번|번호\s*(좀|줘|알려)|주소\s*(좀|줘|알려)|몇\s*살|나이가?\s*(어떻게|몇)|어디\s*살|사는\s*곳|무슨\s*학교|학교\s*어디|몇\s*학년|사진\s*(좀|줘|보내)|만나요|만날래|실명|본명)/i;
 let sb = null, ch = null, me = null, opt = null, log = [], people = {}, mute = new Set(), lastSend = 0, note = '', on = false, el = null, inp = null, last = '';
-let invites = [], sentInv = {}, lastInv = 0, showPeople = true;   // 0.49 대기실 사람 목록·초대
+let invites = [], sentInv = {}, lastInv = 0, showPeople = true, full = false;   // 0.49 대기실 사람 목록·초대
 const noInv = () => { try { return localStorage.getItem('boltwing.noInvite') === '1'; } catch (e) { return false; } };
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -49,7 +49,7 @@ async function open(o) {
     if (opt.onInvite) opt.onInvite(n); ui();
   });
   ch.subscribe(st => {
-    if (st === 'SUBSCRIBED') { note = ''; last = ''; sync(); ui(); }
+    if (st === 'SUBSCRIBED') { note = '대기실 자리를 확인하는 중…'; last = ''; ui(); setTimeout(() => { if (!ch) return; if (Object.keys(ch.presenceState()).length >= CAP) { close(); full = true; note = ''; ui(); return; } full = false; note = ''; sync(); ui(); }, 1200); }   // 0.67: 꽉 찼으면 들어가지 않고 연결을 끊는다
     else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') { note = '대기실 연결이 불안정해요. 잠시 뒤 다시 열어 주세요.'; ui(); }
   });
 }
@@ -107,6 +107,7 @@ function draw() {
   const btn = (label, fn, cls = '') => { const b = document.createElement('button'); b.className = 'cbtn ' + cls; b.textContent = label; b.addEventListener('click', fn); return b; };
   const n = Object.keys(people).length;
   add(`<b>💬 대기실</b> <small>${on ? `지금 ${n}명` : ''}</small>`, 'lbHead');
+  if (full) { add(`🈵 대기실이 꽉 찼어요(${CAP}명). <b>방 만들기·방 코드·초대 링크로 친구와 하기는 그대로 돼요.</b>`, 'cMsg'); const r = add('', 'cRow'); r.append(btn('🔄 다시 들어가 보기', () => { full = false; open(opt); })); return; }
   if (!on) { const r = add('', 'cRow'); r.append(btn('대기실 들어가기', () => open(opt))); if (note) add(esc(note), 'cMsg'); return; }
   // 0.49 받은 초대
   invites = invites.filter(v => Date.now() - v.at < 60000 && !mute.has(v.from));
@@ -165,5 +166,5 @@ function draw() {
   add('채팅은 저장되지 않고 지금 대기실에 있는 사람에게만 보여요. 연락처·SNS·나이·학교·사는 곳은 보낼 수 없어요. 불편한 말이나 초대를 보내는 사람은 [숨기기], 심하면 🚨로 운영자에게 신고해 주세요.', 'cNote');
   lg.scrollTop = lg.scrollHeight;
 }
-return { open, close, sync, render, why, QUICK, get on() { return on; } };
+return { open, close, sync, render, why, QUICK, get on() { return on; }, get full() { return full; } };
 })();

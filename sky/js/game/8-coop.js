@@ -501,7 +501,7 @@ function coopPanel() {
   add('함께 하면: 사람 수만큼 적이 튼튼해지고 고철은 20% 더 · 둘이 가까이 날면 <b>연결 빔</b>(적을 지지고 탄을 막음) · 격추된 친구 곁에 가면 <b>구출</b> · 3초 안에 같이 궁극기를 쓰면 <b>합동 궁극기</b> · 💬로 짧은 말 · 카드는 방장이 고름 · 리듬 결투는 쉼', 'div', 'cNote');
   box.append(friendEl); if (!($('frWin') && !$('frWin').classList.contains('hidden'))) Friend.render(friendEl);   // 친구 창이 열려 있으면 그쪽을 그대로
   box.append(lobbyEl);
-  if (!Lobby.on) Lobby.open(lobbyOpt); else Lobby.sync();
+  if (!Lobby.on && !Lobby.full) Lobby.open(lobbyOpt); else Lobby.sync();   // 0.67: 꽉 찼으면 「다시 들어가 보기」를 누를 때만
   Lobby.render(lobbyEl);
   return box;
 }

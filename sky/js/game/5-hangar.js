@@ -101,6 +101,13 @@ function renderHangar() {
     const b1 = document.createElement('button'); b1.className = 'main'; b1.textContent = '✨ 아이디 만들기'; b1.onclick = () => { A.sfx('click'); Cloud.toSignup(); };
     const b2 = document.createElement('button'); b2.textContent = '나중에'; b2.onclick = () => { S.guestAskAt = S.plays + 3; save(); A.sfx('click'); renderHangar(); };
     r.append(b1, b2); gc.append(r); $('modeInfo').append(gc);
+  } else if (!isHomeApp() && S.plays >= 2 && (S.homeAskAt || 0) <= S.plays) {   // 0.67: 두 판 이상 했으면 홈 화면 추가 권유(나중에 = 5판 뒤, 한 번 추가했으면 다시 안 물음)
+    const gc = document.createElement('div'); gc.className = 'guestAsk';
+    gc.innerHTML = '<b>📲 홈 화면에 볼트윙 놓기</b><br><small>홈 화면에 아이콘을 만들어 두면 링크를 찾지 않아도 앱처럼 바로 열려요. 화면도 더 넓게 써요.</small>';
+    const r = document.createElement('div'); r.className = 'gaRow';
+    const b1 = document.createElement('button'); b1.className = 'main'; b1.textContent = '📲 홈 화면에 추가'; b1.onclick = () => { A.sfx('click'); addHome(); };
+    const b2 = document.createElement('button'); b2.textContent = '나중에'; b2.onclick = () => { S.homeAskAt = S.plays + 5; save(); A.sfx('click'); renderHangar(); };
+    r.append(b1, b2); gc.append(r); $('modeInfo').append(gc);
   }
   if (selMode === 'dojo') {
     dojoLv = Math.min(dojoLv, S.dojo.open);

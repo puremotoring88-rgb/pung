@@ -166,6 +166,11 @@
   .logo small { display: block; font-size: calc(var(--u) * 3.2); opacity: .75; letter-spacing: .3em; margin-top: calc(var(--u) * 1); }
   .wallet { text-align: right; } .hgR { display: flex; align-items: center; }
   #fullBtn { margin-left: calc(var(--u) * 1.5); width: calc(var(--u) * 8); height: calc(var(--u) * 8); border-radius: calc(var(--u) * 2); border: 1px solid #2b3c56; background: rgba(12, 20, 34, .85); color: #dfe9f5; font-size: calc(var(--u) * 4); flex: none; }
+  #instBtn { margin-left: calc(var(--u) * 1.5); width: calc(var(--u) * 8); height: calc(var(--u) * 8); border-radius: calc(var(--u) * 2); border: 1px solid #4a7fc0; background: rgba(20, 50, 90, .85); color: #dfe9f5; font-size: calc(var(--u) * 4); flex: none; }
+  #homeHow { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.6); padding: 16px; }
+  #homeHow .hhIn { max-width: 420px; width: 100%; background: #0d1628; border: 1px solid #4a7fc0; border-radius: 16px; padding: 18px; color: #e8f0fa; display: flex; flex-direction: column; gap: 8px; }
+  #homeHow b { font-size: 1.15em; } #homeHow small { color: #9fb3c8; } #homeHow ol { margin: 4px 0; padding-left: 1.3em; line-height: 1.8; } #homeHow li b { font-size: 1em; color: #ffd166; }
+  #homeHow button { padding: 11px; border-radius: 12px; border: 0; font: inherit; font-weight: 700; color: #fff; background: rgba(255,255,255,.12); } #homeHow .hhOk { background: linear-gradient(135deg, #4aa8ff, #7c6bff); }
   #exitAsk { position: fixed; inset: 0; z-index: 9999; background: rgba(0, 0, 0, .6); display: flex; align-items: center; justify-content: center; }
   #exitAsk .exIn { background: #101b2c; border: 1px solid #3a5878; border-radius: 16px; padding: 22px; width: min(86vw, 340px); display: flex; flex-direction: column; gap: 12px; text-align: center; color: #dfe9f5; font-size: 16px; }
   #exitAsk b { font-size: 20px; } #exitAsk small { opacity: .8; line-height: 1.4; } #exitAsk .exIn div { display: flex; gap: 10px; }
@@ -531,7 +536,7 @@
   <div id="hangar" class="overlay">
     <header class="hgHead">
       <div class="logo"><b>BOLT<i>WING</i></b><small>볼트윙</small></div>
-      <div class="hgR"><div class="wallet"><span id="scrap">🔩 0</span><span id="bestTxt"></span></div><button id="fullBtn" title="전체 화면">⛶</button></div>
+      <div class="hgR"><div class="wallet"><span id="scrap">🔩 0</span><span id="bestTxt"></span></div><button id="instBtn" title="홈 화면에 추가">📲</button><button id="fullBtn" title="전체 화면">⛶</button></div>
     </header>
     <div id="me" class="meBar"></div>
     <div id="pilot" class="pilot"></div>
