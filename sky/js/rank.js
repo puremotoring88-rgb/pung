@@ -15,6 +15,7 @@ let S, save, sfx, ver = '', view = { mode: 'league', week: true }, cache = {};
 
 const gemOf = lv => GEMS.find(g => lv >= g[0]) || GEMS[GEMS.length - 1];
 const gem = lv => { const g = gemOf(lv); return `<i class="gem" style="--c:${g[2]}" title="${g[1]} (조종사 Lv ${lv})"></i>`; };
+const lvTag = lv => `<em class="lvTag">Lv ${Number(lv) || 1}</em>`;   // 0.70: 보석만으로는 뜻을 몰라서 레벨 숫자도
 const zoneIdx = (pos, total) => ZONES.findIndex(z => pos <= Math.ceil(total * z[0]));
 const zoneTag = (pos, total) => { const z = ZONES[zoneIdx(pos, total)]; return `<em class="zone" style="--c:${z[3]}">${z[1]} ${z[2]}</em>`; };
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -28,7 +29,7 @@ function rpc(fn, body) {
     .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.status === 204 ? null : r.json().catch(() => null); });
 }
 function init(o) {
-  S = o.S; save = o.save; sfx = o.sfx || (() => {}); ver = o.ver || ''; gift = o.gift || null;
+  S = o.S; save = o.save; sfx = o.sfx || (() => {}); ver = o.ver || ''; gift = o.gift || null; titleFn = o.title || null;
   S.rank = S.rank || {};
   if (!S.rank.dev) S.rank.dev = uuid();
   if (!S.nick || nickProblem(S.nick)) S.nick = '조종사' + ((Math.random() * 9000 + 1000) | 0);   // 처음엔 자동 별명, 언제든 바꿀 수 있다
@@ -41,7 +42,7 @@ const LEAGUE = [['🛩️', '훈련', '#b9c8dc'], ['🦅', '독수리', '#d08a4a
 const lgTag = t => { const L = LEAGUE[t] || LEAGUE[0]; return `<em class="zone" style="--c:${L[2]}">${L[0]} ${L[1]} 리그</em>`; };
 const noLg = e => /PGRST202|Could not find the function|does not exist/.test(String(e && e.message || e));   // 서버에 리그 함수가 아직 없을 때
 const lgCut = n => ({ up: n >= 5 ? Math.ceil(n * 0.2) : n >= 2 ? 1 : 0, down: n >= 5 ? Math.floor(n * 0.2) : 0 });
-let lg = null, gift = null;   // lg: 마지막으로 받은 내 리그 정보, gift: 지난주 결과를 받으면 부르는 게임 쪽 함수
+let lg = null, gift = null, titleFn = null;   // lg: 마지막으로 받은 내 리그 정보, gift: 지난주 결과를 받으면 부르는 게임 쪽 함수
 function lgGot(d) {   // 서버 답: 내 조 + (있으면) 받지 않은 지난주 결과
   if (!d) return d; lg = d; S.rank.lgTier = d.tier;
   if (d.result && gift) rpc('league_claim', { p_device: S.rank.dev }).then(r => { if (r) gift(r, LEAGUE); }).catch(() => {});
@@ -71,12 +72,12 @@ function leagueView(el, add, stat) {
     const rows = d.rows || [], m = lgMine(d), c = lgCut(rows.length);
     stat.innerHTML = `${lgTag(d.tier)} ${m ? `조 <b>${m.pos}위</b> / ${rows.length}명` : '이번 주는 아직 참가 전'} · ⏳ ${dd ? dd + '일 ' : ''}${hh}시간 남음`;
     if (!d.joined) { list.innerHTML = `<p class="note">이번 주에 한 판 하면 ${lgTag(d.tier)}의 조에 들어가요!</p>`; return; }
-    let html = '';
+    let html = '<div class="rkGap lgHead">⭐ = 이번 주에 판을 하며 모은 <b>주간 별</b> · Lv = 조종사 레벨</div>';   // 0.70
     rows.forEach((r, i) => {
       const pos = Number(r.pos), cls = pos <= c.up ? ' lgU' : c.down && pos > rows.length - c.down ? ' lgD' : '';
       if (i === c.up && c.up) html += '<div class="rkGap lgLine">⬆ 여기까지 승급</div>';
       if (c.down && pos === rows.length - c.down + 1) html += '<div class="rkGap lgLine down">⬇ 여기부터 강등</div>';
-      html += `<div class="rk${r.me ? ' me' : ''}${cls}"><span class="pos">${['🥇', '🥈', '🥉'][pos - 1] || pos}</span><span class="who">${gem(r.lv)}${esc(r.nick)}</span><b>⭐ ${Number(r.pts).toLocaleString()}</b></div>`;
+      html += `<div class="rk${r.me ? ' me' : ''}${cls}"><span class="pos">${['🥇', '🥈', '🥉'][pos - 1] || pos}</span><span class="who">${gem(r.lv)}${lvTag(r.lv)}${esc(r.nick)}</span><b>⭐ ${Number(r.pts).toLocaleString()}</b></div>`;
     });
     list.innerHTML = html;
   };
@@ -95,7 +96,7 @@ function after(mode, score, info, ok = true) {
   if (!ok || !box || !joined()) return;
   const line = document.createElement('div'); line.className = 'rankLine';
   line.textContent = '🏆 랭킹에 올리는 중…'; box.append(line);
-  rpc('submit_score', { p_device: S.rank.dev, p_mode: mode, p_score: Math.round(score), p_nick: S.nick, p_lv: S.pilot.lv, p_info: info, p_ver: ver })
+  rpc('submit_score', { p_device: S.rank.dev, p_mode: mode, p_score: Math.round(score), p_nick: S.nick, p_lv: S.pilot.lv, p_info: (titleFn && titleFn() ? `「${titleFn()}」 ` : "") + String(info || ""), p_ver: ver })
     .then(() => rpc('my_rank', { p_device: S.rank.dev, p_mode: mode, p_week: true }))
     .then(r => {
       cache = {};
@@ -147,7 +148,7 @@ function render(el) {
       const zi = zoneIdx(r.pos, r.total);
       if (prev && r.pos > prev + 1) html += '<div class="rkGap">⋯</div>';
       if (zi !== zPrev) { const z = ZONES[zi]; html += `<div class="rkZoneHead" style="--c:${z[3]}">${z[1]} ${z[2]} 구역</div>`; zPrev = zi; }
-      html += `<div class="rk${r.me ? ' me' : ''}"><span class="pos">${['🥇', '🥈', '🥉'][r.pos - 1] || r.pos}</span><span class="who">${gem(r.lv)}${esc(r.nick)}<small>${esc(r.info || '')}</small></span><b>${fmtScore(view.mode, r)}</b></div>`;
+      html += `<div class="rk${r.me ? ' me' : ''}"><span class="pos">${['🥇', '🥈', '🥉'][r.pos - 1] || r.pos}</span><span class="who">${gem(r.lv)}${lvTag(r.lv)}${esc(r.nick)}<small>${esc(r.info || '')}</small></span><b>${fmtScore(view.mode, r)}</b></div>`;
       prev = r.pos;
     }
     list.innerHTML = html;

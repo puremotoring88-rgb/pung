@@ -20,7 +20,7 @@ Forge.init({
 { const q = new URLSearchParams(location.search).get('room'); if (q) { selMode = 'coop'; joinCode = q.toUpperCase().slice(0, 5); } }   // 초대 링크로 들어오면
 Notice.init();   // 첫 화면의 한 줄·공지·편지
 try { const nn = localStorage.getItem('boltwing.newNick'); if (nn) { S.nick = nn; localStorage.removeItem('boltwing.newNick'); save(); } } catch (e) { /* 무시 */ }   // 0.57: 새 아이디를 만들 때 쓴 별명
-Rank.init({ S, save, sfx: n => A.sfx(n), ver: VERSION, gift: leagueGift });
+Rank.init({ S, save, sfx: n => A.sfx(n), ver: VERSION, gift: leagueGift, title: () => titleName() });
 // 로그인 문: 로그인하지 않았거나 어느 기록을 쓸지 고르는 중이면 첫 화면을 덮는다
 let gateJoin = !!(joinCode && selMode === 'coop');   // 초대 링크로 왔으면 로그인한 뒤에 방에 들어간다
 let gateWas = false;
