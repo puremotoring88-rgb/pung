@@ -37,7 +37,7 @@ function rpc(fn, body, keepalive) {
   return fetch(`${URL}/rest/v1/rpc/${fn}`, { method: 'POST', keepalive: !!keepalive, headers: { apikey: KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.status === 204 ? null : r.json().catch(() => null); });
 }
-const summary = o => `조종사 Lv ${(o.pilot && o.pilot.lv) || 1} · 스테이지 ${o.cleared || 0}까지 클리어 · 🔩${o.scrap || 0} · ${o.plays || 0}번 출격`;
+const summary = o => `조종사 Lv ${(o.pilot && o.pilot.lv) || 1}(경험치 ${Math.floor((o.pilot && o.pilot.xp) || 0)}) · 스테이지 ${o.cleared || 0}까지 클리어 · 🔩${o.scrap || 0} · ${o.plays || 0}번 출격`;
 const ui = () => { if (onUi) onUi(); };
 // 다른 기기에서 같은 아이디로 로그인하면 이 기기는 로그아웃된다(한 번에 한 기기). 이 기기 기록은 그대로 남는다.
 function kicked() { if (acct) lastId = acct.uid; acct = null; store(); msg = '다른 기기에서 이 아이디로 로그인해서 여기는 로그아웃됐어요. 이 기기의 기록은 남아 있어요. 여기서 이어 하려면 다시 로그인하세요.'; }
@@ -105,6 +105,16 @@ function apply(save, at) {   // 계정 기록으로 바꾸고 다시 연다
   acct.at = at; acct.dirty = false; acct.last = Date.now(); store();
   leaving = true; location.reload();
 }
+// 0.65 두 기록 중 어느 쪽이 앞섰는지: 출격 수·클리어·조종사 경험치가 모두 같거나 한쪽이 모두 앞서면 묻지 않는다.
+// 'cloud' = 계정 기록이 앞섬, 'local' = 이 기기가 앞서거나 같음(이 기기 것을 올린다), null = 서로 다른 데서 앞서 있어 직접 고름
+const prog = o => [o.plays || 0, o.cleared || 0, ((o.pilot && o.pilot.lv) || 1) * 1e6 + ((o.pilot && o.pilot.xp) || 0)];
+function decide(cloud, local) {
+  const a = prog(cloud || {}), b = prog(local || {});
+  const cAhead = a.some((v, i) => v > b[i]), lAhead = b.some((v, i) => v > a[i]);
+  if (cAhead && lAhead) return null;
+  return cAhead ? 'cloud' : 'local';
+}
+async function keepLocal(at) { acct.at = at; acct.dirty = true; store(); choose = null; await push(); }
 // 서버 기록과 맞춰 보기
 async function check(wasDirty) {
   if (!acct || busy) return;
@@ -115,8 +125,9 @@ async function check(wasDirty) {
     if (!r.save) { acct.at = null; acct.dirty = true; store(); await push(); return; }
     const same = r.save_at === acct.at || (acct.at && Math.abs(Date.parse(r.save_at) - Date.parse(acct.at)) < 1);
     if (!same) {   // 다른 기기에서 저장했다
-      const S = getS();
-      if (!localChanged || (!S.plays && !S.cleared)) { if (canReload()) apply(r.save, r.save_at); else { choose = { save: r.save, at: r.save_at }; ui(); } }
+      const S = getS(), d = decide(r.save, S);
+      if (!localChanged || (!S.plays && !S.cleared) || d === 'cloud') { if (canReload()) apply(r.save, r.save_at); else { choose = { save: r.save, at: r.save_at }; ui(); } }
+      else if (d === 'local') keepLocal(r.save_at);
       else { choose = { save: r.save, at: r.save_at }; ui(); }
     } else if (acct.dirty) await push();
   } catch (e) { msg = '☁️ ' + why(e); ui(); }
@@ -167,6 +178,9 @@ async function enter(kind, id, pw, keep, carry, nick) {
     const r = (await rpc('acct_load', { p_token: token }) || [])[0];
     if (!r || !r.save) { await push(); ui(); return; }
     if (!legacy) { apply(r.save, r.save_at); return; }   // 이 기기는 새것이면 바로 계정 기록으로
+    const d = decide(r.save, S);
+    if (d === 'cloud') { apply(r.save, r.save_at); return; }
+    if (d === 'local') { await keepLocal(r.save_at); ui(); return; }
     choose = { save: r.save, at: r.save_at }; ui();
   } catch (e) { msg = why(e); ui(); }
 }
@@ -235,9 +249,9 @@ function render(el) {
   el.innerHTML = '';
   const add = (html, cls = '', tag = 'div') => { const d = document.createElement(tag); if (cls) d.className = cls; d.innerHTML = html; el.append(d); return d; };
   const btn = (label, fn, cls = '') => { const b = document.createElement('button'); b.className = 'acBtn ' + cls; b.textContent = label; b.addEventListener('click', fn); return b; };
-  if (choose) {
+  if (choose) { const c0 = choose;
     add('<b>☁️ 어느 기록으로 이어 할까요?</b>', 'acHead');
-    add('다른 기기에서 저장한 기록과 이 기기의 기록이 달라요. 고르지 않은 쪽은 사라져요.', 'acNote');
+    add(`다른 기기에서 저장한 기록과 이 기기의 기록이 서로 다른 곳에서 앞서 있어요. 고르지 않은 쪽은 사라져요.${c0 && c0.at ? ` <small>(계정 기록 저장: ${new Date(c0.at).toLocaleString()})</small>` : ""}`, "acNote");
     const c = choose, S = getS();
     const r1 = add('', 'acRow'); r1.append(btn(`☁️ 계정 기록 쓰기 — ${summary(c.save)}`, () => apply(c.save, c.at), 'main wide'));
     const r2 = add('', 'acRow'); r2.append(btn(`📱 이 기기 기록으로 계정 덮어쓰기 — ${summary(S)}`, () => { acct.at = c.at; acct.dirty = true; store(); choose = null; push(); ui(); }, 'wide'));

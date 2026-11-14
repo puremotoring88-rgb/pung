@@ -406,7 +406,7 @@ function bossDown() {
   if (run.mode !== 'auto' || Math.random() < 0.25) drops.push({ kind: 'part', x, y, vy: 40, v: 1 });
   for (let i = 0; i < 10 + L(); i++) drops.push({ kind: 'scrap', x: x + rnd(-80, 80), y: y + rnd(-40, 40), vy: rnd(20, 90), v: run.mode === 'auto' ? 2 : 3 });
   run.score += 5000 * L();
-  if (run.mode !== 'auto') { const nc = run.mode === 'stage' && stageEnd(run.stage) === 'boss' ? 2 : 1; if (run.coop) run.teamCores = (run.teamCores || 0) + nc; else addCores(nc);   // 협동: 끝에 기여도대로 모두에게(coopShare) say(`💠 코어 +${nc}`, W / 2, H * 0.46, '#c58bff', 22, 2.2); }   // 0.63 한계 돌파 재료
+  if (run.mode !== 'auto') { const nc = run.mode === 'stage' && stageEnd(run.stage) === 'boss' ? 2 : 1; if (run.coop) run.teamCores = (run.teamCores || 0) + nc; else addCores(nc); say(`💠 코어 +${nc}`, W / 2, H * 0.46, '#c58bff', 22, 2.2); }   // 0.63 한계 돌파 재료. 협동이면 끝에 기여도대로 모두에게(coopShare)
   if (run.mode === 'auto') say('💰 ' + Forge.fmt(Forge.addGold(30 * Math.pow(1.17, run.stage - 1))), W / 2, H * 0.36, '#ffd166', 26, 1.8);
   if (!S.stats.bossSeen.includes(boss.idx)) S.stats.bossSeen.push(boss.idx);
   dcount('boss');
