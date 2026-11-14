@@ -427,7 +427,7 @@ function hzTick2(dt, Z) {
     if (b.t >= b.warn && !b.done) {
       b.done = true; flash = Math.max(flash, 0.35); A.sfx('beam'); shake = Math.max(shake, 5);
       if (alive && Math.hypot(P.x - b.x, P.y - b.y) < 44) hurtPlayer(run.d.dmg * 0.8);
-      for (const e of foes) if (!e.dead && e.type !== 'boss' && !e.civ && Math.hypot(e.x - b.x, e.y - b.y) < 50) hitFoe(e, 40);   // 적도 맞는다
+      for (const e of foes) if (!e.dead && e.type !== 'boss' && !e.civ && Math.hypot(e.x - b.x, e.y - b.y) < 50) hitFoe(e, 40, 'env');   // 적도 맞는다(누구 몫도 아님)
     }
   }
   Z.bolts = Z.bolts.filter(b => b.t < b.warn + 0.25);

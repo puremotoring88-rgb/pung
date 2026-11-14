@@ -146,6 +146,7 @@ function hitFoe(e, dmg, own) {
     if (dmg <= 0) return;
   }
   if (e.balloonT > 0) dmg *= 4;   // 풍선은 잘 터진다
+  if (run.coop && net && net.mode === 'host' && own !== 'env') { const k = own ? own.id : 'host'; run.dmgBy = run.dmgBy || {}; run.dmgBy[k] = (run.dmgBy[k] || 0) + Math.min(dmg, Math.max(0, e.hp)); }   // 0.64 협동 기여도: 실제로 깎은 체력
   e.hp -= dmg; e.flash = 0.06;
   if (S.dmgNum !== false && run.mode !== 'auto' && !Q.low) {   // 피해 숫자: 짧은 간격으로 모아서 띄운다
     e.dAcc = (e.dAcc || 0) + dmg;
@@ -697,7 +698,7 @@ function endOther(win) {   // 무한 생존·보스 러시·자동 출격의 결
   $('rStats').innerHTML = [
     `<div class="big">${run.score.toLocaleString()}<small>점</small></div>`, `<div>${rec}</div>`,
     `<div>처치 <b>${run.kills}</b> · 최고 콤보 <b>${run.maxCombo}</b> · 레벨 <b>${run.level}</b></div>`,
-    `<div>얻은 고철 🔩 <b>${run.scrapGot}</b>${run.coresGot ? ` · 💠 코어 <b>${run.coresGot}</b>` : ""}</div>`,
+    `<div>얻은 고철 🔩 <b>${run.scrapGot}</b>${run.coresGot ? ` · 💠 코어 <b>${run.coresGot}</b>` : ""}</div>`, run.share ? shareHtml(run.share.map(x => [x.id, x.name, x.pct, x.scrap, x.cores]), "host") : "",
     run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
     `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새로 열림: ${up.opened.join(', ')}</b>` : ''}</div>`,
   ].filter(Boolean).join('');
@@ -763,7 +764,7 @@ function endRun(win) {
     run.bossRank ? `<div>보스 랭크 <b class="gold">${run.bossRank}</b> · ${run.bossTime.toFixed(1)}초 · 맞은 횟수 ${run.hits - run.hitsAtBoss}${S.ranks && S.ranks[run.stage] ? ` · 최고 ${S.ranks[run.stage]}` : ''}</div>` : '',
     run.assist ? '<div>🛟 지원 출격으로 깼습니다(별 2·3과 S·A 랭크는 지원 없이 도전)</div>' : '',
     `<div>처치 <b>${run.kills}</b> · 최고 콤보 <b>${run.maxCombo}</b> · 레벨 <b>${run.level}</b></div>`,
-    `<div>얻은 고철 🔩 <b>${run.scrapGot}</b>${run.coresGot ? ` · 💠 코어 <b>${run.coresGot}</b>` : ""}${newStars ? ` + 새 별 보상 🔩 <b>${newStars * STAR_REWARD}</b>` : ''}</div>`,
+    `<div>얻은 고철 🔩 <b>${run.scrapGot}</b>${run.coresGot ? ` · 💠 코어 <b>${run.coresGot}</b>` : ""}${newStars ? ` + 새 별 보상 🔩 <b>${newStars * STAR_REWARD}</b>` : ''}</div>`, run.share ? shareHtml(run.share.map(x => [x.id, x.name, x.pct, x.scrap, x.cores]), "host") : "",
     newGear.length ? `<div class="gold">🎉 새로 열림: ${newGear.join(', ')}</div>` : '',
     run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
     opened.length ? `<div class="gold">🔓 새로 열림: ${opened.join(', ')}</div>` : '',

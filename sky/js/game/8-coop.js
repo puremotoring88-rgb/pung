@@ -30,8 +30,26 @@ function netBroadcast(m) { if (net && net.mode === 'host') for (const a of allie
 function netEndOnce(win) {
   if (!(net && net.mode === 'host' && run && run.coop) || run.netEnded) return;
   run.netEnded = true;
-  netBroadcast({ t: 'end', win, stage: run.stage, mode: run.mode, score: run.score, scrap: run.scrapGot, kills: run.kills, wave: run.wave, parts: allies.map(a => [a.id, a.parts || 0]) });
+  const sh = coopShare();
+  const me = sh.find(x => x.id === 'host');   // 방장: 판에서 주운 고철을 내 몫으로 바꾼다(기여도가 낮으면 줄 수도 있다)
+  S.scrap = Math.max(0, S.scrap + me.scrap - run.scrapGot); run.scrapGot = me.scrap;
+  if (me.cores) addCores(me.cores);
+  run.share = sh;
+  netBroadcast({ t: 'end', win, stage: run.stage, mode: run.mode, score: run.score, scrap: run.scrapGot, kills: run.kills, wave: run.wave, parts: allies.map(a => [a.id, a.parts || 0]),
+    sh: sh.map(x => [x.id, x.name, x.pct, x.scrap, x.cores]) });
 }
+// 0.64 함께 한 판의 보상: 모두 받고, 기여도(실제로 깎은 적 체력의 몫)에 따라 0.5배~ 더 받는다
+const COOP_RW = { base: 0.5 };   // 똑같이 나누는 부분. 나머지 0.5는 기여도대로(2명이 50:50이면 둘 다 1배, 70:30이면 1.2배·0.8배)
+function coopShare() {
+  const ppl = [{ id: 'host', name: myNick() }, ...allies.map(a => ({ id: a.id, name: a.name }))], n = ppl.length;
+  const D0 = run.dmgBy || {}, tot = ppl.reduce((s, p) => s + (D0[p.id] || 0), 0);
+  const pool = run.scrapGot, cores = run.teamCores || 0;
+  return ppl.map(p => {
+    const share = tot > 0 ? (D0[p.id] || 0) / tot : 1 / n, k = COOP_RW.base + (1 - COOP_RW.base) * n * share;
+    return { id: p.id, name: p.name, pct: Math.round(share * 100), k, scrap: Math.round(pool * k), cores: cores ? Math.max(1, Math.round(cores * k)) : 0 };
+  });
+}
+const shareHtml = (rows, myId) => rows && rows.length > 1 ? `<div class="coopShare"><b>🤝 기여도</b>${rows.map(r => `<span class="${r[0] === myId ? 'me' : ''}"><em>${esc(r[1])}</em><i><b style="width:${r[2]}%"></b></i>${r[2]}% · 🔩${r[3]}${r[4] ? ` 💠${r[4]}` : ''}</span>`).join('')}<small>모두 받고, 적을 많이 맞힌 만큼 더 받아요.</small></div>` : '';
 const roster = () => [{ name: myNick(), host: true }, ...allies.map(a => ({ name: a.name }))];
 // 0.61 휴대폰에서 카톡 등 다른 앱에 다녀오면 브라우저가 게임을 잠재우고 연결 서버와의 줄이 끊긴다 → 방을 닫지 않고 같은 코드로 다시 잇는다
 const PEER_SOFT = ['network', 'socket-error', 'socket-closed', 'server-error', 'disconnected'];
@@ -402,14 +420,15 @@ function guestEnd(m) {
   state = 'result'; $('hud').classList.add('hidden'); $('pause').classList.add('hidden');
   const mine = (m.parts.find(p => p[0] === net.myId) || [0, 0])[1];
   for (let i = 0; i < mine; i++) grantPart();
-  S.scrap += m.scrap; S.coop = (S.coop || 0) + 1;
+  const my = (m.sh || []).find(x => x[0] === net.myId), myScrap = my ? my[3] : m.scrap, myCores = my ? my[4] : 0;   // 0.64 기여도대로 받은 내 몫
+  S.scrap += myScrap; if (myCores) addCores(myCores); S.coop = (S.coop || 0) + 1;
   const pxp = Math.round(m.score / 600 + m.kills * 0.35 + (m.win ? 25 : 0)), up = gainPilotXp(pxp);
   save(); rawSfx(m.win ? 'clear' : 'fail'); rawMusic('hangar', 0);
   $('rTitle').innerHTML = m.mode === 'endless' ? `<small>함께 · 무한 생존</small>WAVE ${m.wave}` : `<small>함께 · STAGE ${stLabel(m.stage)}</small>${m.win ? '클리어!' : '모두 격추'}`;
   $('rTitle').className = m.win ? 'win' : 'lose';
   $('rStars').innerHTML = '';
   $('rStats').innerHTML = [`<div class="big">${m.score.toLocaleString()}<small>점(팀)</small></div>`, `<div>팀 처치 <b>${m.kills}</b></div>`,
-    `<div>받은 고철 🔩 <b>${m.scrap}</b> (팀이 모은 만큼 모두 받아요)</div>`, run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
+    `<div>받은 고철 🔩 <b>${myScrap}</b>${myCores ? ` · 💠 코어 <b>${myCores}</b>` : ''}</div>`, shareHtml(m.sh, net.myId), run.partsGot.length ? `<div class="gold">새 부품: ${run.partsGot.join(', ')}</div>` : '',
     `<div>조종사 경험치 +${pxp} · Lv ${S.pilot.lv} ${rankName(S.pilot.lv)}${up.ups ? ` <b class="gold">승급! 🔩+${up.reward}</b>` : ''}${up.opened && up.opened.length ? `<br><b class="gold">🔓 새로 열림: ${up.opened.join(', ')}</b>` : ''}</div>`,
     '<div class="rules">스테이지 별과 랭크는 혼자 할 때 기록됩니다. 방장이 다시 출격하면 자동으로 함께 시작해요.</div>'].filter(Boolean).join('');
   const btns = $('rBtns'); btns.innerHTML = '';
