@@ -295,6 +295,7 @@ function renderHangar() {
   $('musicBtn').textContent = S.music ? '🎵 음악' : '🎵 꺼짐';
   $('sfxBtn').textContent = S.sfx ? '🔊 효과음' : '🔇 꺼짐';
   $('vibBtn').textContent = S.vib ? '📳 진동' : '📴 꺼짐';
+  $('duelBtn').textContent = S.noDuel ? '🎵 리듬 결투 끔' : '🎵 판 중간 리듬 결투'; $('duelBtn').classList.toggle('off', !!S.noDuel);
   $('shakeBtn').textContent = S.noShake ? '🫨 흔들림 끔' : '🫨 화면 흔들림'; $('shakeBtn').classList.toggle('off', !!S.noShake);
   ['musicBtn', 'sfxBtn', 'vibBtn'].forEach((id, i) => $(id).classList.toggle('off', ![S.music, S.sfx, S.vib][i]));
 }

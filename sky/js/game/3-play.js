@@ -137,7 +137,7 @@ function drawBlades() {
   }
 }
 function hitFoe(e, dmg, own) {
-  if (e.civ) { if (!e.dead && !e.gone) civHit(e, dmg); return; }   // 쏘면 안 되는 민간 비행체
+  if (e.civ) { if (!e.ghost && !e.dead && !e.gone) civHit(e, dmg); return; }   // 쏘면 안 되는 민간 비행체
   if (e.shield) { if (!(e.shT > 0)) { e.shT = 0.25; ringFx(e.x, e.y + 30, 50, '#9fd8ff'); } return; }   // 거울 방패: 그동안 무적
   if (e.inv || e.dead || e.gone) return;
   if (e.sh > 0) {
@@ -492,7 +492,7 @@ function update(dt) {
       if (w !== run.wave) { run.wave = w; run.d = diffFor(1 + (w - 1) * 0.6); run.stage = Math.min(9, 1 + (w / 2 | 0)); run.banner = { kind: 'stage', title: `WAVE ${w}`, sub: '더 세게 몰려온다!', t: 0, life: 1.8 }; A.sfx('rush'); }
       if (!run.rushDone && run.t >= run.rushAt) { /* 아래에서 처리 */ }
       if (run.t >= run.nextBoss && !run.rush) { run.phase = 'warning'; run.warnT = 3; A.sfx('warning'); buzz([200, 100, 200]); }
-      if (run.rushDone && run.t > run.rushAt + 80) { run.rushDone = false; run.rushAt = run.t + rnd(10, 25); }   // 리듬 결투가 가끔 다시 온다
+      if (run.rushDone && !S.noDuel && run.t > run.rushAt + DUEL.again) { run.rushDone = false; run.rushAt = run.t + rnd(10, 25); }   // 리듬 결투가 가끔 다시 온다
       if (!run.gateAt && !run.gates && run.t > (run.gateLast || 0) + 100) run.gateAt = run.t + 5;
       if (!run.treasureAt && run.t > (run.treasureLast || 0) + 120) run.treasureAt = run.t + 10;
     }
@@ -529,7 +529,7 @@ function update(dt) {
     if (s.eraser) ebul = ebul.filter(b => b.net || Math.hypot(b.x - s.x, b.y - s.y) > s.r + 12);   // 중간 스킬 표창은 닿는 탄을 지운다
     if (!s.orb && (offView(s.x, s.y, run.arena ? 160 : 40) || s.t > 4)) { s.dead = true; continue; }
     for (const e of foes) {
-      if (e.dead || e.inv || s.hits.includes(e)) continue;
+      if (e.dead || e.inv || e.ghost || s.hits.includes(e)) continue;   // 0.75 여객기(ghost)는 탄이 그냥 지나간다
       if (Math.hypot(e.x - s.x, e.y - s.y) > e.r + s.r) continue;
       if (e.shield) {   // 거울 방패: 탄이 되돌아온다(절반만, 느리게)
         if (Math.random() < 0.5) eShot(s.x, s.y, angTo({ x: s.x, y: s.y }), 170, { color: '#9fc8ff', r: 6 });

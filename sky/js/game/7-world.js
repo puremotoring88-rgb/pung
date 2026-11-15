@@ -555,10 +555,10 @@ function hzStart(kind) {
     const n = hzLv() >= 6 ? 2 : 1;
     for (let i = 0; i < n; i++) addFoe('ddrone', rnd(70, W - 70), -40 - i * 140, { civ: true, harmless: true, r: 20, hp: 1, maxHp: 1, vy: 105, vx: 0, ph: rnd(0, TAU), hits: 0 });
     say(first ? '🚁 배달 드론! 쏘지 말고 비켜 주세요' : '🚁 배달 드론 지나갑니다', W / 2, H * 0.36, '#bff5c8', 22, 1.8);
-  } else if (kind === 'liner') {
-    addFoe('liner', rnd(110, W - 110), -120, { civ: true, harmless: true, r: 50, hp: 1, maxHp: 1, vy: 95, vx: 0, hits: 0, warnT: 0 });
-    say('✈️ 민간 여객기 통과 중! 쏘면 안 돼요', W / 2, H * 0.36, '#ffffff', 24, 2);
-    A.sfx('warning');
+  } else if (kind === 'liner') {   // 0.75: 높은 하늘을 지나가는 배경 손님. 탄이 그냥 지나가고 벌점 없음, 반쯤 비침
+    if (Math.random() < 0.5) return;
+    addFoe('liner', rnd(110, W - 110), -120, { civ: true, harmless: true, ghost: true, r: 50, hp: 1, maxHp: 1, vy: 110, vx: 0, hits: 0, warnT: 0 });
+    say('✈️ 높은 하늘로 여객기가 지나가요', W / 2, H * 0.36, '#ffffff', 20, 1.6);
   }
 }
 function civAI(e, dt) {
@@ -569,8 +569,7 @@ function civAI(e, dt) {
     e.gone = true;
     if (e.type === 'ddrone' && !e.broke) { say('📦 배달 완료! 고철 +2', clamp(e.x, 90, W - 90), H - 120, '#9dffcf', 18, 1.4); gainScrap(2); }
     if (e.type === 'liner') {
-      if (e.hits <= 3) { say('✈️ 승객 모두 무사! 고철 +5', W / 2, H * 0.4, '#9dffcf', 22, 1.8); gainScrap(5); run.score += 500 * L(); }
-      else say('✈️ 여객기가 겨우 빠져나갔다…', W / 2, H * 0.4, '#c9d2dc', 20, 1.6);
+      say('✈️ 손 흔들어 주는 승객들 👋', W / 2, H * 0.4, '#cfe0f5', 18, 1.4);
     }
   }
 }
@@ -587,7 +586,7 @@ function civHit(e, dmg) {   // 쏘면 벌점(점수 깎이고 콤보가 끊긴�
   }
 }
 function drawCiv(e) {
-  ctx.save(); ctx.translate(e.x, e.y);
+  ctx.save(); ctx.translate(e.x, e.y); if (e.ghost) ctx.globalAlpha = 0.5;
   if (hasGround()) { ctx.save(); ctx.translate(e.type === 'liner' ? 40 : 16, e.type === 'liner' ? 60 : 26); ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(0, 0, e.type === 'liner' ? 70 : 20, e.type === 'liner' ? 22 : 10, 0, 0, TAU); ctx.fill(); ctx.restore(); }
   const cim = IMG['civ-' + e.type];
   if (cim) {
