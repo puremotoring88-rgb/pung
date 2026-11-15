@@ -558,13 +558,19 @@ function hzStart(kind) {
   } else if (kind === 'liner') {   // 0.75: 높은 하늘을 지나가는 배경 손님. 탄이 그냥 지나가고 벌점 없음, 반쯤 비침
     if (Math.random() < 0.5) return;
     addFoe('liner', rnd(110, W - 110), -120, { civ: true, harmless: true, ghost: true, r: 50, hp: 1, maxHp: 1, vy: 110, vx: 0, hits: 0, warnT: 0 });
-    say('✈️ 높은 하늘로 여객기가 지나가요', W / 2, H * 0.36, '#ffffff', 20, 1.6);
+    say('✈️ 여객기가 지나가요 — 보급품을 기다려 봐요', W / 2, H * 0.36, '#ffffff', 20, 1.6);
   }
 }
 function civAI(e, dt) {
   e.t += dt;
   if (e.type === 'ddrone') { e.y += e.vy * dt; e.x += Math.sin(e.t * 1.8 + e.ph) * 50 * dt; }
   else { e.y += e.vy * dt; if (e.warnT > 0) e.warnT -= dt; }
+  if (e.type === 'liner' && !e.gift && e.y > H * 0.28) {   // 0.78 여객기: 지나가며 승객들이 보급품을 떨어뜨린다
+    e.gift = true;
+    for (let i = 0; i < 3; i++) drops.push({ kind: 'scrap', x: e.x + rnd(-50, 50), y: e.y + 30, vy: 45, v: 3 });
+    const r = Math.random(); if (r < 0.45) drops.push({ kind: 'heart', x: e.x + rnd(-40, 40), y: e.y + 40, vy: 45, v: 20 }); else if (r < 0.9) dropUp(e.x + rnd(-40, 40), e.y + 40);
+    say('🪂 승객들이 보급품을 던져 줬어요!', W / 2, H * 0.36, '#9dffcf', 20, 1.8); A.sfx('part');
+  }
   if (e.y > H + 90) {   // 무사히 지나갔다
     e.gone = true;
     if (e.type === 'ddrone' && !e.broke) { say('📦 배달 완료! 고철 +2', clamp(e.x, 90, W - 90), H - 120, '#9dffcf', 18, 1.4); gainScrap(2); }

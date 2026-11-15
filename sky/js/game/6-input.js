@@ -533,7 +533,7 @@ const SENS = [[1.3, '보통'], [1.7, '빠르게'], [2.2, '아주 빠르게']];
 const UPGR = {
   dmg: { icon: '⚔️', c: '#ff8a5e', w: 3, txt: '화력 +6%', on: () => { run.m.dmg += 0.06; } },
   rate: { icon: '⚡', c: '#ffe066', w: 3, txt: '연사 +6%', on: () => { run.m.rate += 0.06; } },
-  speed: { icon: '👟', c: '#7fd8ff', w: 1.4, txt: '속도 +4%', on: () => { run.m.speed += 0.04; } },
+  guard: { icon: '🛡️', c: '#9fd0ff', w: 1.4, txt: '받는 피해 -3%', on: () => { run.m.guard = Math.min(0.3, (run.m.guard || 0) + 0.03); } },   // 0.78: 👟 속도 +4%는 끌기 조작에서 거의 느껴지지 않아 바꿈(한 판 최대 -30%, 함께 하면 모두)
   magnet: { icon: '🌀', c: '#c9b6ff', w: 1, txt: '줍는 거리 +15%', on: () => { run.m.magnet += 0.15; } },
   multi: { icon: '🔱', c: '#9dffcf', w: 0.6, txt: '탄 +1', on: () => { run.m.multi += 1; run.upMulti = (run.upMulti || 0) + 1; } },
 };

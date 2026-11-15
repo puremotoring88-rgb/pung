@@ -144,7 +144,7 @@ function coopBegin() {
 function allyHurt(a, dmg) {
   if (SKY.god || a.inv > 0 || a.down > 0 || run.phase === 'dead' || run.phase === 'clear') return;
   if (a.orb) { a.orb = 0; a.inv = 0.8; ringFx(a.x, a.y, 46, ITEMS.orb.c); return; }
-  a.hp -= dmg * (run.dmgTaken || 1); a.inv = 1.1;
+  a.hp -= dmg * (run.dmgTaken || 1) * (1 - (run.m.guard || 0)); a.inv = 1.1;
   spark(a.x, a.y, 14, '#ff6b6b', 240, 0.45, 3);
   if (a.hp <= 0) {
     a.hp = 0; a.down = DOWN_T; a.wx = a.x; a.wy = a.y; a.resc = 0;

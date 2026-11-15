@@ -203,7 +203,7 @@ function hurtPlayer(dmg) {
     return;
   }
   if (P.orb) { P.orb = 0; P.inv = 0.8; A.sfx('barrier'); ringFx(P.x, P.y, 46, ITEMS.orb.c); say('🛡️ 막았다!', P.x, P.y - 50, ITEMS.orb.c, 18, 0.9); return; }
-  P.hp -= dmg * (run.dmgTaken || 1); P.inv = st.invT; run.hits++; run.hurtT = 0.6;
+  P.hp -= dmg * (run.dmgTaken || 1) * (1 - (run.m.guard || 0)); P.inv = st.invT; run.hits++; run.hurtT = 0.6;
   if (run.combo >= 10) say('콤보 끊김', P.x, P.y - 60, '#ff9a9a', 20, 1);
   run.combo = 0;
   shake = Math.max(shake, 0.5);
