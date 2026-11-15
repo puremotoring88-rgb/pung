@@ -5,7 +5,7 @@ window.Rank = (() => {
 'use strict';
 const URL = 'https://karluttarljwyutztbgx.supabase.co';
 const KEY = 'sb_publishable_oT_Z6aYJ3uDZxcJeF3ArIA_4ivykkte';   // 공개용 열쇠(누구나 봐도 되는 키)
-const MODES = [['league', '🏅 주간 리그'], ['stage', '🗺️ 스테이지'], ['endless', '♾️ 무한 생존'], ['rush', '👑 보스 러시'], ['dojo', '🎵 리듬 도장']];
+const MODES = [['league', '🏅 주간 리그'], ['stage', '🗺️ 스테이지'], ['endless', '♾️ 무한 생존'], ['rush', '👑 보스 러시'], ['rift', '🌌 차원 균열'], ['dojo', '🎵 리듬 도장']];
 // 이름 앞 보석: 조종사 계급(Lv)이 오를수록 귀한 보석
 const GEMS = [[40, '다이아', '#bff6ff'], [30, '루비', '#ff4d6d'], [20, '사파이어', '#4c9bff'], [15, '에메랄드', '#3fe39a'], [10, '금', '#ffd166'], [6, '은', '#dfe7f2'], [3, '동', '#d08a4a'], [1, '강철', '#8f9aa8']];
 // 구역: 순위가 높을수록 더 높은 하늘. 상위 몇 %인지로 정해서, 사람이 많아져도 누구나 자기 구역이 있다

@@ -420,9 +420,9 @@ function drawBalloon(e) {
 
 // ---------- 격납고 꾸미기: 도색·엔진 불꽃·꼬리·스티커 ----------
 const LOOKS = {
-  paint: { name: '🎨 도색', list: [['none', '기본', null, 0], ['red', '빨강', '#ff4d4d', 40], ['orange', '주황', '#ff9a3c', 40], ['yellow', '노랑', '#ffd93c', 40], ['green', '초록', '#3fe37a', 40], ['sky', '하늘', '#4cc9ff', 40], ['navy', '남색', '#4c6bff', 60], ['violet', '보라', '#b46bff', 60], ['pink', '분홍', '#ff7ad9', 60], ['silver', '은빛', '#9aa6b4', 80], ['night', '먹물', '#2a2f3a', 100, 8], ['gold', '황금', '#ffc83a', -1, 15]] },
-  flame: { name: '🔥 엔진 불꽃', list: [['none', '기본', null, 0], ['blue', '파랑', '#4cc9ff', 30], ['green', '초록', '#4dff9e', 30], ['violet', '보라', '#c58bff', 40], ['pink', '분홍', '#ff7ad9', 40], ['white', '하양', '#ffffff', 50], ['rainbow', '무지개', 'rainbow', 150, 10], ['plasma', '플라스마', '#38ffe0', -1, 20]] },
-  trail: { name: '✨ 꼬리', list: [['none', '없음', null, 0], ['smoke', '연기', 'smoke', 40], ['star', '별가루', '✦', 60], ['heart', '하트', '♥', 60], ['note', '음표', '♪', 60], ['petal', '꽃잎', '❀', 80, 5], ['rainbow', '무지개', 'rainbow', 160, 12], ['comet', '혜성', '☄', -1, 25]] },
+  paint: { name: '🎨 도색', list: [['none', '기본', null, 0], ['red', '빨강', '#ff4d4d', 40], ['orange', '주황', '#ff9a3c', 40], ['yellow', '노랑', '#ffd93c', 40], ['green', '초록', '#3fe37a', 40], ['sky', '하늘', '#4cc9ff', 40], ['navy', '남색', '#4c6bff', 60], ['violet', '보라', '#b46bff', 60], ['pink', '분홍', '#ff7ad9', 60], ['silver', '은빛', '#9aa6b4', 80], ['night', '먹물', '#2a2f3a', 100, 8], ['gold', '황금', '#ffc83a', -1, 15], ['void', '차원', '#7b4dff', -1, 0, '🌌 균열 10층']] },
+  flame: { name: '🔥 엔진 불꽃', list: [['none', '기본', null, 0], ['blue', '파랑', '#4cc9ff', 30], ['green', '초록', '#4dff9e', 30], ['violet', '보라', '#c58bff', 40], ['pink', '분홍', '#ff7ad9', 40], ['white', '하양', '#ffffff', 50], ['rainbow', '무지개', 'rainbow', 150, 10], ['plasma', '플라스마', '#38ffe0', -1, 20], ['void', '공허', '#b06bff', -1, 0, '🌌 균열 25층']] },
+  trail: { name: '✨ 꼬리', list: [['none', '없음', null, 0], ['smoke', '연기', 'smoke', 40], ['star', '별가루', '✦', 60], ['heart', '하트', '♥', 60], ['note', '음표', '♪', 60], ['petal', '꽃잎', '❀', 80, 5], ['rainbow', '무지개', 'rainbow', 160, 12], ['comet', '혜성', '☄', -1, 25], ['rift', '균열', '✧', -1, 0, '🌌 균열 15층']] },
   decal: { name: '🏷️ 스티커', list: [['none', '없음', null, 0], ['star', '별', '⭐', 30], ['bolt', '번개', '⚡', 30], ['heart', '하트', '❤️', 30], ['fire', '불꽃', '🔥', 40], ['flower', '꽃', '🌸', 40], ['cat', '고양이', '🐱', 60], ['crown', '왕관', '👑', 120, 15], ['dragon', '용', '🐉', -1, 30]] },
 };
 const lookOf = (cat, id) => LOOKS[cat].list.find(x => x[0] === id) || LOOKS[cat].list[0];
@@ -504,7 +504,7 @@ function renderLook(el) {
       const [id, name, val, cost, lv] = it, key = cat + ':' + id, own = !cost || S.owned[key], on = (S.look[cat] || 'none') === id, can = lookCanBuy(cat, it), trying = !!lookTry && lookTry.cat === cat && lookTry.id === id;
       const b = document.createElement('button'); b.className = 'lkItem' + (on ? ' on' : '') + (own ? '' : ' lock') + (trying ? ' try' : '');
       const sw = cat === 'paint' ? `<i style="background:${val || frameOf(S.frame).color}"></i>` : cat === 'flame' ? `<i style="background:${val === 'rainbow' ? 'linear-gradient(90deg,#f55,#fd5,#5f8,#5cf,#c5f)' : val || frameOf(S.frame).color}"></i>` : `<em>${val === 'smoke' ? '☁' : val === 'rainbow' ? '🌈' : val || '－'}</em>`;
-      b.innerHTML = `${sw}<span>${name}</span><small>${trying ? '👀 보는 중' : on ? '사용 중' : own ? '고르기' : cost < 0 ? `🎁 Lv ${lv}` : !can ? `🔒 Lv ${lv}` : `🔩 ${cost}`}</small>`;
+      b.innerHTML = `${sw}<span>${name}</span><small>${trying ? '👀 보는 중' : on ? '사용 중' : own ? '고르기' : cost < 0 ? (it[5] || `🎁 Lv ${lv}`) : !can ? `🔒 Lv ${lv}` : `🔩 ${cost}`}</small>`;
       b.addEventListener('click', () => {
         A.sfx('click');
         if (!own) { lookTry = { cat, id }; renderHangar(); return; }   // 안 산 것은 입혀 보기만

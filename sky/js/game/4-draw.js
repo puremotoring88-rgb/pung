@@ -507,14 +507,14 @@ function drawHud() {
   const cx = 140, cw = W - 300;
   if (run.keeper) drawKeeperHud();
   else if (run.phase === 'waves') {
-    const prog = run.mode === 'endless' ? 1 - (run.nextBoss - run.t) / 90 : run.t / run.waveDur;
+    const prog = run.mode === 'endless' ? 1 - (run.nextBoss - run.t) / 90 : run.mode === 'rift' ? (run.t - run.floorT0) / RIFT.waves : run.t / run.waveDur;
     segBar(cx, 26, cw, 9, prog, '#3f7dd6', '#9fd0ff', 10);
-    if (isFinite(run.waveDur)) {   // 이번 판에 올 일: ⑂ 갈림길, ♪ 리듬 결투, ★ 황금 수송선
+    if (isFinite(run.waveDur) && run.mode !== 'rift') {   // 이번 판에 올 일: ⑂ 갈림길, ♪ 리듬 결투, ★ 황금 수송선
       const mark = (t0, s, c) => { if (t0) txt(s, cx + cw * Math.min(1, t0 / run.waveDur), 22, 13, c, 'center', 900); };
       if (!run.rushDone) mark(run.rushAt, '♪', '#ff7ad9');
       mark(run.gateAt, '⑂', '#9dffcf'); mark(run.treasureAt, '★', '#ffd166');
     }
-    txt(run.arena ? '대장까지' : run.mode === 'stage' ? { boss: '챕터 보스까지', scout: '보스 선발대까지', leader: '정예 편대까지' }[stageEnd(run.stage)] : '보스까지', W / 2, 54, 12, '#cfe0f5', 'center', 700);
+    txt(run.arena ? '대장까지' : run.mode === 'stage' ? { boss: '챕터 보스까지', scout: '보스 선발대까지', leader: '정예 편대까지' }[stageEnd(run.stage)] : run.mode === 'rift' ? `🌌 ${run.rift.floor}층 보스까지` : '보스까지', W / 2, 54, 12, '#cfe0f5', 'center', 700);
   } else if (run.phase === 'warning') txt('⚠ WARNING ⚠', W / 2, 46, 24, Math.floor(T * 6) % 2 ? '#ff4d4d' : '#ffd166', 'center', 900);
   else if (run.leaderE && !run.leaderE.dead) { const e = run.leaderE; segBar(cx - 4, 24, cw + 8, 12, e.hp / e.maxHp, '#ff3d5a', '#ff9a6b', 10); txt('정예 편대 대장', W / 2, 56, 13, '#ffd0d0', 'center', 800); }
   else if (boss) {
@@ -557,10 +557,10 @@ function drawHud() {
   const b = run.banner;
   if (b) {
     const inK = clamp(b.t / 0.3, 0, 1), outK = clamp((b.life - b.t) / 0.4, 0, 1), k = Math.min(inK, outK);
-    const y = b.kind === 'ult' ? H * 0.6 : b.kind === 'trap' ? H * 0.46 : H * 0.36, h = b.kind === 'boss' ? 130 : b.kind === 'chapter' ? 176 : 96;
+    const y = b.kind === 'ult' ? H * 0.6 : b.kind === 'trap' ? H * 0.46 : H * 0.36, h = b.kind === 'boss' ? 130 : b.kind === 'chapter' || b.kind === 'rift' ? 176 : 96;
     ctx.save(); ctx.globalAlpha = k;
     const g = ctx.createLinearGradient(0, 0, W, 0);
-    const c = { boss: '120,10,20', ult: '90,60,0', rush: '90,10,90', trap: '10,70,70', chapter: '6,14,40' }[b.kind] || '10,30,70';
+    const c = { boss: '120,10,20', ult: '90,60,0', rush: '90,10,90', trap: '10,70,70', chapter: '6,14,40', rift: '45,12,90' }[b.kind] || '10,30,70';
     g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(0.2, `rgba(${c},.85)`); g.addColorStop(0.8, `rgba(${c},.85)`); g.addColorStop(1, `rgba(${c},0)`);
     ctx.fillStyle = g; ctx.fillRect(0, y - h / 2, W, h);
     if (b.kind === 'boss') {   // 경고 줄무늬
@@ -575,7 +575,11 @@ function drawHud() {
       ctx.fillStyle = 'rgba(255,209,102,.9)'; const lw = Math.min(1, b.t / 0.8) * W * 0.36; ctx.fillRect(W / 2 - lw, y - h / 2 + 6, lw * 2, 2); ctx.fillRect(W / 2 - lw, y + h / 2 - 8, lw * 2, 2);
       txt(`CHAPTER ${b.ch}`, W / 2 - slide, y - 40, 18, '#ffd166', 'center', 800);
     }
-    txt(b.title, W / 2 + slide, y + (b.sub ? 4 : 14), b.kind === 'stage' || b.kind === 'rush' || b.kind === 'chapter' ? 44 : 34, col, 'center', 900);
+    if (b.kind === 'rift') {   // 0.73 균열 층 카드: 보랏빛 선과 「DIMENSION RIFT」
+      ctx.fillStyle = 'rgba(197,139,255,.9)'; const lw = Math.min(1, b.t / 0.8) * W * 0.36; ctx.fillRect(W / 2 - lw, y - h / 2 + 6, lw * 2, 2); ctx.fillRect(W / 2 - lw, y + h / 2 - 8, lw * 2, 2);
+      txt('🌌 DIMENSION RIFT', W / 2 - slide, y - 40, 18, '#d9b8ff', 'center', 800);
+    }
+    txt(b.title, W / 2 + slide, y + (b.sub ? 4 : 14), b.kind === 'stage' || b.kind === 'rush' || b.kind === 'chapter' || b.kind === 'rift' ? 44 : 34, col, 'center', 900);
     if (b.sub) txt(b.sub, W / 2 - slide, y + 32, 15, '#e8eef7', 'center', 600);
     ctx.restore();
   }
@@ -632,6 +636,7 @@ function draw() {
   drawNums(); drawTut();
   ctx.restore();
   ctx.restore();
+  drawRiftFx();   // 0.73 🌌 차원 균열
   if (flash > 0) { ctx.fillStyle = `rgba(255,250,235,${flash * 0.6})`; ctx.fillRect(0, 0, W, H); }
   drawHud();
   updateUltBtn();

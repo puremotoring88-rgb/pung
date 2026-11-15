@@ -26,7 +26,7 @@ function say(text, x, y, color, size = 22, life = 1.2) { if (run && run.arena &&
 function addFoe(type, x, y, o) {
   const E = D.ENEMIES[type] || { hp: 1, r: 22, xp: 0, score: 30 }, hp = E.hp * run.d.hp * foeK() * (run.teamK || 1);   // 함께 하면 적이 튼튼해진다, 판 안에서 세진 만큼도
   const e = Object.assign({ nid: ++foeSeq, type, x, y, vx: 0, vy: 0, r: E.r, hp, maxHp: hp, t: 0, fireT: rnd(0.6, 1.6), flash: 0, xp: E.xp, score: E.score, elite: !!E.elite }, o);
-  const ec = run.dangerT > 0 ? 0.45 : L() >= 3 ? Math.min(0.3, 0.04 + 0.025 * L()) : 0;
+  const ec = (run.dangerT > 0 ? 0.45 : L() >= 3 ? Math.min(0.3, 0.04 + 0.025 * L()) : 0) + (run.mut && run.mut.elite ? 0.25 : 0);   // 🌌 균열 변이 「정예 무리」
   if (type !== 'treasure' && !e.harmless && Math.random() < ec) {   // 정예: 방패(먼저 깎아야 함), 쾌속(빠름), 폭발(부서지면 탄을 뿌림)
     e.mod = pick(['shield', 'swift', 'volatile']); e.xp = Math.ceil(e.xp * 1.5) + 1; e.score *= 2;
     if (e.mod === 'shield') e.sh = e.maxHp * 0.7;
@@ -154,9 +154,9 @@ function foeAI(e, dt) {
 
 // ---------- 보스 ----------
 function spawnBoss() {
-  const idx = run.mode === 'rush' ? run.bossIdx : run.mode === 'endless' ? run.bossCount % 5 : run.mode === 'stage' ? stageBossIdx(run.stage) : (run.stage - 1) % 5, def = D.BOSSES[idx];
+  const idx = run.mode === 'rift' ? run.riftBoss : run.mode === 'rush' ? run.bossIdx : run.mode === 'endless' ? run.bossCount % 5 : run.mode === 'stage' ? stageBossIdx(run.stage) : (run.stage - 1) % 5, def = D.BOSSES[idx];
   const scout = run.mode === 'stage' && stageEnd(run.stage) === 'scout';   // 보스 선발대: 다음 챕터 보스를 미리 만난다(체력 절반)
-  const hp = def.hp * run.d.hp * foeK(true) * (1 + 0.15 * run.loop) * (run.mode === 'auto' ? 0.35 : 1) * (run.teamK || 1) * (scout ? 0.5 : 1);
+  const hp = def.hp * run.d.hp * foeK(true) * (1 + 0.15 * run.loop) * (run.mode === 'auto' ? 0.35 : 1) * (run.teamK || 1) * (scout ? 0.5 : 1) * (run.mode === 'rift' ? RIFT.bossK * (run.mut.rage ? 1.3 : 1) : 1);   // 🌌 균열 보스는 층이 많아 조금 가볍게, 「분노한 보스」면 +30%
   boss = { def, idx, t: 0, x: W / 2, y: -170, entering: true, tm: {}, parts: [], spin: 0, inhale: 0, mirror: 0, stream: 0, tx: W / 2, slash: 0 };
   const lay = { spider: [[0, 70]], whale: [[0, 90]], twins: [[-135, 56], [135, 56]], knight: [[0, 60]], core: [[0, 82]] }[def.id];
   for (const [dx, r] of lay) {

@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.72';
+const VERSION = '0.73';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -278,6 +278,7 @@ const MODES = [
 ];
 MODES.push({ id: 'dojo', icon: '🎵', name: '리듬 도장', go: '리듬 결투 ▶', desc: '비행은 쉬고 리듬 게임만! 8가지 장르 곡 중에 골라, 4줄로 떨어지는 음표를 박자에 맞춰 누릅니다. B 랭크 이상이면 다음 단계가 열립니다.' });
 MODES.push({ id: 'escape', icon: '🪂', name: '탈출 작전', go: '탈출 시작 ▶', desc: '(시험판) 오른쪽으로 나아가요! 비행기 → 비상 탈출 → 로프로 흔들며 이동 → 새를 타고 … 누르기 하나로 합니다. 손맛을 시험하는 중이라 그림은 단순해요.' });
+MODES.push({ id: 'rift', icon: '🌌', name: '차원 균열', go: '균열 속으로 ▶', desc: '끝판(9-5)을 깬 조종사만 들어오는 끝없는 탑. 층마다 30초를 버티고 보스를 잡으면 다음 층으로. 한 층 오를 때마다 적이 강해지고 「변이」가 쌓입니다. 이번 주에는 모두가 같은 변이·보스 순서로 겨뤄요. 층마다 💠 코어, 5·10·15·20·30층 돌파 보상과 균열 전용 칭호·꾸미기!' });
 MODES.push({ id: 'coop', icon: '🤝', name: '친구와 함께', go: '함께 출격 ▶', desc: '친구 1~2명과 같은 하늘에서 함께 싸웁니다. 한 명이 방을 만들고 코드나 초대 링크를 보내면 됩니다. 휴대폰과 PC가 섞여도 됩니다.' });
 let selMode = 'stage', dojoLv = 1;
 const STAR_RULES = ['클리어', '체력 절반 이상 남기고 클리어', '콤보 30 이상 만들기'];
@@ -386,6 +387,9 @@ const TITLES = [
   { id: 'flash', name: '번개 사냥꾼', hint: '보스 5종을 기준 시간 안에', ok: () => D.BOSSES.every(b => (bk().boss[b.id] || {}).fast) },
   ...D.BOSSES.map(b => ({ id: 'b_' + b.id, name: `${b.name} 사냥꾼`, hint: `${b.name} 5번 잡기`, ok: () => ((bk().boss[b.id] || {}).k || 0) >= 5 })),
   { id: 'combo', name: '연쇄 폭발 장인', hint: '콤보 100', ok: () => S.stats.bestCombo >= 100 },
+  { id: 'rift5', name: '균열 돌파자', hint: '차원 균열 5층 돌파', ok: () => (S.records.rift || 0) >= 5 },
+  { id: 'rift10', name: '차원 사냥꾼', hint: '차원 균열 10층 돌파', ok: () => (S.records.rift || 0) >= 10 },
+  { id: 'rift20', name: '균열의 지배자', hint: '차원 균열 20층 돌파', ok: () => (S.records.rift || 0) >= 20 },
   { id: 'weekly', name: '주간 완주자', hint: '주간 도전 25칸 모두', ok: () => (S.weekDone || 0) >= 1 },
   { id: 'rhythm', name: '박자의 신', hint: '리듬 도장 8단계 열기', ok: () => S.dojo.open >= 8 },
   { id: 'ace', name: '에이스', hint: '성장 단계 「에이스」', ok: () => myTierV >= 4 },
@@ -502,6 +506,7 @@ function showPhoto() {
   }, 'image/png');
 }
 // ---------- 첫 10분: 처음엔 스테이지만, 판을 하고 깰수록 모드·탭이 하나씩 열린다(숫자는 해 보고 조정) ----------
+const RIFT_OPEN = 45;   // 0.73 🌌 차원 균열: 9-5(지도 9개를 모두 돈 1회차 끝판)를 깨면 열린다
 const OPENS = [
   { k: 'tab:arms', icon: '🔫', name: '무기 강화', need: { plays: 1 }, tip: '모은 고철로 무기를 강하게 만들어요.' },
   { k: 'tab:goals', icon: '🏅', name: '임무', need: { plays: 1 }, tip: '오늘의 임무와 도전 과제로 고철을 받아요.' },
@@ -517,9 +522,10 @@ const OPENS = [
   { k: 'mode:auto', icon: '⭐', name: '표창 공방', need: { cleared: 13 }, tip: '로봇을 직접 몰아 표창으로 베는 넓은 들판.' },
   { k: 'mode:escape', icon: '🪂', name: '탈출 작전(시험판)', need: { cleared: 10 }, tip: '누르기 하나로 로프를 걸어 흔들며 나아가는 새 모드!' },
   { k: 'mode:rush', icon: '👑', name: '보스 러시', need: { cleared: 20 }, tip: '보스 다섯을 쉬지 않고 연달아!' },
+  { k: 'mode:rift', icon: '🌌', name: '차원 균열', need: { cleared: RIFT_OPEN }, tip: '끝판을 깬 조종사만! 층마다 강해지는 끝없는 탑. 이번 주 모두 같은 변이로 겨뤄요.' },
 ];
 const openCond = o => S.plays >= (o.need.plays || 0) && S.cleared >= (o.need.cleared || 0);
-const isOpen = k => { if (S.openAll || (S.openKeep && S.openKeep[k]) || k === 'tab:sortie' || k === 'tab:settings' || k === 'mode:stage') return true; if (k === 'mode:coop' && joinCode) return true; const o = OPENS.find(x => x.k === k); return !o || openCond(o); };
+const isOpen = k => { if (k === 'mode:rift') return S.cleared >= RIFT_OPEN; if (S.openAll || (S.openKeep && S.openKeep[k]) || k === 'tab:sortie' || k === 'tab:settings' || k === 'mode:stage') return true; if (k === 'mode:coop' && joinCode) return true; const o = OPENS.find(x => x.k === k); return !o || openCond(o); };
 function nextOpenTip() {   // 다음에 열릴 것 한 줄
   const n = OPENS.find(o => !isOpen(o.k)); if (!n) return '';
   const grp = OPENS.filter(o => !isOpen(o.k) && JSON.stringify(o.need) === JSON.stringify(n.need)).map(o => o.icon + ' ' + o.name).join(' · ');
@@ -650,7 +656,7 @@ function startRun(stage, md = 'stage') {
   A.init();
   if (touchDevice) goFullscreen();
   if (md === 'auto') stage = S.idle.zone;
-  if (md === 'rush' || md === 'endless') stage = 1;
+  if (md === 'rush' || md === 'endless' || md === 'rift') stage = 1;
   if (md === 'dojo') { dojoLv = Math.min(dojoLv, S.dojo.open); stage = dojoLv; }
   if (md === 'coop') { if (!(net && net.mode === 'host' && allies.length)) { coopMsg = net && net.mode === 'guest' ? '방장이 출격을 누르면 함께 시작해요' : '먼저 방을 만들고 친구가 들어올 때까지 기다려 주세요'; renderHangar(); return; } md = coopMd; if (md === 'escape') { escRaceHost(); return; } }
   if (md === 'stage' && !gateOk(stage)) { A.sfx('click'); hangarStage = stage; renderHangar(); const tp = $('stTip'); if (tp) { tp.classList.remove('gateShake'); void tp.offsetWidth; tp.classList.add('gateShake'); } return; }   // 별이 모자라면 출격 대신 안내
@@ -668,6 +674,7 @@ function startRun(stage, md = 'stage') {
     mode: md, wave: 1, bossCount: 0, nextBoss: 90, bossIdx: 0, startedAt: Date.now(), zone0: stage, assist };
   if (md === 'endless') { run.waveDur = Infinity; run.banner = { kind: 'stage', title: 'WAVE 1', sub: '무한 생존 · 얼마나 버틸까?', t: 0, life: 2.6 }; }
   if (md === 'rush') { run.d = diffFor(Math.max(3, lvOf(S.cleared))); run.phase = 'warning'; run.warnT = 2.5; run.rushDone = true; run.banner = { kind: 'boss', title: 'BOSS RUSH', sub: '보스 다섯 연속!', t: 0, life: 2.4 }; }
+  if (md === 'rift') riftStart();
   run.gateAt = md === 'stage' || md === 'endless' ? 32 : 0; run.treasureAt = md === 'stage' || md === 'endless' ? 80 : 0;
   Forge.show(false); $('forge').classList.remove('rest'); $('fRest').classList.add('hidden'); $('ultBtn').classList.remove('hidden'); cam.x = cam.y = 0;
   if (md === 'auto') { run.d.hp = Math.pow(1.22, stage - 1); run.goldStart = S.forge.earned; run.rushDone = true; run.waveDur = 45; run.rushAt = rnd(15, 30); run.banner = { kind: 'stage', title: `ZONE ${stage}`, sub: '사방에서 온다! 피하면서 싸우자', t: 0, life: 2.6 }; S.idle.on = true; S.idle.lastSeen = Date.now(); keepAwake(true); }

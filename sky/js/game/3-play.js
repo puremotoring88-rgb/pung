@@ -507,7 +507,7 @@ function update(dt) {
   flakTick(dt);   // 재채기하는 동안은 쉰다
   colTick(dt);
   hazardTick(dt);   // 돌풍·토네이도·민간 비행체
-  for (const e of foes) { if (e.type !== 'boss') foeAI(e, dt * (e.mod === 'swift' ? 1.6 : 1)); if (e.flash > 0) e.flash -= dt; }
+  for (const e of foes) { if (e.type !== 'boss') foeAI(e, dt * (e.mod === 'swift' ? 1.6 : 1) * (run.mut && run.mut.fast ? 1.25 : 1)); if (e.flash > 0) e.flash -= dt; }
 
   // 내 탄
   for (const s of shots) {
@@ -599,7 +599,7 @@ function update(dt) {
       d.dead = true;
       if (d.kind === 'xp') { run.xp += d.v * (1 + 0.06 * rs('learn')); A.sfx('xp'); }
       else if (d.kind === 'scrap') { gainScrap(d.v); A.sfx('scrap'); }
-      else if (d.kind === 'heart') { if (!run.gambler) P.hp = Math.min(P.maxHp, P.hp + d.v); A.sfx('heal'); say('+' + d.v, P.x, P.y - 40, '#6ee37a', 22); }
+      else if (d.kind === 'heart') { if (run.mut && run.mut.noheal) say('🩸 회복 봉인', P.x, P.y - 40, '#c58bff', 18); else if (!run.gambler) P.hp = Math.min(P.maxHp, P.hp + d.v); A.sfx('heal'); say('+' + d.v, P.x, P.y - 40, '#6ee37a', 22); }
       else if (d.kind === 'part') grantPart();
       else if (d.kind === 'item') useItem(d.id, P);
       else if (d.kind === 'up') takeUp(d.id, P);
@@ -631,6 +631,7 @@ function afterBoss() {
     run.banner = { kind: 'boss', title: `BOSS ${run.bossIdx + 1} / 5`, sub: '다음 보스가 온다!', t: 0, life: 1.8 };
     return;
   }
+  if (m === 'rift') { riftNext(); return; }
   if (m === 'endless') {
     clearField(); run.phase = 'waves'; run.bossCount++; run.nextBoss = run.t + 90; A.music('stage', run.theme);
     return;
@@ -678,6 +679,10 @@ function endOther(win) {   // 무한 생존·보스 러시·자동 출격의 결
     const nb = run.wave > S.records.wave;
     S.records.wave = Math.max(S.records.wave, run.wave); S.records.endlessScore = Math.max(S.records.endlessScore, run.score);
     title = `<small>무한 생존</small>WAVE ${run.wave}`; rec = `버틴 시간 ${fmt(run.t)}${nb ? ' · 최고 기록!' : ` · 최고 WAVE ${S.records.wave}`}`; good = nb;
+  } else if (m === 'rift') {
+    const fl = run.rift.floor - 1, nb = fl > run.rift.prev;
+    S.records.riftScore = Math.max(S.records.riftScore || 0, run.score);
+    title = `<small>🌌 차원 균열</small>${run.rift.floor}층에서 멈춤`; rec = `${fl}층 돌파 · ${fmt(run.t)}${nb ? ' · 최고 기록!' : ` · 최고 ${S.records.rift || 0}층`}`; good = nb;
   } else if (m === 'rush') {
     const beaten = win ? 5 : run.bossIdx;
     S.records.rush = Math.max(S.records.rush, beaten);
@@ -707,6 +712,7 @@ function endOther(win) {   // 무한 생존·보스 러시·자동 출격의 결
   mk(m === 'auto' ? '다시 켜 두기 ▶' : '다시 하기 ▶', 'big', () => startRun(1, m));
   mk('격납고', 'sub', showHangar);
   if (m === 'endless') Rank.after('endless', run.score, `WAVE ${run.wave} · ${fmt(run.t)}`, !run.coop);
+  if (m === 'rift') Rank.after('rift', run.score, `${run.rift.floor - 1}층 돌파 · ${fmt(run.t)}`, !run.coop);
   if (m === 'rush') Rank.after('rush', run.score, run.bossIdx >= 5 || win ? `완주 · ${fmt(run.t)}` : `보스 ${run.bossIdx}/5`, !run.coop);
   $('copy').dataset.text = `⚡ 볼트윙 ${MODES.find(x => x.id === m).name} ${title.replace(/<[^>]+>/g, ' ').trim()} · 점수 ${run.score.toLocaleString()}`;
   $('result').classList.remove('hidden'); resultFx();

@@ -682,3 +682,79 @@ function drawKeeperHud() {   // 대장 체력과, 화면 밖에 있으면 방향
   ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-10, -12); ctx.lineTo(-10, 12); ctx.closePath(); ctx.fill(); ctx.restore();
 }
 
+
+// ---------- 0.73 🌌 차원 균열: 9-5(1회차 끝판)를 깨면 열리는 끝없는 탑 ----------
+// 층마다 30초 적 무리 → 보스. 한 층마다 난이도 +1, 2층부터 「변이」가 하나씩 쌓인다(최대 3개, 가장 새것만).
+// 이번 주(월요일 기준)에는 모두가 같은 변이·보스·맵 순서 → 랭킹이 공정하다. 숫자는 해 보고 조정.
+const RIFT = { lv0: 12, lvUp: 0.8, bossK: 0.5, waves: 30, heal: 0.3, floorPts: 3000, cores: { 5: 2, 10: 3, 15: 4, 20: 5, 30: 8 }, looks: { 10: ['paint:void', '🎨 차원 도색'], 15: ['trail:rift', '✨ 균열 꼬리'], 25: ['flame:void', '🔥 공허 불꽃'] } };
+const RIFT_MUT = [
+  { id: 'hot', icon: '🔥', nm: '과열탄', d: '적 탄이 25% 빨라요' },
+  { id: 'steel', icon: '🛡️', nm: '강철 껍질', d: '적 체력 +35%' },
+  { id: 'fast', icon: '💨', nm: '쾌속', d: '적이 25% 빨리 움직여요' },
+  { id: 'elite', icon: '💀', nm: '정예 무리', d: '정예가 훨씬 많아요' },
+  { id: 'dark', icon: '🌑', nm: '어둠', d: '내 둘레만 밝아요' },
+  { id: 'noheal', icon: '🩸', nm: '회복 봉인', d: '하트를 주워도 회복 안 돼요' },
+  { id: 'rage', icon: '😡', nm: '분노한 보스', d: '보스 체력 +30%' },
+];
+function riftWeek() {   // 이번 주 씨앗으로 변이·보스·맵 순서를 섞는다
+  weekRoll();
+  let a = 7; for (const c of String(S.week.key)) a = (Math.imul(a, 31) + c.charCodeAt(0)) | 0;
+  const rng = () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const shuf = arr => { arr = arr.slice(); for (let i = arr.length - 1; i > 0; i--) { const j = rng() * (i + 1) | 0; [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+  return { key: S.week.key, mut: shuf(RIFT_MUT.map((m, i) => i)), boss: shuf([0, 1, 2, 3, 4]), maps: Array.from({ length: 30 }, () => rng() * 9 | 0) };
+}
+function riftMuts(n, plan) {   // n층에 걸린 변이: 2층부터 1개, 6층부터 2개, 10층부터 3개(가장 최근에 들어온 것들)
+  plan = plan || riftWeek();
+  const k = Math.min(3, Math.floor((n + 2) / 4)), out = [];
+  for (let i = 0; i < k; i++) out.push(RIFT_MUT[plan.mut[(n - 2 - i + 70) % RIFT_MUT.length]]);
+  return out;
+}
+function riftWeekLine() { const p = riftWeek(); return [2, 3, 4].map(n => riftMuts(n, p)[0].icon).join(' → '); }
+function riftStart() {
+  run.rift = { plan: riftWeek(), floor: 1, prev: S.records.rift || 0 };
+  run.rushDone = true;   // 리듬 결투는 쉰다
+  riftFloor(1);
+}
+function riftFloor(n) {
+  const w = run.rift; w.floor = n;
+  const lv = RIFT.lv0 + (n - 1) * RIFT.lvUp;
+  run.stage = Math.round(lv); run.loop = 0; run.d = diffFor(lv);
+  const ms = riftMuts(n, w.plan); run.mut = {}; ms.forEach(m => { run.mut[m.id] = 1; });
+  if (run.mut.hot) run.d.bs *= 1.25;
+  if (run.mut.steel) run.d.hp *= 1.35;
+  run.theme = w.plan.maps[(n - 1) % w.plan.maps.length]; run.riftBoss = w.plan.boss[(n - 1) % 5];
+  run.floorT0 = run.t; run.waveDur = run.t + RIFT.waves; run.phase = 'waves'; run.spawnT = 1.2;
+  run.banner = { kind: 'rift', ch: n, title: `${n}층`, sub: ms.length ? ms.map(m => `${m.icon} ${m.nm}`).join(' · ') : '균열 입구 · 아직 변이 없음', t: 0, life: 3.2 };
+  if (ms.length && n > 1) { const nw = ms[0]; say(`${nw.icon} 새 변이: ${nw.nm} — ${nw.d}`, W / 2, H * 0.7, '#d9b8ff', 18, 3.2); }
+  for (let i = 0; i < 30; i++) fx.push({ k: 'streak', x: rnd(0, W), y: rnd(-H, 0), vx: 0, vy: rnd(900, 1400), t: 0, life: rnd(0.8, 1.5), color: 'rgba(197,139,255,.6)', size: rnd(1, 2.5) });
+  A.music('stage', run.theme); A.sfx('rush');
+}
+function riftNext() {   // 보스를 잡으면: 점수·돌파 보상 → 체력 조금 회복 → 다음 층 → 카드 한 장
+  const w = run.rift, n = w.floor;
+  run.score += RIFT.floorPts * n;
+  if (n > (S.records.rift || 0)) S.records.rift = n;
+  const c = RIFT.cores[n]; if (c) { addCores(c); say(`🌌 ${n}층 돌파! 💠 +${c}`, W / 2, H * 0.42, '#c58bff', 26, 2.8); A.sfx('levelup'); }
+  const lk = RIFT.looks[n]; if (lk) { S.owned = S.owned || {}; if (!S.owned[lk[0]]) { S.owned[lk[0]] = 1; say(`🎁 균열 보상: ${lk[1]}`, W / 2, H * 0.48, '#ffd166', 22, 3); } }
+  save();
+  clearField(); P.hp = Math.min(P.maxHp, P.hp + P.maxHp * RIFT.heal); P.inv = 2;
+  riftFloor(n + 1);
+  openCards();
+}
+function drawRiftFx() {   // 화면 가장자리의 보랏빛 균열, 「어둠」 변이면 내 둘레만 밝게
+  if (!run || run.mode !== 'rift' || !P) return;
+  const pulse = 0.2 + 0.06 * Math.sin(T * 2.2);
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.78);
+  g.addColorStop(0, 'rgba(90,30,170,0)'); g.addColorStop(1, `rgba(120,50,220,${pulse})`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  if (run.mut && run.mut.dark) {
+    const g2 = ctx.createRadialGradient(P.x, P.y, 90, P.x, P.y, 380);
+    g2.addColorStop(0, 'rgba(2,0,10,0)'); g2.addColorStop(1, 'rgba(2,0,10,.86)');
+    ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
+  }
+  if (Math.floor(T * 3) % 7 === 0) {   // 가끔 번쩍이는 균열 금
+    ctx.save(); ctx.strokeStyle = 'rgba(217,184,255,.55)'; ctx.lineWidth = 2; ctx.beginPath();
+    const side = Math.floor(T / 2.3) % 2, x0 = side ? W - 4 : 4; let y = (Math.floor(T * 3) * 137) % H; ctx.moveTo(x0, y);
+    for (let i = 0; i < 6; i++) { y += 22 + (i * 53) % 30; ctx.lineTo(x0 + (side ? -1 : 1) * (8 + (i * 37) % 26), y); }
+    ctx.stroke(); ctx.restore();
+  }
+}

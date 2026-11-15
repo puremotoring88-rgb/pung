@@ -92,7 +92,7 @@ function renderHangar() {
     mb.append(b);
   }
   const M = MODES.find(m => m.id === selMode);
-  const rec = { escape: `최고 ${(S.records.escape || 0).toLocaleString()} m · ${'⭐'.repeat(S.records.escapeStars || 0)}${'☆'.repeat(3 - (S.records.escapeStars || 0))}`, stage: `최고 스테이지 ${S.cleared} · 별 ★${starCount()}`, endless: `최고 WAVE ${S.records.wave} · 최고 점수 ${S.records.endlessScore.toLocaleString()}`,
+  const rec = { escape: `최고 ${(S.records.escape || 0).toLocaleString()} m · ${'⭐'.repeat(S.records.escapeStars || 0)}${'☆'.repeat(3 - (S.records.escapeStars || 0))}`, rift: `최고 ${S.records.rift || 0}층 돌파 · 이번 주 변이 ${riftWeekLine()} …`, stage: `최고 스테이지 ${S.cleared ? stLabel(S.cleared) : '-'} · 별 ★${starCount()}`, endless: `최고 WAVE ${S.records.wave} · 최고 점수 ${S.records.endlessScore.toLocaleString()}`,
     rush: `최고 ${S.records.rush} / 5${S.records.rushTime ? ` · 최단 ${fmt(S.records.rushTime)}` : ''}`, auto: `구역 ${S.idle.zone} · 최고 ${S.idle.best} · 💰${Forge.fmt(S.forge.gold)} · 최고 표창 Lv ${S.forge.maxLv} · ✨ 별조각 ${S.forge.shards}` }[selMode];
   $('modeInfo').innerHTML = `<b>${M.icon} ${M.name}</b><br>${M.desc}<br><small>📊 ${rec || `열린 단계 ${S.dojo.open} / 8`}</small>`;
   { const nt = nextOpenTip(); if (nt) $('modeInfo').insertAdjacentHTML('beforeend', `<div class="nextOpen">${nt}</div>`); }
@@ -196,6 +196,8 @@ function renderHangar() {
     fr.append(d);
   }
   const wp = $('weapons'); wp.innerHTML = '';
+  const brkNote = () => maxGearLv() >= 4 ? `<p class="note brkNote" style="grid-column:1/-1">💠 <b>한계 돌파 (Lv 6~10)</b>: 고철 + 💠 코어 + 조종사 레벨(Lv 6→조종사 6 · 7→9 · 8→12 · 9→16 · 10→20). 💠 코어는 보스 처치(챕터 보스 2개)·스테이지 첫 클리어·주간 도전 8·12·18·22칸·🌌 차원 균열에서 모여요. 지금 💠 ${S.cores || 0}개.</p>` : '';
+  wp.insertAdjacentHTML('beforeend', brkNote());
   for (const w of D.WEAPONS) {
     const open = unlocked(w), lv = S.weapons[w.id] || 1, d = document.createElement('div');
     d.className = 'card' + (S.weapon === w.id ? ' on' : '') + (open ? '' : ' locked');
@@ -213,7 +215,7 @@ function renderHangar() {
     d.addEventListener('click', () => { openSlot = openSlot === slot ? null : slot; A.sfx('click'); renderHangar(); });
     sl.append(d);
   }
-  const pl = $('partList'); pl.innerHTML = '';
+  const pl = $('partList'); pl.innerHTML = brkNote();
   if (openSlot) {
     const owned = D.PARTS.filter(p => p.slot === openSlot && S.parts[p.id]);
     const total = D.PARTS.filter(p => p.slot === openSlot).length;

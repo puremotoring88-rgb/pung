@@ -73,8 +73,8 @@
   .rkRow input { flex: 1; min-width: 0; font: inherit; padding: calc(var(--u) * 2); border-radius: calc(var(--u) * 1.6); border: 1px solid rgba(160,200,255,.35); background: rgba(5,12,28,.7); color: #fff; }
   .rkBtn { font: inherit; font-weight: 800; padding: calc(var(--u) * 2) calc(var(--u) * 3); border-radius: calc(var(--u) * 1.6); border: 0; background: linear-gradient(#ffd166, #e08a2a); color: #2a1600; cursor: pointer; }
   .rkBtn.sub { flex: 1; background: rgba(40,70,120,.6); color: #fff; border: 1px solid rgba(160,200,255,.35); }
-  .rkChips { display: flex; gap: calc(var(--u) * 1.2); margin: calc(var(--u) * 2) 0 0; }
-  .rkChips button { flex: 1; font: inherit; font-size: calc(var(--u) * 3); padding: calc(var(--u) * 1.8) 0; border-radius: calc(var(--u) * 1.6); border: 1px solid #2b3c56; background: rgba(16,26,42,.9); color: #cfe0f5; cursor: pointer; }
+  .rkChips { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 1.2); margin: calc(var(--u) * 2) 0 0; }
+  .rkChips button { flex: 1 1 30%; font: inherit; font-size: calc(var(--u) * 3); padding: calc(var(--u) * 1.8) 0; border-radius: calc(var(--u) * 1.6); border: 1px solid #2b3c56; background: rgba(16,26,42,.9); color: #cfe0f5; cursor: pointer; }
   .rkChips button.on { border-color: #ffd166; color: #ffe7a3; background: linear-gradient(#3a2f10, #1e180a); }
   .rkChips.small button { font-size: calc(var(--u) * 2.8); padding: calc(var(--u) * 1.2) 0; }
   .rkList { margin: calc(var(--u) * 2) 0; }
@@ -393,7 +393,7 @@
   .meBar .meStar { order: 3; flex-basis: 100%; text-align: left; background: rgba(255, 209, 102, .1); border: 1px solid rgba(255, 209, 102, .35); color: #ffe7a3; border-radius: calc(var(--u) * 1.6); padding: calc(var(--u) * .9) calc(var(--u) * 2); font: inherit; font-size: .9em; font-weight: 700; } .meBar .meStar b { color: #ffd166; font-size: 1.1em; } .meBar .meSub { order: 2; }
   #frWin { position: fixed; inset: 0; z-index: 35; background: rgba(2,5,12,.72); display: flex; align-items: flex-start; justify-content: center; padding: calc(var(--u) * 6) calc(var(--u) * 3); overflow-y: auto; }
   #frWin.hidden { display: none; }
-  #frWin .fwIn { width: 100%; max-width: 560px; padding: calc(var(--u) * 3); border-radius: calc(var(--u) * 3); background: #0b1324; }
+  #frWin .fwIn { font-size: clamp(14px, calc(var(--u) * 3.3), 17px); color: #e8eef7; width: 100%; max-width: 560px; padding: calc(var(--u) * 3); border-radius: calc(var(--u) * 3); background: #0b1324; }
   #frWin .fwHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: calc(var(--u) * 2); font-size: 1.15em; }
   #frWin .fwX { background: rgba(255,255,255,.12); color: #fff; border: 0; border-radius: 99px; padding: calc(var(--u) * 1) calc(var(--u) * 3); font: inherit; }
   .tabs { overflow-x: auto; scrollbar-width: none; } .tabs::-webkit-scrollbar { display: none; }
@@ -430,11 +430,11 @@
 .coopBox { margin-top: calc(var(--u) * 2); display: flex; flex-direction: column; gap: calc(var(--u) * 1.6); }
 .coopBox .cRow { display: flex; gap: calc(var(--u) * 1.6); align-items: center; flex-wrap: wrap; }
 .coopBox .cRow span { color: #b9c8dc; }
-.coopBox input { flex: 1; min-width: 0; font: inherit; padding: calc(var(--u) * 1.6) calc(var(--u) * 2); border-radius: calc(var(--u) * 1.6); border: 1px solid rgba(160,200,255,.35); background: rgba(5,12,28,.7); color: #fff; }
-.coopBox input.code { text-transform: uppercase; letter-spacing: .3em; font-weight: 900; text-align: center; }
-.coopBox .cbtn { font: inherit; font-weight: 800; padding: calc(var(--u) * 1.6) calc(var(--u) * 2.6); border-radius: calc(var(--u) * 1.6); border: 1px solid rgba(160,200,255,.4); background: rgba(40,80,140,.6); color: #fff; cursor: pointer; }
-.coopBox .cbtn.main { flex: 1; background: linear-gradient(#3fa0ff, #2160c0); font-size: 1.1em; }
-.coopBox .cbtn.off { background: rgba(120,40,50,.6); }
+:is(.coopBox, #frWin) input { flex: 1; min-width: 0; font: inherit; padding: calc(var(--u) * 1.6) calc(var(--u) * 2); border-radius: calc(var(--u) * 1.6); border: 1px solid rgba(160,200,255,.35); background: rgba(5,12,28,.7); color: #fff; }
+:is(.coopBox, #frWin) input.code { text-transform: uppercase; letter-spacing: .3em; font-weight: 900; text-align: center; }
+:is(.coopBox, #frWin) .cbtn { font: inherit; font-weight: 800; padding: calc(var(--u) * 1.6) calc(var(--u) * 2.6); border-radius: calc(var(--u) * 1.6); border: 1px solid rgba(160,200,255,.4); background: rgba(40,80,140,.6); color: #fff; cursor: pointer; }
+:is(.coopBox, #frWin) .cbtn.main { flex: 1; background: linear-gradient(#3fa0ff, #2160c0); font-size: 1.1em; }
+:is(.coopBox, #frWin) .cbtn.off { background: rgba(120,40,50,.6); }
 .coopBox .cCode { text-align: center; } .coopBox .cCode small { display: block; color: #b9c8dc; } .coopBox .cCode b { font-size: 2.2em; letter-spacing: .25em; color: #ffd166; }
 .coopBox .cList { color: #dfe8f2; } .coopBox .cNote { color: #b9c8dc; font-size: .88em; } .coopBox .cMsg { color: #9dffcf; font-weight: 800; }
   .hgFoot { padding: calc(var(--u) * 2) calc(var(--u) * 4) max(calc(var(--u) * 4), env(safe-area-inset-bottom)); }
