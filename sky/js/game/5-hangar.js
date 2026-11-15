@@ -68,7 +68,7 @@ function upButton(kind, lv, apply) {   // kind 'w' 무기 / 'p' 부품
 }
 function renderHangar() {
   $('scrap').textContent = `🔩 ${S.scrap}${S.cores || maxGearLv() >= D.BREAK_LV ? ` · 💠 ${S.cores || 0}` : ''}`;
-  unlockCheck(); titleCheck(); Rank.leagueCheck(); refTick();
+  finaleCheck(); unlockCheck(); titleCheck(); Rank.leagueCheck(); refTick();
   renderMe();
   $('bestTxt').textContent = `최고 ${S.best.toLocaleString()} · ★${starCount()}`;
   if (!isOpen('tab:' + tab)) tab = 'sortie'; if (!isOpen('mode:' + selMode)) selMode = 'stage';
@@ -95,6 +95,7 @@ function renderHangar() {
   const rec = { escape: `최고 ${(S.records.escape || 0).toLocaleString()} m · ${'⭐'.repeat(S.records.escapeStars || 0)}${'☆'.repeat(3 - (S.records.escapeStars || 0))}`, rift: `최고 ${S.records.rift || 0}층 돌파 · 이번 주 변이 ${riftWeekLine()} …`, stage: `최고 스테이지 ${S.cleared ? stLabel(S.cleared) : '-'} · 별 ★${starCount()}`, endless: `최고 WAVE ${S.records.wave} · 최고 점수 ${S.records.endlessScore.toLocaleString()}`,
     rush: `최고 ${S.records.rush} / 5${S.records.rushTime ? ` · 최단 ${fmt(S.records.rushTime)}` : ''}`, auto: `구역 ${S.idle.zone} · 최고 ${S.idle.best} · 💰${Forge.fmt(S.forge.gold)} · 최고 표창 Lv ${S.forge.maxLv} · ✨ 별조각 ${S.forge.shards}` }[selMode];
   $('modeInfo').innerHTML = `<b>${M.icon} ${M.name}</b><br>${M.desc}<br><small>📊 ${rec || `열린 단계 ${S.dojo.open} / 8`}</small>`;
+  if (selMode === 'rift' && S.finaleSeen) { const fb = document.createElement('button'); fb.className = 'fnAgain'; fb.textContent = '🎬 끝판 피날레 다시 보기'; fb.addEventListener('click', () => { A.sfx('click'); showFinale(true); }); $('modeInfo').append(fb); }
   { const nt = nextOpenTip(); if (nt) $('modeInfo').insertAdjacentHTML('beforeend', `<div class="nextOpen">${nt}</div>`); }
   if (Cloud.guest && S.plays >= 1 && (S.guestAskAt || 0) <= S.plays) {   // 0.55: 손님으로 한 판 이상 했으면 아이디 만들기 권유(나중에 = 3판 뒤 다시)
     const gc = document.createElement('div'); gc.className = 'guestAsk';
@@ -298,3 +299,63 @@ function renderHangar() {
   ['musicBtn', 'sfxBtn', 'vibBtn'].forEach((id, i) => $(id).classList.toggle('off', ![S.music, S.sfx, S.vib][i]));
 }
 
+
+// ---------- 0.74 🏁 끝판 피날레: 9-5(1회차 끝판)를 깨면 한 번 보여 준다. 예전에 깬 사람도 다음에 격납고를 열 때 본다. 차원 균열 칸에서 다시 보기 ----------
+const FINALE = { cores: 5 };
+function finaleCheck() {
+  if (S.finaleSeen || S.cleared < RIFT_OPEN || state !== 'hangar' || $('finale')) return;
+  if (!$('gate').classList.contains('hidden')) return;   // 로그인 문이 닫힌 뒤에
+  setTimeout(() => { if (!S.finaleSeen && state === 'hangar' && !$('finale')) showFinale(false); }, 400);
+}
+function showFinale(replay) {
+  const first = !S.finaleSeen;
+  if (first) { S.finaleSeen = 1; S.cores = (S.cores || 0) + FINALE.cores; save(); }
+  const bx = document.createElement('div'); bx.id = 'finale';
+  const cv2 = document.createElement('canvas'); bx.append(cv2);
+  const maps = MAP_ICON.map((ic, i) => `<span style="animation-delay:${3.2 + i * 0.35}s">${ic}<small>${D.THEMES[i].name}</small></span>`).join('');
+  const bosses = D.BOSSES.map((b, i) => `<span style="animation-delay:${7.4 + i * 0.4}s">${b.name}</span>`).join('');
+  const st0 = S.stats || {};
+  bx.insertAdjacentHTML('beforeend', `<button class="fnSkip">건너뛰기 ›</button><div class="fnIn">
+    <p class="fnL" style="animation-delay:.6s">THE LAST SKY</p>
+    <h2 class="fnL" style="animation-delay:1.4s">9개의 하늘을 모두 지켜 냈어요</h2>
+    <div class="fnMaps">${maps}</div>
+    <p class="fnL" style="animation-delay:6.8s">쓰러뜨린 보스</p>
+    <div class="fnBoss">${bosses}</div>
+    <div class="fnStat fnL" style="animation-delay:10s">
+      <div><b>${(S.plays || 0).toLocaleString()}</b><small>출격</small></div><div><b>${(st0.kills || 0).toLocaleString()}</b><small>처치</small></div>
+      <div><b>${st0.bestCombo || 0}</b><small>최고 콤보</small></div><div><b>★${starCount()}</b><small>별</small></div><div><b>Lv ${S.pilot.lv}</b><small>${rankName(S.pilot.lv)}</small></div>
+    </div>
+    <h3 class="fnL" style="animation-delay:12s">${String(S.nick || '조종사').replace(/[<>&"]/g, '')} 조종사, 정말 고마워요.</h3>
+    <p class="fnL fnBy" style="animation-delay:13.2s">BOLTWING — made by motive</p>
+    <div class="fnL fnGift" style="animation-delay:14.6s">${first ? `🎁 칭호 「마지막 하늘을 넘은 자」 · 💠 코어 +${FINALE.cores}<br>` : ''}🌌 <b>차원 균열</b>이 열렸어요 — 끝없는 탑에서 이번 주 기록을 겨뤄 보세요</div>
+    <div class="fnL fnBtns" style="animation-delay:15.4s"><button class="fnGo">🌌 차원 균열로</button><button class="fnHome">격납고</button></div>
+  </div>`);
+  document.body.append(bx);
+  const x2 = cv2.getContext('2d'); let alive = true, t0 = performance.now();
+  const stars = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), z: Math.random() * 0.8 + 0.2 }));
+  const sparks = [], cols = ['#ffd166', '#5fd4ff', '#ff7ad9', '#9dffcf', '#c58bff', '#ff8a5e'];
+  const burst = (x, y) => { const c = cols[Math.random() * cols.length | 0]; for (let i = 0; i < 46; i++) { const a = Math.random() * TAU, v = 60 + Math.random() * 190; sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0, life: 1 + Math.random() * 0.8, c }); } A.sfx('boomS'); };
+  const ship = IMG['ship-' + S.frame] || Art.ship(S.frame, frameOf(S.frame).color); let nextB = 2.5, last = t0;
+  const frame = now => {
+    if (!alive) return;
+    const w = cv2.width = innerWidth, h = cv2.height = innerHeight, t = (now - t0) / 1000, dt = Math.min(0.05, (now - last) / 1000); last = now;
+    x2.fillStyle = '#03040c'; x2.fillRect(0, 0, w, h);
+    for (const s of stars) { s.y += dt * 0.25 * s.z; if (s.y > 1) { s.y = 0; s.x = Math.random(); } x2.fillStyle = `rgba(220,235,255,${0.3 + s.z * 0.6})`; x2.fillRect(s.x * w, s.y * h, 1.5 * s.z + 0.5, 4 * s.z + 1); }
+    if (t > nextB) { burst(w * (0.15 + Math.random() * 0.7), h * (0.12 + Math.random() * 0.4)); nextB = t + 0.5 + Math.random() * 1.1; }
+    for (const p of sparks) { p.t += dt; p.vy += 90 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 1 - dt; x2.globalAlpha = Math.max(0, 1 - p.t / p.life); x2.fillStyle = p.c; x2.fillRect(p.x, p.y, 3, 3); }
+    x2.globalAlpha = 1; for (let i = sparks.length - 1; i >= 0; i--) if (sparks[i].t > sparks[i].life) sparks.splice(i, 1);
+    if (ship) {   // 내 기체가 아래에서 떠올라 하늘 가운데로
+      const k = Math.min(1, t / 3), e = 1 - Math.pow(1 - k, 3), sy = h * (1.15 - 0.33 * e) + Math.sin(t * 1.6) * 6, sz = Math.min(w, h) * 0.2;
+      x2.save(); x2.translate(w / 2, sy); x2.rotate(Math.sin(t * 0.9) * 0.08);
+      const g = x2.createRadialGradient(0, sz * 0.5, 0, 0, sz * 0.5, sz); g.addColorStop(0, 'rgba(95,212,255,.55)'); g.addColorStop(1, 'rgba(95,212,255,0)'); x2.fillStyle = g; x2.fillRect(-sz, -sz * 0.2, sz * 2, sz * 1.6);
+      x2.drawImage(ship, -sz / 2, -sz / 2, sz, sz * ship.height / ship.width); x2.restore();
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  A.sfx('fanfare'); setTimeout(() => alive && A.sfx('fullcombo'), 14600);
+  const close = go => { alive = false; bx.remove(); A.sfx('click'); if (go) { selMode = 'rift'; tab = 'sortie'; } renderHangar(); };
+  bx.querySelector('.fnSkip').addEventListener('click', () => { bx.classList.add('fnAll'); });   // 건너뛰기 = 글을 한꺼번에 보이기
+  bx.querySelector('.fnGo').addEventListener('click', () => close(true));
+  bx.querySelector('.fnHome').addEventListener('click', () => close(false));
+}

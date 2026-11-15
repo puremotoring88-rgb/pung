@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.73';
+const VERSION = '0.74';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -387,6 +387,7 @@ const TITLES = [
   { id: 'flash', name: '번개 사냥꾼', hint: '보스 5종을 기준 시간 안에', ok: () => D.BOSSES.every(b => (bk().boss[b.id] || {}).fast) },
   ...D.BOSSES.map(b => ({ id: 'b_' + b.id, name: `${b.name} 사냥꾼`, hint: `${b.name} 5번 잡기`, ok: () => ((bk().boss[b.id] || {}).k || 0) >= 5 })),
   { id: 'combo', name: '연쇄 폭발 장인', hint: '콤보 100', ok: () => S.stats.bestCombo >= 100 },
+  { id: 'finale', name: '마지막 하늘을 넘은 자', hint: '끝판 9-5 클리어', ok: () => S.cleared >= RIFT_OPEN },
   { id: 'rift5', name: '균열 돌파자', hint: '차원 균열 5층 돌파', ok: () => (S.records.rift || 0) >= 5 },
   { id: 'rift10', name: '차원 사냥꾼', hint: '차원 균열 10층 돌파', ok: () => (S.records.rift || 0) >= 10 },
   { id: 'rift20', name: '균열의 지배자', hint: '차원 균열 20층 돌파', ok: () => (S.records.rift || 0) >= 20 },

@@ -74,6 +74,26 @@
   .rkBtn { font: inherit; font-weight: 800; padding: calc(var(--u) * 2) calc(var(--u) * 3); border-radius: calc(var(--u) * 1.6); border: 0; background: linear-gradient(#ffd166, #e08a2a); color: #2a1600; cursor: pointer; }
   .rkBtn.sub { flex: 1; background: rgba(40,70,120,.6); color: #fff; border: 1px solid rgba(160,200,255,.35); }
   .rkChips { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 1.2); margin: calc(var(--u) * 2) 0 0; }
+  #finale { position: fixed; inset: 0; z-index: 95; background: #03040c; color: #fff; overflow-y: auto; font-size: clamp(14px, 3.6vw, 18px); }
+  #finale canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+  #finale .fnIn { position: relative; max-width: 520px; margin: 0 auto; padding: 9vh 18px 40px; text-align: center; text-shadow: 0 2px 10px rgba(0,0,0,.9); }
+  #finale .fnSkip { position: fixed; top: 12px; right: 12px; z-index: 2; border: 0; border-radius: 99px; padding: 8px 14px; background: rgba(255,255,255,.14); color: #fff; font: inherit; font-size: 14px; }
+  #finale .fnL, #finale .fnMaps span, #finale .fnBoss span { opacity: 0; animation: fnIn 1s forwards; }
+  #finale.fnAll .fnL, #finale.fnAll .fnMaps span, #finale.fnAll .fnBoss span { animation-delay: 0s !important; animation-duration: .3s; }
+  @keyframes fnIn { from { opacity: 0; transform: translateY(14px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+  #finale p.fnL:first-child { letter-spacing: .45em; color: #ffd166; font-weight: 800; font-size: .85em; }
+  #finale h2 { font-size: 1.6em; margin: .4em 0 .8em; } #finale h3 { font-size: 1.25em; margin: 1.2em 0 .3em; color: #ffe7a3; }
+  #finale .fnMaps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1.4em; }
+  #finale .fnMaps span { font-size: 2em; } #finale .fnMaps small { display: block; font-size: .38em; color: #cfe0f5; }
+  #finale .fnBoss { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: .5em 0 1.4em; }
+  #finale .fnBoss span { padding: 6px 12px; border-radius: 99px; background: rgba(255,77,77,.18); border: 1px solid rgba(255,120,120,.5); font-weight: 800; text-decoration: line-through; text-decoration-color: rgba(255,209,102,.8); }
+  #finale .fnStat { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 12px 6px; border-radius: 14px; background: rgba(20,30,60,.65); border: 1px solid rgba(255,209,102,.35); }
+  #finale .fnStat b { display: block; font-size: 1.1em; color: #ffd166; } #finale .fnStat small { font-size: .72em; color: #cfe0f5; }
+  #finale .fnBy { color: #9fb0c6; letter-spacing: .15em; font-size: .85em; }
+  #finale .fnGift { margin: 1.4em 0 1em; padding: 12px; border-radius: 14px; background: rgba(120,60,220,.3); border: 1px solid rgba(197,139,255,.6); line-height: 1.6; }
+  #finale .fnBtns { display: flex; gap: 10px; } #finale .fnBtns button { flex: 1; padding: 13px; border-radius: 12px; border: 0; font: inherit; font-weight: 900; color: #fff; background: rgba(255,255,255,.14); }
+  #finale .fnBtns .fnGo { background: linear-gradient(135deg, #7c4dff, #c58bff); }
+  .fnAgain { display: block; margin-top: calc(var(--u) * 1.4); border: 1px solid rgba(197,139,255,.6); background: rgba(90,40,170,.35); color: #ecdcff; border-radius: calc(var(--u) * 1.6); padding: calc(var(--u) * 1.2) calc(var(--u) * 2.4); font-weight: 700; }
   .rkChips button { flex: 1 1 30%; font: inherit; font-size: calc(var(--u) * 3); padding: calc(var(--u) * 1.8) 0; border-radius: calc(var(--u) * 1.6); border: 1px solid #2b3c56; background: rgba(16,26,42,.9); color: #cfe0f5; cursor: pointer; }
   .rkChips button.on { border-color: #ffd166; color: #ffe7a3; background: linear-gradient(#3a2f10, #1e180a); }
   .rkChips.small button { font-size: calc(var(--u) * 2.8); padding: calc(var(--u) * 1.2) 0; }
