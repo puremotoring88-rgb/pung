@@ -641,6 +641,7 @@ function draw() {
   drawHud();
   updateUltBtn();
   if (state === 'duel') Duel.draw(ctx, T);
-  if (net && net.mode === 'guest' && run.cardWait) { panel(W / 2 - 170, H * 0.45 - 30, 340, 60, 16); txt(run.cardWait === 2 ? '방장이 잠깐 멈췄어요' : '방장이 카드를 고르는 중…', W / 2, H * 0.45 + 8, 18, '#ffe7a3', 'center', 800); }
+  if (net && net.mode === 'host' && state === 'cards' && run.cardBy) { panel(W / 2 - 170, H * 0.45 - 30, 340, 60, 16); txt(`${run.cardName}님이 카드를 고르는 중…`, W / 2, H * 0.45 + 8, 18, '#ffe7a3', 'center', 800); }
+  if (net && net.mode === 'guest' && run.cardWait && !run.guestPick) { panel(W / 2 - 170, H * 0.45 - 30, 340, 60, 16); txt(run.cardWait === 2 ? '방장이 잠깐 멈췄어요' : '방장이 카드를 고르는 중…', W / 2, H * 0.45 + 8, 18, '#ffe7a3', 'center', 800); }
 }
 

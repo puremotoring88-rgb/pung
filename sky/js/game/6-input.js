@@ -12,11 +12,12 @@ cv.addEventListener('pointerdown', e => {
   $('emoBar').classList.add('hidden');
   if (S.touch === 'above' && drag.touch) { P.tx = p.x + cam.x; P.ty = p.y - ABOVE + cam.y; }
   if (padMode() && drag.touch) { if (p.y < PAD_Y) { drag = null; return; } drag.pad = true; }   // 조종판: 판 안을 누른 자리가 중심
+  else if (run.arena && (!drag.touch || S.touch !== 'above')) drag.pad = true;   // 0.76 표창 공방: 화면이 로봇을 따라가므로 끌기 대신 어디든 누른 자리가 중심인 조이스틱
   cv.setPointerCapture(e.pointerId);
 });
 cv.addEventListener('pointermove', e => {
   if (state === 'play' && e.pointerType === 'mouse' && S.mouse && !P.trap) {   // PC: 마우스 따라가기
-    const m = toWorld(e); P.tx = m.x + cam.x; P.ty = m.y + cam.y; return;
+    const m = toWorld(e); mouseAt = m; P.tx = m.x + cam.x; P.ty = m.y + cam.y; return;
   }
   if (!drag || state !== 'play' || P.trap) return;
   const p = toWorld(e); drag.fx = p.x; drag.fy = p.y;
@@ -30,17 +31,24 @@ const ABOVE = 150;
 // 🕹️ 조종판: 화면 아래 판 안에서 누른 자리를 중심으로, 민 방향·거리만큼 그쪽으로 날아간다. 손을 떼면 멈춘다.
 const PAD_Y = H * 0.68, PAD_R = 70;
 const padMode = () => touchDevice && (S.touch || 'rel') === 'pad';
+let mouseAt = null;
+cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') mouseAt = null; });   // 마우스가 화면 밖으로 나가면 멈춘다
 function padSteer(dt) {   // update에서 부른다: 민 거리만큼의 속도로
+  if (run.arena && !drag && S.mouse && mouseAt && !P.trap && !touchDevice && !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'd', 'w', 's'].some(k => keys[k])) {   // 0.76 표창 공방 PC: 마우스가 가리키는 쪽으로 계속 간다(로봇 가까이면 멈춤)
+    const dx = mouseAt.x + cam.x - P.x, dy = mouseAt.y + cam.y - P.y, d = Math.hypot(dx, dy);
+    if (d < 24) { P.tx = P.x; P.ty = P.y; } else { const v = Math.min(1, d / 160) * 900 * st.speed * run.m.speed * dt / d; P.tx = P.x + dx * v; P.ty = P.y + dy * v; }
+  }
   if (!drag || !drag.pad || P.trap) return;
   let jx = drag.fx - drag.px, jy = drag.fy - drag.py; const m = Math.hypot(jx, jy);
   if (m > PAD_R) { drag.px = drag.fx - jx / m * PAD_R; drag.py = drag.fy - jy / m * PAD_R; jx = jx / m * PAD_R; jy = jy / m * PAD_R; }   // 너무 멀리 밀면 중심이 따라온다
   const v = (m < 8 ? 0 : 900 * st.speed * run.m.speed * dt) / PAD_R; P.tx = P.x + jx * v; P.ty = P.y + jy * v;
 }
 function drawPad() {
-  if (!padMode() || state !== 'play' || run.phase === 'dead' || (run.arena && run.phase === 'rest')) return;
+  const arenaPad = !padMode() && run.arena && drag && drag.pad;
+  if ((!padMode() && !arenaPad) || state !== 'play' || run.phase === 'dead' || (run.arena && run.phase === 'rest')) return;
   const ox = cam.x, oy = cam.y; ctx.save();
   ctx.fillStyle = 'rgba(127,216,255,.05)'; ctx.strokeStyle = 'rgba(127,216,255,.16)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.roundRect(ox + 14, oy + PAD_Y, W - 28, H - PAD_Y - 14, 26); ctx.fill(); ctx.stroke();
+  if (!arenaPad) { ctx.beginPath(); ctx.roundRect(ox + 14, oy + PAD_Y, W - 28, H - PAD_Y - 14, 26); ctx.fill(); ctx.stroke(); }
   if (drag && drag.pad) {
     ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.strokeStyle = 'rgba(255,255,255,.35)';
     ctx.beginPath(); ctx.arc(ox + drag.px, oy + drag.py, PAD_R, 0, TAU); ctx.fill(); ctx.stroke();
@@ -93,6 +101,7 @@ window.addEventListener('keydown', e => {
   }
   if ((e.key === 'x' || e.key === 'X' || e.key === 'c' || e.key === 'C') && state === 'play' && run && !e.repeat) { if (run.arena) throwBlades(); else useSkill(); }
   if (e.key === 'p' || e.key === 'Escape') { if (state === 'play') pauseGame(); else if (state === 'pause') resumeGame(); }
+  if (run && run.guestPick && ['1', '2', '3', '4'].includes(e.key)) { const g = run.guestPick[+e.key - 1]; if (g) guestPickCard(g); }
   if (state === 'cards' && ['1', '2', '3'].includes(e.key)) { const ids = $('cards').dataset.ids.split(','); if (ids[+e.key - 1]) takeCard(ids[+e.key - 1]); }
   if (state === 'hangar' && e.key === 'Enter' && document.activeElement.tagName !== 'INPUT' && $('gate').classList.contains('hidden')) startRun(hangarStage, selMode);
 });
@@ -220,7 +229,6 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
 $('musicBtn').addEventListener('click', () => { S.music = !S.music; A.setMusic(S.music); save(); renderHangar(); });
 $('sfxBtn').addEventListener('click', () => { S.sfx = !S.sfx; A.setSfx(S.sfx); save(); renderHangar(); });
 $('vibBtn').addEventListener('click', () => { S.vib = !S.vib; save(); buzz(40); renderHangar(); });
-$('duelBtn').addEventListener('click', () => { S.noDuel = !S.noDuel; save(); A.sfx('click'); renderHangar(); });   // 0.75 판 중간 리듬 결투 끄기(리듬 도장은 그대로)
 $('shakeBtn').addEventListener('click', () => { S.noShake = !S.noShake; save(); A.sfx('click'); renderHangar(); });   // 0.69 화면 흔들림 끄기
 $('fsBtn').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else goFullscreen(); });
 $('photo').addEventListener('click', showPhoto);

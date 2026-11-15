@@ -118,6 +118,7 @@ function hostData(c, m) {
   if (m.t === 'in' && typeof m.x === 'number' && typeof m.y === 'number') { a.tx = clamp(m.x, 22, W - 22); a.ty = clamp(m.y, 90, H - 70); }
   else if (m.t === 'ult') allyUlt(a);
   else if (m.t === 'skill') allySkill(a);
+  else if (m.t === 'pick' && typeof m.id === 'string' && state === 'cards' && run && run.cardBy === a.id) takeCard(m.id, true);
   else if (m.t === 'ep') a.esc = escClean(m);   // 탈출 작전 같이 달리기: 친구 자리
   else if (m.t === 'eev' && m.e && ESC_EV.includes(m.e.k)) { if (m.to === 'host') Escape.netEvent(a.id, { k: m.e.k }); else { const b = allies.find(x => x.id === m.to); if (b && b.conn.open) b.conn.send({ t: 'eev', from: a.id, e: { k: m.e.k } }); } }
   else if (m.t === 'emo') emote(a, m.i);
@@ -228,7 +229,7 @@ function drawCoopLinks() {   // 방장·친구 화면 모두
 }
 function allyUlt(a) {
   if (a.ult < 100 || a.down > 0 || state !== 'play' || run.phase === 'dead' || run.phase === 'clear') return;
-  a.ult = 0; a.swarm = 18; teamUlt(a.id);
+  a.ult = 0; a.swarm = 36; a.inv = Math.max(a.inv || 0, FEEL.ultInv); teamUlt(a.id);   // 0.76: 친구 궁극기도 방장처럼 잠깐 무적, 탄 수 2배
   ebul = ebul.filter(b => Math.hypot(b.x - a.x, b.y - a.y) > 150);
   ringFx(a.x, a.y, 150, a.color); say(`${a.name}의 궁극기!`, a.x, a.y - 60, a.color, 20, 1.2); A.sfx('charge'); flash = Math.max(flash, 0.25);
 }
@@ -260,7 +261,7 @@ function updateAllies(dt) {
     for (const d of drops) {
       if (d.dead || Math.hypot(a.x - d.x, a.y - d.y) > 34) continue;
       d.dead = true;
-      if (d.kind === 'xp') { run.xp += d.v; A.sfx('xp'); }
+      if (d.kind === 'xp') { run.xpWho = a.id; run.xp += d.v; A.sfx('xp'); }
       else if (d.kind === 'scrap') { gainScrap(d.v); A.sfx('scrap'); }
       else if (d.kind === 'heart') { a.hp = Math.min(a.maxHp, a.hp + d.v); say('+' + d.v, a.x, a.y - 40, '#6ee37a', 18); A.sfx('heal'); }
       else if (d.kind === 'item') useItem(d.id, a);
@@ -283,7 +284,7 @@ function netTick(dt) {
   const R = run, bn = R.banner && R.banner !== net.lastBn ? { kind: R.banner.kind, title: R.banner.title, sub: R.banner.sub, life: R.banner.life - R.banner.t } : null;
   net.lastBn = R.banner;
   const m = {
-    t: 's', cw: state === 'cards' ? 1 : state === 'pause' ? 2 : 0, fl: r2(flash), sk: r2(shake), bn,
+    t: 's', cw: state === 'cards' ? 1 : state === 'pause' ? 2 : 0, cn: state === 'cards' ? run.cardName || '방장' : '', fl: r2(flash), sk: r2(shake), bn,
     r: { stage: R.stage, phase: R.phase, theme: R.theme, mode: R.mode, level: R.level, xp: r2(R.xp), xpNeed: R.xpNeed, score: R.score, scrapGot: R.scrapGot, combo: R.combo, comboT: r2(R.comboT),
       t: r2(R.t), waveDur: isFinite(R.waveDur) ? R.waveDur : -1, nextBoss: R.nextBoss, wave: R.wave, bossIdx: R.bossIdx, dangerT: r2(R.dangerT || 0), beatBuff: R.beatBuff || 1, gateAt: R.gateAt || 0, treasureAt: R.treasureAt || 0, msp: R.m.speed, it: TIMED.map(id => r2(R['it_' + id] || 0)), danceT: r2(R.danceT || 0) },
     p: [['host', r1(P.x), r1(P.y), r2(P.bank), r1(P.hp), P.maxHp, r2(P.down || 0), P.inv > 0 && P.inv < 50 ? 1 : 0, r1(P.ult), st.F.id, myNick(), '#ffd166', r2(P.twinT || 0), P.orb ? 1 : 0, lookStr(myLook()), r1(P.wx || 0), r1(P.wy || 0), r2(P.resc || 0), P.bombs || 0],
@@ -331,6 +332,7 @@ function guestData(m) {
   else if (m.t === 'start') guestStart(m);
   else if (m.t === 's') applySnap(m);
   else if (m.t === 'end') guestEnd(m);
+  else if (m.t === 'cards' && Array.isArray(m.l)) guestCards(m);
   else if (m.t === 'esc') escRaceGuest(m);
   else if (m.t === 'eev' && m.e && ESC_EV.includes(m.e.k)) Escape.netEvent(String(m.from), { k: m.e.k });
   else if (m.t === 'eps' && Array.isArray(m.l)) net.eps = m.l.slice(0, 3).map(p => [String(p[0]), cleanName(p[1]), ALLY_COL.concat('#ffd166').includes(p[2]) ? p[2] : '#9dffcf', escClean(p[3] || {})]);
@@ -351,7 +353,7 @@ function applySnap(m) {
   if (m.r.it) TIMED.forEach((id, i) => { run['it_' + id] = m.r.it[i]; });
   if (run.theme !== themeWas) skyTheme = -1;
   if (m.bn) run.banner = Object.assign({ t: 0 }, m.bn);
-  run.cardWait = m.cw;
+  run.cardWait = m.cw; run.cardName = cleanName(m.cn || '') || '방장'; if (m.cw !== 1 && run.guestPick) guestCardsClose();
   flash = Math.max(flash, m.fl || 0); shake = Math.max(shake, m.sk || 0);
   const old = new Map(allies.map(a => [a.id, a]));
   allies.length = 0;
@@ -534,3 +536,28 @@ Friend.init({
 $('fGo').addEventListener('click', leaveRest);
 EMOTES.forEach((t, i) => { const b = document.createElement('button'); b.textContent = t; b.addEventListener('pointerdown', e => { e.stopPropagation(); sendEmote(i); }); $('emoBar').append(b); });
 
+
+// ---------- 0.76 함께 할 때 카드: 레벨을 올린 경험치를 주운 친구가 고른다(방장이 보낸 카드 목록) ----------
+function guestCards(m) {
+  if (!run || !net || net.mode !== 'guest') return;
+  const l = m.l.slice(0, 4).filter(c => Array.isArray(c) && typeof c[0] === 'string').map(c => ({ id: c[0].slice(0, 20), name: String(c[1] || '').slice(0, 30), icon: String(c[2] || '').slice(0, 8), desc: String(c[3] || '').slice(0, 120), rarity: ['common', 'rare', 'hero', 'curse', 'evo'].includes(c[4]) ? c[4] : 'common' }));
+  if (!l.length) return;
+  run.guestPick = l.map(c => c.id);
+  const box = $('cardsBox'); box.innerHTML = '';
+  l.forEach((c, i) => {   // 방장이 보낸 글은 글자로만 넣는다(innerHTML 쓰지 않음)
+    const b = document.createElement('button'); b.className = 'pickCard ' + c.rarity; b.style.animationDelay = i * 0.08 + 's';
+    const ic = document.createElement('span'); ic.className = 'ic'; ic.textContent = c.icon;
+    const tx = document.createElement('span'); const tag = { rare: '희귀', hero: '영웅', curse: '대가', evo: '진화' }[c.rarity];
+    if (tag) { const em = document.createElement('em'); em.textContent = tag; tx.append(em); }
+    const nb = document.createElement('b'); nb.textContent = `${i + 1}. ${c.name}`; tx.append(nb, document.createTextNode(c.desc));
+    b.append(ic, tx); b.addEventListener('click', () => guestPickCard(c.id)); box.append(b);
+  });
+  $('cardsLv').textContent = `Lv ${m.lv | 0} · 내가 골라요! (15초)`;
+  $('cards').classList.remove('hidden'); A.sfx('levelup');
+}
+function guestPickCard(id) {
+  if (!run || !run.guestPick || !run.guestPick.includes(id)) return;
+  try { if (net && net.conn && net.conn.open) net.conn.send({ t: 'pick', id }); } catch (e) { /* 끊김 */ }
+  A.sfx('click'); guestCardsClose();
+}
+function guestCardsClose() { if (run) run.guestPick = null; $('cards').classList.add('hidden'); }

@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.75';
+const VERSION = '0.76';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -677,7 +677,7 @@ function startRun(stage, md = 'stage') {
   if (md === 'endless') { run.waveDur = Infinity; run.banner = { kind: 'stage', title: 'WAVE 1', sub: '무한 생존 · 얼마나 버틸까?', t: 0, life: 2.6 }; }
   if (md === 'rush') { run.d = diffFor(Math.max(3, lvOf(S.cleared))); run.phase = 'warning'; run.warnT = 2.5; run.rushDone = true; run.banner = { kind: 'boss', title: 'BOSS RUSH', sub: '보스 다섯 연속!', t: 0, life: 2.4 }; }
   if (md === 'rift') riftStart();
-  if (S.noDuel || (md === 'stage' && Math.random() > DUEL.p)) run.rushDone = true;   // 0.75 리듬 결투: 설정에서 끄기, 스테이지는 두 판에 한 번꼴
+  if (md === 'stage' && Math.random() > DUEL.p) run.rushDone = true;   // 0.75 리듬 결투: 스테이지는 두 판에 한 번꼴(끄는 설정은 0.76에서 뺌)
   run.gateAt = md === 'stage' || md === 'endless' ? 32 : 0; run.treasureAt = md === 'stage' || md === 'endless' ? 80 : 0;
   Forge.show(false); $('forge').classList.remove('rest'); $('fRest').classList.add('hidden'); $('ultBtn').classList.remove('hidden'); cam.x = cam.y = 0;
   if (md === 'auto') { run.d.hp = Math.pow(1.22, stage - 1); run.goldStart = S.forge.earned; run.rushDone = true; run.waveDur = 45; run.rushAt = rnd(15, 30); run.banner = { kind: 'stage', title: `ZONE ${stage}`, sub: '사방에서 온다! 피하면서 싸우자', t: 0, life: 2.6 }; S.idle.on = true; S.idle.lastSeen = Date.now(); keepAwake(true); }

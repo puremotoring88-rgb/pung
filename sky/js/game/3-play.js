@@ -291,6 +291,16 @@ function openCards() {
   A.sfx('levelup');
   const choice = rollCards();
   run.cardChoice = choice;
+  run.cardBy = null; run.cardName = '방장';
+  if (run.coop && net && net.mode === 'host' && run.xpWho && run.xpWho !== 'host') {   // 0.76 함께 할 때: 레벨을 올린 경험치를 주운 친구가 카드를 고른다(15초 안에 안 고르면 첫 장)
+    const a = allies.find(x => x.id === run.xpWho && x.conn && x.conn.open);
+    if (a) {
+      state = 'cards'; run.cardBy = a.id; run.cardName = a.name;
+      try { a.conn.send({ t: 'cards', lv: run.level, l: choice.map(c => [c.id, c.name, c.icon, c.desc, c.rarity]) }); } catch (e) { /* 끊김 */ }
+      const by = a.id; setTimeout(() => { if (state === 'cards' && run.cardBy === by) takeCard(choice[0].id, true); }, 15000);
+      return;
+    }
+  }
   if (run.mode === 'auto') {
     const ids = choice.map(c => c.id);
     const want = ids.includes('evo') ? 'evo' : P.hp < P.maxHp * 0.4 && ids.includes('heal') ? 'heal' : AUTO_CARDS.find(id => ids.includes(id)) || ids[0];
@@ -316,8 +326,8 @@ function openCards() {
   $('cards').dataset.ids = choice.map(c => c.id).join(',');
   $('cards').classList.remove('hidden');
 }
-function takeCard(id) {
-  if (state !== 'cards') return;
+function takeCard(id, fromNet) {
+  if (state !== 'cards' || (run.cardBy && !fromNet)) return;   // 친구가 고르는 중이면 방장은 못 고른다
   const m = run.m, c = (run.cardChoice || []).find(x => x.id === id) || { mult: 1 }, k = c.mult || 1;
   run.taken[id] = (run.taken[id] || 0) + 1;
   if (id === 'dmg') m.dmg *= 1 + 0.2 * k;
@@ -326,8 +336,8 @@ function takeCard(id) {
   else if (id === 'pierce') m.pierce++;
   else if (id === 'drone') m.drones++;
   else if (id === 'magnet') m.magnet *= 1 + 0.4 * k;
-  else if (id === 'heal') P.hp = Math.min(P.maxHp, P.hp + P.maxHp * Math.min(1, 0.4 * k));
-  else if (id === 'maxhp') { P.maxHp += Math.round(20 * k); P.hp += Math.round(20 * k); }
+  else if (id === 'heal') for (const s of [P, ...(run.coop ? allies : [])]) s.hp = Math.min(s.maxHp, s.hp + s.maxHp * Math.min(1, 0.4 * k));   // 함께 할 때는 모두에게
+  else if (id === 'maxhp') for (const s of [P, ...(run.coop ? allies : [])]) { s.maxHp += Math.round(20 * k); s.hp += Math.round(20 * k); }
   else if (id === 'ult') m.ult *= 1 + 0.3 * k;
   else if (id === 'speed') m.speed *= 1 + 0.12 * k;
   else if (id === 'barrier') { m.barrier = 1; P.barrierReady = true; }
@@ -337,6 +347,7 @@ function takeCard(id) {
   else if (id === 'evo') { run.evo = true; const ev = EVOS[st.Wp.id]; run.banner = { kind: 'ult', title: `${ev.icon} 진화! ${ev.name}`, sub: ev.desc, t: 0, life: 2.8 }; flash = 0.8; A.sfx('part'); A.sfx('fanfare'); buzz([40, 30, 80, 30, 120]); evoFx(); }
   A.sfx('click');
   $('cards').classList.add('hidden');
+  run.cardBy = null;
   state = 'play';
 }
 // ---------- 자동 조종: 날아오는 탄을 미리 보고 가장 안전한 곳으로, 적 아래로 붙는다 ----------
@@ -492,7 +503,7 @@ function update(dt) {
       if (w !== run.wave) { run.wave = w; run.d = diffFor(1 + (w - 1) * 0.6); run.stage = Math.min(9, 1 + (w / 2 | 0)); run.banner = { kind: 'stage', title: `WAVE ${w}`, sub: '더 세게 몰려온다!', t: 0, life: 1.8 }; A.sfx('rush'); }
       if (!run.rushDone && run.t >= run.rushAt) { /* 아래에서 처리 */ }
       if (run.t >= run.nextBoss && !run.rush) { run.phase = 'warning'; run.warnT = 3; A.sfx('warning'); buzz([200, 100, 200]); }
-      if (run.rushDone && !S.noDuel && run.t > run.rushAt + DUEL.again) { run.rushDone = false; run.rushAt = run.t + rnd(10, 25); }   // 리듬 결투가 가끔 다시 온다
+      if (run.rushDone && run.t > run.rushAt + DUEL.again) { run.rushDone = false; run.rushAt = run.t + rnd(10, 25); }   // 리듬 결투가 가끔 다시 온다
       if (!run.gateAt && !run.gates && run.t > (run.gateLast || 0) + 100) run.gateAt = run.t + 5;
       if (!run.treasureAt && run.t > (run.treasureLast || 0) + 120) run.treasureAt = run.t + 10;
     }
@@ -597,7 +608,7 @@ function update(dt) {
     if (run.arena ? (d.age = (d.age || 0) + dt) > 30 : d.y > H + 30) { d.dead = true; continue; }
     if (run.phase !== 'dead' && !(P.down > 0) && dd < 26) {
       d.dead = true;
-      if (d.kind === 'xp') { run.xp += d.v * (1 + 0.06 * rs('learn')); A.sfx('xp'); }
+      if (d.kind === 'xp') { run.xpWho = 'host'; run.xp += d.v * (1 + 0.06 * rs('learn')); A.sfx('xp'); }
       else if (d.kind === 'scrap') { gainScrap(d.v); A.sfx('scrap'); }
       else if (d.kind === 'heart') { if (run.mut && run.mut.noheal) say('🩸 회복 봉인', P.x, P.y - 40, '#c58bff', 18); else if (!run.gambler) P.hp = Math.min(P.maxHp, P.hp + d.v); A.sfx('heal'); say('+' + d.v, P.x, P.y - 40, '#6ee37a', 22); }
       else if (d.kind === 'part') grantPart();
