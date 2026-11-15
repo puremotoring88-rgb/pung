@@ -508,7 +508,7 @@ function startDuelEvent() {
   state = 'duel'; drag = null;
   $('hud').classList.add('hidden');
   ebul = []; lasers = [];
-  Duel.start({ level: Math.min(8, L() + run.loop * 2 + (run.mode === 'endless' ? run.wave >> 1 : 0)), title: '중간 보스', sync: S.dojo.sync, speed: S.dojo.spd, onEnd: duelEnd });
+  Duel.start({ level: Math.min(DUEL.max, 1 + Math.floor((L() - 1) / DUEL.step) + (run.mode === 'endless' ? run.wave >> 2 : 0)), title: '중간 보스', sync: S.dojo.sync, speed: S.dojo.spd, onEnd: duelEnd });
 }
 function duelEnd(r) {
   state = 'play'; $('hud').classList.remove('hidden');

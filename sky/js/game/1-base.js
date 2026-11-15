@@ -40,7 +40,7 @@ const fresh = () => ({ next: 1, maxStage: 1, cleared: 0, best: 0, scrap: 0, part
   stars: {}, claimed: {}, stats: { kills: 0, ults: 0, bestCombo: 0, bossSeen: [], nohit: 0, escapes: 0, perfects: 0 },
   records: { wave: 0, endlessScore: 0, rush: 0, rushTime: 0 }, idle: { zone: 1, best: 0, rate: 0, lastSeen: 0, on: false, total: 0 },
   pilot: { lv: 1, xp: 0 }, research: {}, daily: { date: '', picks: [], cnt: {}, claimed: {} }, attend: { days: 0, last: '' }, mouse: true, seenHelp: false, openV: 1, seenOpen: {}, newDot: {}, lefty: false, dojo: { open: 1, best: {}, song: 'random', sync: 0, spd: 1 } });
-const VERSION = '0.76';
+const VERSION = '0.77';
 let S = fresh();
 try {
   const old = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -652,7 +652,7 @@ const diffFor = s => ({
   iv: Math.max(0.55, 1.9 - 0.12 * (s - 1)),
 });
 
-const DUEL = { p: 0.5, again: 150 };   // 0.75 판 중간 리듬 결투: 스테이지에서 나올 확률, 무한 생존에서 다시 오는 간격(초)
+const DUEL = { p: 0.5, again: 150, max: 5, step: 2 };   // 판 중간 리듬 결투: 스테이지에서 나올 확률, 무한 생존에서 다시 오는 간격(초), 0.77 단계 = 1 + (난이도-1)/step, 최대 max(5단계까지라 구름 구간 없음, 리듬 도장은 그대로)
 let assistOn = false;
 function startRun(stage, md = 'stage') {
   A.init();
